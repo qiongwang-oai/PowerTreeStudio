@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+:root { --pane: 300px; }
+html, body, #root { height: 100%; }
+.rf-handle { width: 10px; height: 10px; }
+.input{border:1px solid #e2e8f0;border-radius:12px;padding:.4rem .6rem;min-width:6rem}
