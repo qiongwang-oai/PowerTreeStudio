@@ -7,11 +7,10 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 
 function CustomNode(props: NodeProps) {
-  const { data, type } = props;
-  // Use data.type for the actual node type
+  const { data } = props;
   const nodeType = data.type;
   return (
-    <div className="rounded-lg border bg-white px-2 py-1 shadow text-xs text-center min-w-[80px]">
+    <div className="rounded-lg border bg-white px-2 py-1 shadow text-xs text-center min-w-[120px]">
       {nodeType !== 'Source' && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
@@ -44,31 +43,38 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
     id: n.id,
     data: {
-      label: n.type === 'Source' && 'V_nom' in n ? (
-        <div>
-          <div>{n.name}</div>
-          <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+      label: (
+        <div className="flex flex-col items-stretch gap-1">
+          <div className="text-center font-semibold">{n.name}</div>
+          <div className="flex items-stretch justify-between gap-2">
+            <div className="text-left">
+              {n.type === 'Source' && 'V_nom' in n ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+                </div>
+              ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                </div>
+              ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                </div>
+              ) : null}
+            </div>
+            {/* Right power intentionally empty on init; will be filled by compute effect */}
+          </div>
         </div>
-      ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-        <div>
-          <div>{n.name}</div>
-          <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-          <div style={{fontSize:'11px',color:'#555'}}>η: {((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? '')) * 100}%</div>
-        </div>
-      ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-        <div>
-          <div>{n.name}</div>
-          <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
-          <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-          <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-        </div>
-      ) : n.name,
+      ),
       type: n.type
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
     draggable: true
-  })), [])
+  })), [project.nodes])
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>({
     id: e.id,
@@ -81,38 +87,115 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
 
-  // Sync when project nodes/edges change (e.g., adding from Palette)
+  // Sync when project nodes change (add/remove); preserve positions of existing nodes
   useEffect(()=>{
-    const mapped: RFNode[] = project.nodes.map(n=>({
-      id: n.id,
-      data: {
-        label: n.type === 'Source' && 'V_nom' in n ? (
-          <div>
-            <div>{n.name}</div>
-            <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
-          </div>
-        ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-          <div>
-            <div>{n.name}</div>
-            <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-            <div style={{fontSize:'11px',color:'#555'}}>η: {((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? '')) * 100}%</div>
-          </div>
-        ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-          <div>
-            <div>{n.name}</div>
-            <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
-            <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-            <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-          </div>
-        ) : n.name,
-        type: n.type
-      },
-      position: { x: n.x ?? 0, y: n.y ?? 0 },
-      type: 'custom',
-      draggable: true
-    }))
-    setNodes(mapped)
+    setNodes(prev => {
+      const prevById = new Map(prev.map(p=>[p.id, p]))
+      const mapped: RFNode[] = project.nodes.map(n=>{
+        const existing = prevById.get(n.id)
+        const position = existing?.position ?? { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 }
+        return {
+          id: n.id,
+          data: {
+            label: (
+              <div className="flex flex-col items-stretch gap-1">
+                <div className="text-center font-semibold">{n.name}</div>
+                <div className="flex items-stretch justify-between gap-2">
+                  <div className="text-left">
+                    {n.type === 'Source' && 'V_nom' in n ? (
+                      <div>
+                        <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+                      </div>
+                    ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
+                      <div>
+                        <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                      </div>
+                    ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+                      <div>
+                        <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                      </div>
+                    ) : null}
+                  </div>
+                  {/* Right power intentionally empty here; compute effect will populate */}
+                </div>
+              </div>
+            ),
+            type: n.type
+          },
+          position,
+          type: 'custom',
+          draggable: true
+        }
+      })
+      return mapped
+    })
   }, [project.nodes, setNodes])
+
+  // Update power info in labels when computeResult changes without resetting positions
+  useEffect(()=>{
+    setNodes(prev => prev.map(rn => {
+      const n = project.nodes.find(x=>x.id===rn.id)
+      if (!n) return rn
+      // Left details without name
+      const left = (
+        <div className="text-left">
+          {n.type === 'Source' && 'V_nom' in n ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+            </div>
+          ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+            </div>
+          ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+              <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+            </div>
+          ) : null}
+        </div>
+      )
+      // Right power info respecting type rules
+      const pin = computeResult.nodes[n.id]?.P_in
+      const pout = computeResult.nodes[n.id]?.P_out
+      const showPin = (pin !== undefined) && (n.type !== 'Source')
+      const showPout = (pout !== undefined) && (n.type !== 'Load')
+      const right = (showPin || showPout) ? (
+        <>
+          <div className="w-px bg-slate-300 mx-1" />
+          <div className="text-left min-w-[70px]">
+            {showPin && (
+              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
+            )}
+            {showPout && (
+              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
+            )}
+          </div>
+        </>
+      ) : null
+
+      return {
+        ...rn,
+        data: {
+          ...rn.data,
+          label: (
+            <div className="flex flex-col items-stretch gap-1">
+              <div className="text-center font-semibold">{n.name}</div>
+              <div className="flex items-stretch justify-between gap-2">
+                {left}
+                {right}
+              </div>
+            </div>
+          )
+        }
+      }
+    }))
+  }, [computeResult, project.nodes, setNodes])
 
   useEffect(()=>{
     const mapped: RFEdge[] = project.edges.map(e=>({
