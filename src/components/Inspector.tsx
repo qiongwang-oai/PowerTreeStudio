@@ -90,6 +90,14 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
+                  <label className="flex items-center justify-between gap-2">
+                    <span>Critical Load</span>
+                    <input
+                      type="checkbox"
+                      checked={(node as any).critical !== false}
+                      onChange={e=>onChange('critical', e.target.checked)}
+                    />
+                  </label>
                   <div className="mt-3 text-xs text-slate-500">Computed</div>
                   <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
                 </>}

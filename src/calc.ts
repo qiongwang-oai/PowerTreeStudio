@@ -121,7 +121,9 @@ export function compute(project: Project): ComputeResult {
     }
   }
   for (const node of Object.values(nmap)){ if (node.type==='Load'){ const load=node as any; const up=(load.V_upstream ?? load.Vreq); const allow=load.Vreq*(1 - project.defaultMargins.voltageMarginPct/100); if (up<allow) (node as any).warnings.push(`Voltage margin shortfall at load: upstream ${up.toFixed(3)}V < allowed ${allow.toFixed(3)}V`) } }
-  const totalLoad = Object.values(nmap).filter(n=>n.type==='Load').reduce((a,n)=>a+(n.P_in||0),0)
+  const totalLoad = Object.values(nmap)
+    .filter(n=>n.type==='Load')
+    .reduce((a,n)=> a + (((n as any).critical !== false ? (n.P_out||0) : 0)), 0)
   const totalSource = Object.values(nmap).filter(n=>n.type==='Source').reduce((a,n)=>a+(n.P_in||0),0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
   return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }
