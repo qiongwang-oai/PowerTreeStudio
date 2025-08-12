@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader } from './ui/card'
 import { Tabs, TabsContent, TabsList } from './ui/tabs'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import { Button } from './ui/button'
+import { compute } from '../calc'
+import { fmt } from '../utils'
 
 export default function Inspector({selected, onDeleted}:{selected:string|null, onDeleted?:()=>void}){
   const project = useStore(s=>s.project)
@@ -13,6 +15,7 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
   const updateEdge = useStore(s=>s.updateEdge as any)
   const removeEdge = useStore(s=>s.removeEdge)
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
+  const analysis = compute(project)
   const node = useMemo(()=> project.nodes.find(n=>n.id===selected) || null, [project.nodes, selected])
   const [tab, setTab] = React.useState('props')
   if (edge) {
@@ -36,6 +39,7 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
                   onChange={e=> updateEdge && updateEdge(edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
                 />
               </label>
+              <ReadOnlyRow label="Dissipation (W)" value={fmt(analysis.edges[edge.id]?.P_loss_edge ?? 0, 4)} />
             </div>
           </CardContent>
         </Card>
@@ -63,8 +67,7 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
                 {node.type==='Source' && <>
                   <Field label="V_nom (V)" value={(node as any).V_nom} onChange={v=>onChange('V_nom', v)} />
-                  <Field label="I_max (A)" value={(node as any).I_max||''} onChange={v=>onChange('I_max', v)} />
-                  <Field label="P_max (W)" value={(node as any).P_max||''} onChange={v=>onChange('P_max', v)} />
+                  <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
                 </>}
                 {node.type==='Converter' && <>
                   <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
@@ -78,11 +81,17 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
                     </select>
                   </label>
                   {(node as any).efficiency?.type==='fixed' && <Field label="η value (0-1)" value={(node as any).efficiency.value} onChange={v=>onChange('efficiency',{type:'fixed', value:v})} />}
+                  <div className="mt-3 text-xs text-slate-500">Computed</div>
+                  <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                  <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                  <ReadOnlyRow label="Dissipation (W)" value={fmt((analysis.nodes[node.id]?.P_in ?? 0) - (analysis.nodes[node.id]?.P_out ?? 0), 3)} />
                 </>}
                 {node.type==='Load' && <>
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
+                  <div className="mt-3 text-xs text-slate-500">Computed</div>
+                  <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
                 </>}
                 {node.type==='Bus' && <Field label="V_bus (V)" value={(node as any).V_bus} onChange={v=>onChange('V_bus', v)} />}
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
@@ -107,5 +116,23 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
   )
 }
 function Field({label, value, onChange}:{label:string, value:any, onChange:(v:number)=>void}){
-  return (<label className="flex items-center justify-between gap-2"><span>{label}</span><input className="input" type="number" value={value} onChange={e=>onChange(parseFloat(e.target.value))} /></label>)
+  const displayValue = Number.isFinite(value) ? value : ''
+  return (
+    <label className="flex items-center justify-between gap-2">
+      <span>{label}</span>
+      <input
+        className="input"
+        type="number"
+        value={displayValue as any}
+        onChange={e=>{
+          const raw = e.target.value
+          const n = Number(raw)
+          onChange(Number.isFinite(n) ? n : 0)
+        }}
+      />
+    </label>
+  )
+}
+function ReadOnlyRow({label, value}:{label:string, value:any}){
+  return (<div className="flex items-center justify-between gap-2"><span>{label}</span><span>{value}</span></div>)
 }

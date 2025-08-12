@@ -64,8 +64,64 @@ export function compute(project: Project): ComputeResult {
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
     const V_drop=I*R_total; const P_loss=I*I*R_total; e.I_edge=I; e.R_total=R_total; e.V_drop=V_drop; e.P_loss_edge=P_loss
     if (parent && child && 'V_upstream' in child===false){ const upV = parent.type==='Source'? (parent as any).V_nom : parent.type==='Converter'? (parent as any).Vout : parent.type==='Bus'? (parent as any).V_bus : undefined; if (upV!==undefined) (child as any).V_upstream = upV - V_drop } }
+  // Adjust converters bottom-up so parents see updated child numbers
+  for (const nodeId of reverseOrder){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter'){
+      let edgeLossSum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === node.id) edgeLossSum += (e.P_loss_edge || 0)
+      }
+      ;(node as any).P_out = (node.P_out || 0) + edgeLossSum
+      const conv = node as any as ConverterNode & ComputeNode
+      const updatedEta = etaFromModel(conv.efficiency, conv.P_out || 0, conv.I_out || 0, conv)
+      conv.P_in = (conv.P_out || 0) / Math.max(updatedEta, 1e-9)
+      conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
+    }
+  }
+  // Reconcile converters bottom-up using updated child inputs and edge losses
+  for (const nodeId of reverseOrder){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter'){
+      const conv = node as any as ConverterNode & ComputeNode
+      let childInputSum = 0
+      let edgeLossSum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === conv.id){
+          const child = nmap[e.to]
+          if (child?.P_in) childInputSum += child.P_in
+          edgeLossSum += (e.P_loss_edge || 0)
+        }
+      }
+      const P_out = childInputSum + edgeLossSum
+      const I_out = P_out / Math.max(conv.Vout, 1e-9)
+      const eta = etaFromModel(conv.efficiency, P_out, I_out, conv)
+      conv.P_out = P_out
+      conv.I_out = I_out
+      conv.P_in = P_out / Math.max(eta, 1e-9)
+      conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
+    }
+  }
+  // Update Source totals after converters are reconciled
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Source'){
+      let childInputSum = 0
+      let edgeLossSum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === node.id){
+          const child = nmap[e.to]
+          if (child?.P_in) childInputSum += child.P_in
+          edgeLossSum += (e.P_loss_edge || 0)
+        }
+      }
+      const totalOut = childInputSum + edgeLossSum
+      ;(node as any).P_out = totalOut
+      ;(node as any).P_in = totalOut
+    }
+  }
   for (const node of Object.values(nmap)){ if (node.type==='Load'){ const load=node as any; const up=(load.V_upstream ?? load.Vreq); const allow=load.Vreq*(1 - project.defaultMargins.voltageMarginPct/100); if (up<allow) (node as any).warnings.push(`Voltage margin shortfall at load: upstream ${up.toFixed(3)}V < allowed ${allow.toFixed(3)}V`) } }
-  const totalLoad = Object.values(nmap).filter(n=>n.type==='Load').reduce((a,n)=>a+(n.P_out||0),0)
+  const totalLoad = Object.values(nmap).filter(n=>n.type==='Load').reduce((a,n)=>a+(n.P_in||0),0)
   const totalSource = Object.values(nmap).filter(n=>n.type==='Source').reduce((a,n)=>a+(n.P_in||0),0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
   return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }

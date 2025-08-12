@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
+import { compute } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 
@@ -12,11 +13,17 @@ function CustomNode(props: NodeProps) {
   return (
     <div className="rounded-lg border bg-white px-2 py-1 shadow text-xs text-center min-w-[80px]">
       {nodeType !== 'Source' && (
-        <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
+        <>
+          <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
+          <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
+        </>
       )}
       {data.label}
       {(nodeType === 'Source' || nodeType === 'Converter') && (
-        <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
+        <>
+          <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
+          <div style={{ fontSize: '10px', color: '#666', marginTop: 4 }}>output</div>
+        </>
       )}
     </div>
   );
@@ -30,6 +37,9 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
   const removeEdge = useStore(s=>s.removeEdge)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
+
+  // Compute analysis each render to reflect immediate edits
+  const computeResult = compute(project)
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
     id: n.id,
@@ -65,8 +75,8 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
     source: e.from,
     target: e.to,
     animated: false,
-    label: (e.interconnect?.R_milliohm ?? 0) + ' mΩ'
-  })), [])
+    label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(computeResult.edges[e.id]?.I_edge ?? 0).toFixed(3)} A`
+  })), [project.edges, computeResult])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
@@ -110,10 +120,10 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
       source: e.from,
       target: e.to,
       animated: false,
-      label: (e.interconnect?.R_milliohm ?? 0) + ' mΩ'
+      label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(computeResult.edges[e.id]?.I_edge ?? 0).toFixed(3)} A`
     }))
     setEdges(mapped)
-  }, [project.edges, setEdges])
+  }, [project.edges, setEdges, computeResult])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
