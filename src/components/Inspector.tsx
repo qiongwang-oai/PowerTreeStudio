@@ -10,9 +10,39 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
   const project = useStore(s=>s.project)
   const update = useStore(s=>s.updateNode)
   const removeNode = useStore(s=>s.removeNode)
+  const updateEdge = useStore(s=>s.updateEdge as any)
+  const removeEdge = useStore(s=>s.removeEdge)
+  const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
   const node = useMemo(()=> project.nodes.find(n=>n.id===selected) || null, [project.nodes, selected])
   const [tab, setTab] = React.useState('props')
-  if (!node) return <div className="p-3 text-sm text-slate-500">Select a node to edit properties.</div>
+  if (edge) {
+    return (
+      <div className="h-full flex flex-col">
+        <Card className="flex-1">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">Edge <span className="text-xs text-slate-500">({edge.id})</span></div>
+              <Button variant="outline" size="sm" onClick={()=>{ removeEdge(edge.id); onDeleted && onDeleted() }}>Delete</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 text-sm">
+              <label className="flex items-center justify-between gap-2">
+                <span>Resistance (mΩ)</span>
+                <input
+                  className="input"
+                  type="number"
+                  value={edge.interconnect?.R_milliohm ?? 0}
+                  onChange={e=> updateEdge && updateEdge(edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
+                />
+              </label>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+  if (!node) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
   const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(node.id, patch) }
   const curve = (node as any as ConverterNode)?.efficiency
   const points = (curve && curve.type==='curve') ? curve.points : []
