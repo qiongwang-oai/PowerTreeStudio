@@ -1,0 +1,45 @@
+<svg width="1200" height="300" viewBox="0 0 1200 300" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title id="title">PowerTree Studio</title>
+  <desc id="desc">A visual editor and analyzer for DC power distribution trees.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0ea5e9"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#94a3b8"/>
+      <stop offset="100%" stop-color="#cbd5e1"/>
+    </linearGradient>
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="300" fill="url(#bg)"/>
+
+  <!-- Graph motif -->
+  <g transform="translate(140,50)" stroke-linecap="round" stroke="url(#edge)" fill="none" stroke-width="4">
+    <path d="M60,40 C140,40 100,120 180,120"/>
+    <path d="M60,40 C220,40 260,180 380,180"/>
+    <path d="M180,120 C260,120 300,200 380,180"/>
+  </g>
+  <g transform="translate(140,50)" filter="url(#shadow)">
+    <circle cx="60" cy="40" r="16" fill="#f59e0b"/>
+    <circle cx="180" cy="120" r="14" fill="#22c55e"/>
+    <circle cx="380" cy="180" r="12" fill="#ef4444"/>
+  </g>
+
+  <!-- Title -->
+  <g transform="translate(520,110)" fill="#ffffff" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial">
+    <text x="0" y="0" font-size="56" font-weight="700">PowerTree Studio</text>
+    <text x="2" y="42" font-size="20" fill="#e2e8f0">Design • Analyze • Report power distribution networks</text>
+  </g>
+
+  <!-- Badges -->
+  <g transform="translate(520,190)">
+    <rect x="0" y="0" rx="8" ry="8" width="190" height="34" fill="#0ea5e9"/>
+    <text x="14" y="23" font-size="16" font-weight="600" fill="#ffffff" font-family="Inter, ui-sans-serif">React • Vite • TS</text>
+    <rect x="206" y="0" rx="8" ry="8" width="210" height="34" fill="#334155"/>
+    <text x="220" y="23" font-size="16" font-weight="600" fill="#e2e8f0" font-family="Inter, ui-sans-serif">ReactFlow • Zustand</text>
+  </g>
+</svg>

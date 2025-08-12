@@ -1,3 +1,5 @@
+![PowerTree Studio](public/powertree-banner.svg)
+
 ## PowerTree Studio
 
 A visual editor and analyzer for DC power distribution trees ("power trees"). Model Sources, Converters, Loads, Buses, and interconnects, then get real‑time validation, losses, and efficiency.
