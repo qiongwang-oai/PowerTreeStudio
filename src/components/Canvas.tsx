@@ -77,6 +77,10 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
                 </div>
+               ) : n.type === 'Note' && 'text' in n ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
+                </div>
                ) : null}
             </div>
             {/* Right power intentionally empty on init; will be filled by compute effect */}
@@ -144,6 +148,10 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
             </div>
+           ) : n.type === 'Note' && 'text' in n ? (
+             <div>
+               <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
+             </div>
            ) : null}
                   </div>
                   {/* Right power intentionally empty here; compute effect will populate */}
@@ -183,6 +191,10 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
               <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
               <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
               <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+            </div>
+          ) : n.type === 'Note' && 'text' in n ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
             </div>
           ) : null}
         </div>

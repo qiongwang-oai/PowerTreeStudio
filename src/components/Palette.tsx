@@ -27,6 +27,7 @@ export default function Palette(){
         <Button onClick={()=>onAdd('Load')}>Load</Button>
         <Button onClick={()=>onAdd('Bus')}>Bus/Net</Button>
         <Button variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
+        <div className="col-span-2 h-px bg-slate-200 my-1" aria-hidden="true" />
         <Button onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
         <Button onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
       </div>
