@@ -15,6 +15,7 @@ type State = {
   removeNode: (id: string) => void
   removeEdge: (id: string) => void
   updateSubsystemProject: (subsystemId: string, updater: (p: Project) => Project) => void
+  updateSubsystemProjectAtPath: (subsystemPath: string[], updater: (p: Project) => Project) => void
   subsystemAddNode: (subsystemId: string, node: AnyNode) => void
   subsystemAddEdge: (subsystemId: string, edge: Edge) => void
   subsystemUpdateNode: (subsystemId: string, nodeId: string, patch: Partial<AnyNode>) => void
@@ -22,6 +23,13 @@ type State = {
   subsystemUpdateNodePos: (subsystemId: string, nodeId: string, x: number, y: number) => void
   subsystemRemoveNode: (subsystemId: string, nodeId: string) => void
   subsystemRemoveEdge: (subsystemId: string, edgeId: string) => void
+  nestedSubsystemAddNode: (subsystemPath: string[], node: AnyNode) => void
+  nestedSubsystemAddEdge: (subsystemPath: string[], edge: Edge) => void
+  nestedSubsystemUpdateNode: (subsystemPath: string[], nodeId: string, patch: Partial<AnyNode>) => void
+  nestedSubsystemUpdateEdge: (subsystemPath: string[], edgeId: string, patch: Partial<Edge>) => void
+  nestedSubsystemUpdateNodePos: (subsystemPath: string[], nodeId: string, x: number, y: number) => void
+  nestedSubsystemRemoveNode: (subsystemPath: string[], nodeId: string) => void
+  nestedSubsystemRemoveEdge: (subsystemPath: string[], edgeId: string) => void
 }
 
 const saved = loadAutosave()
@@ -46,6 +54,26 @@ export const useStore = create<State>((set,get)=>({
       return { ...sub, project: nextProject }
     }) as AnyNode[]
     set({project:{...p}}); autosave(get().project)
+  }
+  ,updateSubsystemProjectAtPath: (subsystemPath, updater) => {
+    const applyAtPath = (proj: Project, path: string[]): Project => {
+      if (path.length === 0) {
+        return updater(proj)
+      }
+      const [currentId, ...rest] = path
+      return {
+        ...proj,
+        nodes: (proj.nodes.map(n => {
+          if (n.id !== currentId || (n as any).type !== 'Subsystem') return n
+          const sub = n as any
+          const nextProject = applyAtPath(sub.project, rest)
+          return { ...sub, project: nextProject }
+        }) as AnyNode[])
+      }
+    }
+    const root = get().project
+    const nextRoot = applyAtPath(root, subsystemPath)
+    set({ project: nextRoot }); autosave(get().project)
   }
   ,subsystemAddNode: (subsystemId, node) => {
     const fn = (proj: Project): Project => ({ ...proj, nodes: ([...proj.nodes, node] as AnyNode[]) })
@@ -74,5 +102,33 @@ export const useStore = create<State>((set,get)=>({
   ,subsystemRemoveEdge: (subsystemId, edgeId) => {
     const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.filter(e=>e.id!==edgeId) })
     get().updateSubsystemProject(subsystemId, fn)
+  }
+  ,nestedSubsystemAddNode: (subsystemPath, node) => {
+    const fn = (proj: Project): Project => ({ ...proj, nodes: ([...proj.nodes, node] as AnyNode[]) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemAddEdge: (subsystemPath, edge) => {
+    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.some(e=>e.from===edge.from && e.to===edge.to)? proj.edges : [...proj.edges, edge] })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemUpdateNode: (subsystemPath, nodeId, patch) => {
+    const fn = (proj: Project): Project => ({ ...proj, nodes: (proj.nodes.map(n=>n.id===nodeId? ({...n, ...patch} as AnyNode) : n) as AnyNode[]) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemUpdateEdge: (subsystemPath, edgeId, patch) => {
+    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.map(e=>e.id===edgeId? ({...e, ...patch}) : e) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemUpdateNodePos: (subsystemPath, nodeId, x, y) => {
+    const fn = (proj: Project): Project => ({ ...proj, nodes: (proj.nodes.map(n=>n.id===nodeId? ({...n, x, y} as AnyNode) : n) as AnyNode[]) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemRemoveNode: (subsystemPath, nodeId) => {
+    const fn = (proj: Project): Project => ({ ...proj, nodes: (proj.nodes.filter(n=>n.id!==nodeId) as AnyNode[]), edges: proj.edges.filter(e=>e.from!==nodeId && e.to!==nodeId) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemRemoveEdge: (subsystemPath, edgeId) => {
+    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.filter(e=>e.id!==edgeId) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
 }))

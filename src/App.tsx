@@ -12,7 +12,7 @@ export default function App(){
   const setScenario = useStore(s=>s.setScenario)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
-  const [openSubsystemId, setOpenSubsystemId] = React.useState<string|null>(null)
+  const [openSubsystemIds, setOpenSubsystemIds] = React.useState<string[]>([])
   const minRight = 220, maxRight = 640
   const onDragStart = (e: React.MouseEvent)=>{
     e.preventDefault()
@@ -45,7 +45,7 @@ export default function App(){
         <div className="text-xs text-slate-500">Project: {project.name}</div>
       </div>
       <aside className="border-r bg-white overflow-auto"><Palette /></aside>
-      <main className="overflow-hidden"><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemId(id)} /></main>
+      <main className="overflow-hidden"><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds(ids=>[...ids, id])} /></main>
       <aside className="relative border-l bg-white overflow-auto">
         <div
           role="separator"
@@ -57,12 +57,27 @@ export default function App(){
             background: 'transparent'
           }}
         />
-        <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemId(id)} />
+        <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds(ids=>[...ids, id])} />
       </aside>
       <div className="col-span-3"><TotalsBar /></div>
-      {openSubsystemId && (
-        <SubsystemEditor subsystemId={openSubsystemId} onClose={()=>setOpenSubsystemId(null)} onOpenSubsystem={(id)=>setOpenSubsystemId(id)} />
-      )}
+      {openSubsystemIds.map((id, idx)=>{
+        let ctx = project
+        for (let j=0; j<idx; j++){
+          const parentId = openSubsystemIds[j]
+          const parentNode = ctx.nodes.find(n=>n.id===parentId && (n as any).type==='Subsystem') as any
+          if (parentNode && parentNode.project){ ctx = parentNode.project } else { break }
+        }
+        return (
+          <SubsystemEditor
+            key={`${idx}-${id}`}
+            subsystemId={id}
+            subsystemPath={openSubsystemIds.slice(0, idx+1)}
+            projectContext={ctx}
+            onClose={()=>setOpenSubsystemIds(ids=>ids.slice(0, -1))}
+            onOpenSubsystem={(nextId)=>setOpenSubsystemIds(ids=>[...ids, nextId])}
+          />
+        )
+      })}
     </div>
   )
 }

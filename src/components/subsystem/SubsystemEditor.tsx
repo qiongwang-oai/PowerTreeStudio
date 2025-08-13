@@ -1,13 +1,12 @@
 import React from 'react'
-import { useStore } from '../../state/store'
+import { Project } from '../../models'
 import SubsystemPalette from './SubsystemPalette'
 import SubsystemCanvas from './SubsystemCanvas'
 import SubsystemInspector from './SubsystemInspector'
 import { Button } from '../ui/button'
 
-export default function SubsystemEditor({ subsystemId, onClose, onOpenSubsystem }:{ subsystemId:string, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
-  const root = useStore(s=>s.project)
-  const subsystem = root.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
+export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
+  const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
   const [selected, setSelected] = React.useState<string|null>(null)
   if (!subsystem) return null
   const embedded = subsystem.project
@@ -27,10 +26,10 @@ export default function SubsystemEditor({ subsystemId, onClose, onOpenSubsystem 
         </div>
         <aside className="border-r bg-white overflow-auto"><SubsystemPalette subsystemId={subsystemId} project={embedded} /></aside>
         <main className="overflow-hidden">
-          <SubsystemCanvas subsystemId={subsystemId} project={embedded} onSelect={setSelected} onOpenNested={onOpenSubsystem} />
+          <SubsystemCanvas subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} onSelect={setSelected} onOpenNested={onOpenSubsystem} />
         </main>
         <aside className="border-l bg-white overflow-auto">
-          <SubsystemInspector subsystemId={subsystemId} project={embedded} selected={selected} onDeleted={()=>setSelected(null)} />
+          <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={selected} onDeleted={()=>setSelected(null)} />
         </aside>
       </div>
     </div>

@@ -35,11 +35,12 @@ function CustomNode(props: NodeProps) {
   )
 }
 
-export default function SubsystemCanvas({ subsystemId, project, onSelect, onOpenNested }:{ subsystemId:string, project: Project, onSelect:(id:string|null)=>void, onOpenNested?:(id:string)=>void }){
-  const addEdgeStore = useStore(s=>s.subsystemAddEdge)
-  const updatePos = useStore(s=>s.subsystemUpdateNodePos)
-  const removeNode = useStore(s=>s.subsystemRemoveNode)
-  const removeEdge = useStore(s=>s.subsystemRemoveEdge)
+export default function SubsystemCanvas({ subsystemId, subsystemPath, project, onSelect, onOpenNested }:{ subsystemId:string, subsystemPath?: string[], project: Project, onSelect:(id:string|null)=>void, onOpenNested?:(id:string)=>void }){
+  const addEdgeStore = useStore(s=>s.nestedSubsystemAddEdge)
+  const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
+  const removeNode = useStore(s=>s.nestedSubsystemRemoveNode)
+  const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  const path = (subsystemPath || [subsystemId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const computeResult = compute(project)
@@ -255,7 +256,7 @@ export default function SubsystemCanvas({ subsystemId, project, onSelect, onOpen
       if (ch.type === 'position' && ch.dragging === false){
         const n = nodes.find(x=>x.id===ch.id)
         const pos = n?.position || ch.position
-        if (pos) updatePos(subsystemId, ch.id, pos.x, pos.y)
+        if (pos) updatePos(path, ch.id, pos.x, pos.y)
       }
     }
   }, [nodes, subsystemId])
@@ -270,16 +271,16 @@ export default function SubsystemCanvas({ subsystemId, project, onSelect, onOpen
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
     setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}` } as any, eds))
-    if (c.source && c.target) addEdgeStore(subsystemId, { id: `${c.source}-${c.target}`, from: c.source, to: c.target })
-  }, [project.edges, subsystemId])
+    if (c.source && c.target) addEdgeStore(path, { id: `${c.source}-${c.target}`, from: c.source, to: c.target })
+  }, [project.edges, path])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
-    for (const n of deleted){ removeNode(subsystemId, n.id) }
-  }, [removeNode, subsystemId])
+    for (const n of deleted){ removeNode(path, n.id) }
+  }, [removeNode, path])
 
   const onEdgesDelete: OnEdgesDelete = useCallback((deleted)=>{
-    for (const e of deleted){ removeEdge(subsystemId, e.id) }
-  }, [removeEdge, subsystemId])
+    for (const e of deleted){ removeEdge(path, e.id) }
+  }, [removeEdge, path])
 
   return (
     <div className="h-full" aria-label="subsystem-canvas">

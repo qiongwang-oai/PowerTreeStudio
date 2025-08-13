@@ -36,12 +36,12 @@ function sanitizeImportedProject(pj: Project): Project {
   return p
 }
 
-export default function SubsystemInspector({ subsystemId, project, selected, onDeleted }:{ subsystemId:string, project: Project, selected:string|null, onDeleted?:()=>void }){
-  const update = useStore(s=>s.subsystemUpdateNode)
-  const removeNode = useStore(s=>s.subsystemRemoveNode)
-  const updateEdge = useStore(s=>s.subsystemUpdateEdge)
-  const removeEdge = useStore(s=>s.subsystemRemoveEdge)
-  const updateProject = useStore(s=>s.updateSubsystemProject)
+export default function SubsystemInspector({ subsystemId, subsystemPath, project, selected, onDeleted }:{ subsystemId:string, subsystemPath?: string[], project: Project, selected:string|null, onDeleted?:()=>void }){
+  const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
+  const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
+  const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
+  const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  // project import will be applied directly to the selected subsystem node via nestedSubsystemUpdateNode
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
@@ -56,7 +56,7 @@ export default function SubsystemInspector({ subsystemId, project, selected, onD
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="font-semibold">Edge <span className="text-xs text-slate-500">({edge.id})</span></div>
-              <Button variant="outline" size="sm" onClick={()=>{ removeEdge(subsystemId, edge.id); onDeleted && onDeleted() }}>Delete</Button>
+              <Button variant="outline" size="sm" onClick={()=>{ nestedRemoveEdge((subsystemPath||[subsystemId]), edge.id); onDeleted && onDeleted() }}>Delete</Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -67,7 +67,7 @@ export default function SubsystemInspector({ subsystemId, project, selected, onD
                   className="input"
                   type="number"
                   value={edge.interconnect?.R_milliohm ?? 0}
-                  onChange={e=> updateEdge(subsystemId, edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
+                  onChange={e=> nestedUpdateEdge((subsystemPath||[subsystemId]), edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
                 />
               </label>
               <ReadOnlyRow label="Dissipation (W)" value={fmt(analysis.edges[edge.id]?.P_loss_edge ?? 0, 4)} />
@@ -79,7 +79,7 @@ export default function SubsystemInspector({ subsystemId, project, selected, onD
   }
 
   if (!node) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
-  const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(subsystemId, node.id, patch) }
+  const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; nestedUpdateNode((subsystemPath||[subsystemId]), node.id, patch) }
   const curve = (node as any as ConverterNode)?.efficiency
   const points = (curve && curve.type==='curve') ? curve.points : []
   return (
@@ -88,7 +88,7 @@ export default function SubsystemInspector({ subsystemId, project, selected, onD
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="font-semibold">{node.name} <span className="text-xs text-slate-500">({node.type})</span></div>
-            <Button variant="outline" size="sm" onClick={()=>{ removeNode(subsystemId, node.id); onDeleted && onDeleted() }}>Delete</Button>
+            <Button variant="outline" size="sm" onClick={()=>{ nestedRemoveNode((subsystemPath||[subsystemId]), node.id); onDeleted && onDeleted() }}>Delete</Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -137,8 +137,7 @@ export default function SubsystemInspector({ subsystemId, project, selected, onD
                           if (!file) return
                           const pj = await importJson(file)
                           const sanitized = sanitizeImportedProject(pj)
-                          updateProject(subsystemId, _ => sanitized)
-                          update(subsystemId, node.id, { projectFileName: file.name } as any)
+                          nestedUpdateNode((subsystemPath||[subsystemId]), node.id, { project: sanitized, projectFileName: file.name } as any)
                           e.currentTarget.value = ''
                         }}
                       />
