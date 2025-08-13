@@ -68,7 +68,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
               <div className="space-y-2 text-sm">
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
                 {node.type==='Source' && <>
-                  <Field label="V_nom (V)" value={(node as any).V_nom} onChange={v=>onChange('V_nom', v)} />
+                  <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
                   <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
                 </>}
                 {node.type==='Converter' && <>

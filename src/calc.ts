@@ -66,7 +66,7 @@ export function compute(project: Project): ComputeResult {
       if (inputPorts.length !== 1){ sub.warnings.push(`Subsystem must contain exactly 1 Subsystem Input Port (found ${inputPorts.length}).`) }
       inner.nodes = inner.nodes.map(n=>{
         if ((n as any).type === 'SubsystemInput'){
-          return { id: n.id, type: 'Source', name: n.name || 'Subsystem Input', V_nom: Vin } as any
+          return { id: n.id, type: 'Source', name: n.name || 'Subsystem Input', Vout: Vin } as any
         }
         return n as any
       })
@@ -86,15 +86,15 @@ export function compute(project: Project): ComputeResult {
     else if (node.type==='Source'){ const src=node as any as SourceNode & ComputeNode
       const outs = outgoing[src.id] || []
       let I = 0; for (const e of outs){ const child=nmap[e.to]; if (child?.I_in) I += child.I_in }
-      const P_in=I*src.V_nom; src.I_out=I; src.P_out=P_in; src.P_in=P_in; src.I_in=I
+      const P_in=I*src.Vout; src.I_out=I; src.P_out=P_in; src.P_in=P_in; src.I_in=I
       const count=src.count||1
-      if (src.redundancy==='N+1'){ const available=(count-1)* (src.P_max || (src.I_max||0)*src.V_nom); const required=P_in; if (available<required) src.warnings.push(`Redundancy shortfall: available ${available.toFixed(1)}W < required ${required.toFixed(1)}W`) }
+      if (src.redundancy==='N+1'){ const available=(count-1)* (src.P_max || (src.I_max||0)*src.Vout); const required=P_in; if (available<required) src.warnings.push(`Redundancy shortfall: available ${available.toFixed(1)}W < required ${required.toFixed(1)}W`) }
       if (src.P_max && P_in > src.P_max*(1 - defaultMargins.powerPct/100)) src.warnings.push(`Source overpower ${P_in.toFixed(1)}W > ${src.P_max}W`)
       if (src.I_max && I > src.I_max*(1 - defaultMargins.currentPct/100)) src.warnings.push(`Source overcurrent ${I.toFixed(2)}A > ${src.I_max}A`) } }
   for (const e of Object.values(emap)){
     const child=nmap[e.to]; const parent=nmap[e.from]
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
-    const upV = parent?.type==='Source'? (parent as any).V_nom
+    const upV = parent?.type==='Source'? (parent as any).Vout
       : parent?.type==='Converter'? (parent as any).Vout
       : parent?.type==='Bus'? (parent as any).V_bus
       : parent?.type==='SubsystemInput'? (parent as any).Vout

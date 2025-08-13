@@ -6,7 +6,7 @@ import { AnyNode } from '../models'
 import { Alert } from './ui/alert'
 function createPreset(type:'Source'|'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'): AnyNode {
   const id = genId('n_')
-  if (type==='Source') return { id, type, name:'Source', V_nom:48, x: 80, y: 80 } as any
+  if (type==='Source') return { id, type, name:'Source', Vout:48, x: 80, y: 80 } as any
   if (type==='Converter') return { id, type, name:'Buck', Vin_min:40, Vin_max:60, Vout:12, efficiency:{type:'fixed', value:0.95}, x: 320, y: 160 } as any
   if (type==='Load') return { id, type, name:'Load', Vreq:12, I_typ:1, I_max:2, x: 560, y: 240 } as any
   if (type==='Bus') return { id, type, name:'Bus', V_bus:12, x: 420, y: 220 } as any

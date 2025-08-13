@@ -28,7 +28,7 @@ describe('Subsystem scenario sync and nested editing', () => {
       { id:'e_c1_l1', from:'c1', to:'l1' }
     ] as any
     const subsystem: AnyNode = { id:'ss', type:'Subsystem', name:'SS', inputV_nom:12, project: makeProject(innerNodes, innerEdges, 'Typical') } as any
-    const source: AnyNode = { id:'s', type:'Source', name:'S', V_nom:12 } as any
+    const source: AnyNode = { id:'s', type:'Source', name:'S', Vout:12 } as any
     const root = makeProject([source, subsystem], [{ id:'e_s_ss', from:'s', to:'ss' } as any], 'Typical')
     const r1 = compute(root)
     expect(Number(r1.nodes['ss']?.P_out?.toFixed(2))).toBe(5.00)

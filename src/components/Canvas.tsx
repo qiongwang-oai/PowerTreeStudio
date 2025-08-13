@@ -54,9 +54,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           <div className="text-center font-semibold">{n.name}</div>
           <div className="flex items-stretch justify-between gap-2">
             <div className="text-left">
-              {n.type === 'Source' && 'V_nom' in n ? (
+              {n.type === 'Source' && 'Vout' in n ? (
                 <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
                 </div>
               ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                 <div>
@@ -127,9 +127,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                 <div className="text-center font-semibold">{n.name}</div>
                 <div className="flex items-stretch justify-between gap-2">
                   <div className="text-left">
-                    {n.type === 'Source' && 'V_nom' in n ? (
+                    {n.type === 'Source' && 'Vout' in n ? (
                       <div>
-                        <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
                       </div>
                     ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                       <div>
@@ -181,9 +181,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       // Left details without name
       const left = (
         <div className="text-left">
-          {n.type === 'Source' && 'V_nom' in n ? (
+          {n.type === 'Source' && 'Vout' in n ? (
             <div>
-              <div style={{fontSize:'11px',color:'#555'}}>V_nom: {(n as any).V_nom}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
             </div>
           ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
             <div>

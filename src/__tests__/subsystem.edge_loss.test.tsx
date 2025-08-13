@@ -21,7 +21,7 @@ describe('converter to subsystem includes edge loss in P_out', ()=>{
       defaultMargins:{ currentPct:10, powerPct:10, voltageDropPct:5, voltageMarginPct:3 },
       scenarios:['Typical','Max','Idle'], currentScenario:'Typical',
       nodes:[
-        {id:'s', type:'Source', name:'S', V_nom:12},
+        {id:'s', type:'Source', name:'S', Vout:12},
         {id:'c', type:'Converter', name:'Buck', Vin_min:10, Vin_max:14, Vout:12, efficiency:{type:'fixed', value:0.95}},
         {id:'sub', type:'Subsystem', name:'SUB', inputV_nom:12, project: inner}
       ] as any,

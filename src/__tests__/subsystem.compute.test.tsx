@@ -22,7 +22,7 @@ describe('Subsystem with Subsystem Input Port', ()=>{
       defaultMargins:{ currentPct:10, powerPct:10, voltageDropPct:5, voltageMarginPct:3 },
       scenarios:['Typical','Max','Idle'], currentScenario:'Typical',
       nodes:[
-        {id:'s', type:'Source', name:'S', V_nom:12},
+        {id:'s', type:'Source', name:'S', Vout:12},
         {id:'sub', type:'Subsystem', name:'SUB', inputV_nom:12, project: inner}
       ] as any,
       edges:[{id:'e', from:'s', to:'sub'}]
