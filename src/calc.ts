@@ -123,15 +123,15 @@ export function compute(project: Project): ComputeResult {
     if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
       let childInputSum = 0
-      let edgeLossSumToSubsystem = 0
+      let edgeLossSum = 0
       for (const e of Object.values(emap)){
         if (e.from === conv.id){
           const child = nmap[e.to]
           if (child?.P_in) childInputSum += child.P_in
-          if (child?.type === 'Subsystem') edgeLossSumToSubsystem += (e.P_loss_edge || 0)
+          edgeLossSum += (e.P_loss_edge || 0)
         }
       }
-      const P_out = childInputSum + edgeLossSumToSubsystem
+      const P_out = childInputSum + edgeLossSum
       const I_out = P_out / Math.max(conv.Vout, 1e-9)
       const eta = etaFromModel(conv.efficiency, P_out, I_out, conv)
       conv.P_out = P_out

@@ -16,9 +16,9 @@ describe('curve efficiency', ()=>{
   it('computes P_in/P_out and edge losses', ()=>{
     const r = compute(proj)
     const conv = r.nodes['c']
-    expect(conv.P_out).toBeCloseTo(50, 3)
-    expect(conv.P_in! - conv.P_out!).toBeGreaterThan(0)
     const e2 = r.edges['e2']
+    expect(conv.P_out).toBeCloseTo(50 + (e2.P_loss_edge || 0), 3)
+    expect(conv.P_in! - conv.P_out!).toBeGreaterThan(0)
     expect(e2.P_loss_edge).toBeGreaterThan(0)
   })
 })
