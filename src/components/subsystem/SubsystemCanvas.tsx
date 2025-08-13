@@ -71,6 +71,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                ) : n.type === 'Subsystem' ? (
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
                 </div>
                ) : n.type === 'SubsystemInput' ? (
                 <div>
@@ -141,6 +142,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
            ) : n.type === 'Subsystem' ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
             </div>
            ) : n.type === 'SubsystemInput' ? (
             <div>
@@ -191,6 +193,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           ) : n.type === 'Subsystem' ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Vin: {(computeResult.nodes[n.id]?.inputV_nom ?? (n as any).inputV_nom ?? 0).toFixed(2)}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
             </div>
           ) : n.type === 'Note' && 'text' in n ? (
             <div>

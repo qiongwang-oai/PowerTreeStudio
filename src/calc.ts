@@ -71,8 +71,11 @@ export function compute(project: Project): ComputeResult {
         return n as any
       })
       const innerResult = compute(inner)
-      const Pin = innerResult.totals.sourceInput
-      const Pout = innerResult.totals.loadPower
+      const PinSingle = innerResult.totals.sourceInput
+      const PoutSingle = innerResult.totals.loadPower
+      const count = Math.max(1, Math.round((sub as any as SubsystemNode).numParalleledSystems || 1))
+      const Pin = PinSingle * count
+      const Pout = PoutSingle * count
       sub.P_in = Pin
       sub.P_out = Pout
       sub.loss = (Pin || 0) - (Pout || 0)

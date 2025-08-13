@@ -124,6 +124,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                 {node.type==='Bus' && <Field label="V_bus (V)" value={(node as any).V_bus} onChange={v=>onChange('V_bus', v)} />}
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
                 {node.type==='Subsystem' && <>
+                  <Field label="Number of Paralleled Systems" value={(node as any).numParalleledSystems ?? 1} onChange={v=>onChange('numParalleledSystems', Math.max(1, Math.round(v)))} />
                   <div className="flex items-center justify-between gap-2">
                     <span>Embedded Project: <b>{(node as any).projectFileName || 'None'}</b></span>
                     <>
