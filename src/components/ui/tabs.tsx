@@ -1,7 +1,7 @@
 import * as React from 'react'
 export function Tabs({value,onValueChange,children}:{value:string,onValueChange:(v:string)=>void,children:React.ReactNode}){
   const arr = React.Children.toArray(children)
-  return <div>{arr.map((c:any)=> React.isValidElement(c) ? React.cloneElement(c,{value,onValueChange}) : c)}</div>
+  return <div>{arr.map((c:any)=> React.isValidElement(c) ? React.cloneElement(c as React.ReactElement, {value, onValueChange} as any) : c)}</div>
 }
 export function TabsList({value,onValueChange,items}:{value:string,onValueChange:(v:string)=>void,items:{value:string,label:string}[]}){
   return <div className="flex gap-2 p-1 bg-slate-100 rounded-xl w-fit">
