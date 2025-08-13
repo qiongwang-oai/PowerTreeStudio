@@ -99,13 +99,30 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
     const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+    const parent = project.nodes.find(n=>n.id===e.from) as any
+    const child = project.nodes.find(n=>n.id===e.to) as any
+    const parentV = parent?.type==='Source'? parent?.Vout
+      : parent?.type==='Converter'? parent?.Vout
+      : parent?.type==='Bus'? parent?.V_bus
+      : parent?.type==='SubsystemInput'? parent?.Vout
+      : undefined
+    const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+    const childDirectVin = child?.type==='Load'? child?.Vreq
+      : child?.type==='Subsystem'? ((computeResult.nodes[child.id] as any)?.inputV_nom ?? child?.inputV_nom)
+      : undefined
+    const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
+    const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
+    const mismatch = convRangeViolation || eqViolation
+    const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+    const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
     return ({
       id: e.id,
       source: e.from,
       target: e.to,
       animated: false,
-      label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`,
-      style: { strokeWidth }
+      label,
+      ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
+      style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
     })
   }), [project.edges, computeResult])
 
@@ -249,13 +266,30 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const mapped: RFEdge[] = project.edges.map(e=>{
       const I = computeResult.edges[e.id]?.I_edge ?? 0
       const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+      const parent = project.nodes.find(n=>n.id===e.from) as any
+      const child = project.nodes.find(n=>n.id===e.to) as any
+      const parentV = parent?.type==='Source'? parent?.Vout
+        : parent?.type==='Converter'? parent?.Vout
+        : parent?.type==='Bus'? parent?.V_bus
+        : parent?.type==='SubsystemInput'? parent?.Vout
+        : undefined
+      const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+      const childDirectVin = child?.type==='Load'? child?.Vreq
+        : child?.type==='Subsystem'? ((computeResult.nodes[child.id] as any)?.inputV_nom ?? child?.inputV_nom)
+        : undefined
+      const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
+      const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
+      const mismatch = convRangeViolation || eqViolation
+      const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+      const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
       return ({
         id: e.id,
         source: e.from,
         target: e.to,
         animated: false,
-        label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`,
-        style: { strokeWidth }
+        label,
+        ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
+        style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
       })
     })
     setEdges(mapped)
