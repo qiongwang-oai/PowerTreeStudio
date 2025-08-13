@@ -92,6 +92,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
+                  <Field label="I_idle (A)" value={(node as any).I_idle} onChange={v=>onChange('I_idle', v)} />
                   <label className="flex items-center justify-between gap-2">
                     <span>Critical Load</span>
                     <input

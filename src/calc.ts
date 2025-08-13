@@ -5,7 +5,14 @@ export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge
 export type ComputeNode = AnyNode & { P_out?: number; P_in?: number; I_out?: number; I_in?: number; V_upstream?: number; loss?: number; warnings: string[] }
 export type ComputeResult = { nodes: Record<string, ComputeNode>; edges: Record<string, ComputeEdge>; totals: { loadPower: number, sourceInput: number, overallEta: number }; globalWarnings: string[]; order: string[] }
 
-export function scenarioCurrent(load: LoadNode, scenario: Scenario): number { if (scenario==='Max') return load.I_max; if (scenario==='Idle') return load.I_typ*0.2; return load.I_typ }
+export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
+  if (scenario==='Max') return load.I_max
+  if (scenario==='Idle') {
+    const idle = (load as any).I_idle
+    return Number.isFinite(idle) && idle>0 ? idle as number : load.I_typ*0.2
+  }
+  return load.I_typ
+}
 function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
   if (model.type==='fixed') return model.value
   const points = [...model.points].sort((a,b)=>a.loadPct-b.loadPct)
