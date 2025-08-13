@@ -5,12 +5,14 @@ import Canvas from './components/Canvas'
 import Inspector from './components/Inspector'
 import TotalsBar from './components/TotalsBar'
 import { Button } from './components/ui/button'
+import SubsystemEditor from './components/subsystem/SubsystemEditor'
 
 export default function App(){
   const project = useStore(s=>s.project)
   const setScenario = useStore(s=>s.setScenario)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
+  const [openSubsystemId, setOpenSubsystemId] = React.useState<string|null>(null)
   const minRight = 220, maxRight = 640
   const onDragStart = (e: React.MouseEvent)=>{
     e.preventDefault()
@@ -43,7 +45,7 @@ export default function App(){
         <div className="text-xs text-slate-500">Project: {project.name}</div>
       </div>
       <aside className="border-r bg-white overflow-auto"><Palette /></aside>
-      <main className="overflow-hidden"><Canvas onSelect={setSelected} /></main>
+      <main className="overflow-hidden"><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemId(id)} /></main>
       <aside className="relative border-l bg-white overflow-auto">
         <div
           role="separator"
@@ -55,9 +57,12 @@ export default function App(){
             background: 'transparent'
           }}
         />
-        <Inspector selected={selected} onDeleted={()=>setSelected(null)} />
+        <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemId(id)} />
       </aside>
       <div className="col-span-3"><TotalsBar /></div>
+      {openSubsystemId && (
+        <SubsystemEditor subsystemId={openSubsystemId} onClose={()=>setOpenSubsystemId(null)} onOpenSubsystem={(id)=>setOpenSubsystemId(id)} />
+      )}
     </div>
   )
 }

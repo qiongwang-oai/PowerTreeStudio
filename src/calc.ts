@@ -54,9 +54,14 @@ export function compute(project: Project): ComputeResult {
       if (conv.Pout_max && P_out > conv.Pout_max*(1 - defaultMargins.powerPct/100)) conv.warnings.push(`P_out ${P_out.toFixed(2)}W exceeds limit ${conv.Pout_max}W (incl. margin).`) }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
-      const Vin = Math.max(sub.inputV_nom || 0, 1e-9)
+      // Prefer nested SubsystemInput.Vout as the subsystem's input voltage
+      const nestedInput = (sub.project?.nodes || []).find((n:any)=> n.type==='SubsystemInput') as any
+      const nestedVout = Number(nestedInput?.Vout || 0)
+      const Vin = Math.max((Number.isFinite(nestedVout) && nestedVout>0 ? nestedVout : (sub.inputV_nom || 0)), 1e-9)
       // Clone embedded project and replace SubsystemInput with Source at Vin
       const inner: Project = JSON.parse(JSON.stringify(sub.project))
+      // Sync scenario with parent project to ensure consistent analysis
+      inner.currentScenario = project.currentScenario
       const inputPorts = inner.nodes.filter(n=> (n as any).type === 'SubsystemInput')
       if (inputPorts.length !== 1){ sub.warnings.push(`Subsystem must contain exactly 1 Subsystem Input Port (found ${inputPorts.length}).`) }
       inner.nodes = inner.nodes.map(n=>{
@@ -72,6 +77,8 @@ export function compute(project: Project): ComputeResult {
       sub.P_out = Pout
       sub.loss = (Pin || 0) - (Pout || 0)
       sub.I_in = (sub.P_in || 0) / Vin
+      // Reflect resolved input voltage onto the compute clone for UI display
+      ;(sub as any).inputV_nom = Vin
     }
     else if (node.type==='Source'){ const src=node as any as SourceNode & ComputeNode
       const outs = outgoing[src.id] || []
@@ -84,7 +91,11 @@ export function compute(project: Project): ComputeResult {
   for (const e of Object.values(emap)){
     const child=nmap[e.to]; const parent=nmap[e.from]
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
-    const upV = parent?.type==='Source'? (parent as any).V_nom : parent?.type==='Converter'? (parent as any).Vout : parent?.type==='Bus'? (parent as any).V_bus : undefined
+    const upV = parent?.type==='Source'? (parent as any).V_nom
+      : parent?.type==='Converter'? (parent as any).Vout
+      : parent?.type==='Bus'? (parent as any).V_bus
+      : parent?.type==='SubsystemInput'? (parent as any).Vout
+      : undefined
     const I = child ? (
       (child.type==='Converter' || child.type==='Subsystem')
         ? ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))

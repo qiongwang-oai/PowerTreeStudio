@@ -1,14 +1,15 @@
 import React, { useCallback, useEffect, useMemo } from 'react'
-import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete } from 'reactflow'
+import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { useStore } from '../state/store'
-import { compute } from '../calc'
+import { Project, AnyNode } from '../../models'
+import { compute } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
+import { useStore } from '../../state/store'
 
 function CustomNode(props: NodeProps) {
-  const { data } = props;
-  const nodeType = data.type;
+  const { data } = props
+  const nodeType = (data as any).type
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
     : nodeType === 'Load' ? 'bg-orange-50'
@@ -31,19 +32,16 @@ function CustomNode(props: NodeProps) {
         </>
       )}
     </div>
-  );
+  )
 }
 
-export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|null)=>void, onOpenSubsystem?:(id:string)=>void}){
-  const project = useStore(s=>s.project)
-  const addEdgeStore = useStore(s=>s.addEdge)
-  const updatePos = useStore(s=>s.updateNodePos)
-  const removeNode = useStore(s=>s.removeNode)
-  const removeEdge = useStore(s=>s.removeEdge)
+export default function SubsystemCanvas({ subsystemId, project, onSelect, onOpenNested }:{ subsystemId:string, project: Project, onSelect:(id:string|null)=>void, onOpenNested?:(id:string)=>void }){
+  const addEdgeStore = useStore(s=>s.subsystemAddEdge)
+  const updatePos = useStore(s=>s.subsystemUpdateNodePos)
+  const removeNode = useStore(s=>s.subsystemRemoveNode)
+  const removeEdge = useStore(s=>s.subsystemRemoveEdge)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
-
-  // Compute analysis each render to reflect immediate edits
   const computeResult = compute(project)
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
@@ -84,11 +82,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                 </div>
                ) : null}
             </div>
-            {/* Right power intentionally empty on init; will be filled by compute effect */}
           </div>
         </div>
       ),
-      type: n.type
+      type: (n as AnyNode).type
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
@@ -111,7 +108,6 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
 
-  // Sync when project nodes change (add/remove); preserve positions of existing nodes
   useEffect(()=>{
     setNodes(prev => {
       const prevById = new Map(prev.map(p=>[p.id, p]))
@@ -156,11 +152,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
              </div>
            ) : null}
                   </div>
-                  {/* Right power intentionally empty here; compute effect will populate */}
                 </div>
               </div>
             ),
-            type: n.type
+            type: (n as AnyNode).type
           },
           position,
           type: 'custom',
@@ -171,12 +166,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     })
   }, [project.nodes, setNodes])
 
-  // Update power info in labels when computeResult changes without resetting positions
   useEffect(()=>{
     setNodes(prev => prev.map(rn => {
       const n = project.nodes.find(x=>x.id===rn.id)
       if (!n) return rn
-      // Left details without name
       const left = (
         <div className="text-left">
           {n.type === 'Source' && 'V_nom' in n ? (
@@ -196,7 +189,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
             </div>
           ) : n.type === 'Subsystem' ? (
             <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vin: {(((computeResult.nodes[n.id] as any)?.inputV_nom) ?? (n as any).inputV_nom ?? 0).toFixed(2)}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vin: {(computeResult.nodes[n.id]?.inputV_nom ?? (n as any).inputV_nom ?? 0).toFixed(2)}V</div>
             </div>
           ) : n.type === 'Note' && 'text' in n ? (
             <div>
@@ -205,7 +198,6 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           ) : null}
         </div>
       )
-      // Right power info respecting type rules
       const pin = computeResult.nodes[n.id]?.P_in
       const pout = computeResult.nodes[n.id]?.P_out
       const showPin = (pin !== undefined) && (n.type !== 'Source')
@@ -223,7 +215,6 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           </div>
         </>
       ) : null
-
       return {
         ...rn,
         data: {
@@ -264,10 +255,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       if (ch.type === 'position' && ch.dragging === false){
         const n = nodes.find(x=>x.id===ch.id)
         const pos = n?.position || ch.position
-        if (pos) updatePos(ch.id, pos.x, pos.y)
+        if (pos) updatePos(subsystemId, ch.id, pos.x, pos.y)
       }
     }
-  }, [nodes])
+  }, [nodes, subsystemId])
 
   const onConnect = useCallback((c: Connection)=>{
     const reaches = (start:string, goal:string)=>{
@@ -279,19 +270,19 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
     setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}` } as any, eds))
-    if (c.source && c.target) addEdgeStore({ id: `${c.source}-${c.target}`, from: c.source, to: c.target })
-  }, [project.edges])
+    if (c.source && c.target) addEdgeStore(subsystemId, { id: `${c.source}-${c.target}`, from: c.source, to: c.target })
+  }, [project.edges, subsystemId])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
-    for (const n of deleted){ removeNode(n.id) }
-  }, [removeNode])
+    for (const n of deleted){ removeNode(subsystemId, n.id) }
+  }, [removeNode, subsystemId])
 
   const onEdgesDelete: OnEdgesDelete = useCallback((deleted)=>{
-    for (const e of deleted){ removeEdge(e.id) }
-  }, [removeEdge])
+    for (const e of deleted){ removeEdge(subsystemId, e.id) }
+  }, [removeEdge, subsystemId])
 
   return (
-    <div className="h-full" aria-label="canvas">
+    <div className="h-full" aria-label="subsystem-canvas">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -304,10 +295,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
-        onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(n.id) }}
+        onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenNested) onOpenNested(n.id) }}
       >
         <MiniMap /><Controls /><Background gap={16} />
       </ReactFlow>
     </div>
   )
 }
+
+

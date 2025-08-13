@@ -1,25 +1,54 @@
 import React, { useMemo } from 'react'
-import { useStore } from '../state/store'
-import { ConverterNode } from '../models'
-import { Card, CardContent, CardHeader } from './ui/card'
-import { Tabs, TabsContent, TabsList } from './ui/tabs'
+import { useStore } from '../../state/store'
+import { AnyNode, ConverterNode, Edge, Project } from '../../models'
+import { Card, CardContent, CardHeader } from '../ui/card'
+import { Tabs, TabsContent, TabsList } from '../ui/tabs'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
-import { Button } from './ui/button'
-import { compute } from '../calc'
-import { fmt } from '../utils'
-import { importJson } from '../io'
+import { Button } from '../ui/button'
+import { compute } from '../../calc'
+import { fmt, genId } from '../../utils'
+import { importJson } from '../../io'
 
-export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void}){
-  const project = useStore(s=>s.project)
-  const update = useStore(s=>s.updateNode)
-  const removeNode = useStore(s=>s.removeNode)
-  const updateEdge = useStore(s=>s.updateEdge as any)
-  const removeEdge = useStore(s=>s.removeEdge)
+function sanitizeImportedProject(pj: Project): Project {
+  let p: Project = JSON.parse(JSON.stringify(pj))
+  // Remove sources; replace with a note
+  const sources = p.nodes.filter(n=> (n as any).type==='Source')
+  if (sources.length>0){
+    const note: AnyNode = { id: genId('n_'), type:'Note' as any, name:'Import Notice', text:`${sources.length} Source node(s) removed during import. Use Subsystem Input as upstream.` } as any
+    p.nodes = [note, ...p.nodes.filter(n=> (n as any).type!=='Source')]
+    const removedIds = new Set(sources.map(s=>s.id))
+    p.edges = p.edges.filter(e=>!removedIds.has(e.from) && !removedIds.has(e.to))
+  }
+  // Ensure exactly one SubsystemInput
+  const inputs = p.nodes.filter(n=> (n as any).type==='SubsystemInput')
+  if (inputs.length===0){
+    const inputNode: AnyNode = { id: genId('n_'), type:'SubsystemInput' as any, name:'Subsystem Input', x:80, y:80 } as any
+    p.nodes = [inputNode, ...p.nodes]
+  }
+  if (inputs.length>1){
+    const [keep, ...rest] = inputs
+    const restIds = new Set(rest.map(r=>r.id))
+    const notice: AnyNode = { id: genId('n_'), type:'Note' as any, name:'Import Notice', text:`Multiple Subsystem Inputs found. Kept one (${keep.name || keep.id}); converted ${rest.length} to notes.` } as any
+    const converted: AnyNode[] = rest.map(r=>({ id: genId('n_'), type:'Note' as any, name:'Extra Input', text:`Extra input ${r.name || r.id} removed.` } as any))
+    p.nodes = [notice, ...p.nodes.filter(n=> (n as any).type!=='SubsystemInput' || n.id===keep.id), ...converted]
+    p.edges = p.edges.filter(e=> !restIds.has(e.from) && !restIds.has(e.to))
+  }
+  return p
+}
+
+export default function SubsystemInspector({ subsystemId, project, selected, onDeleted }:{ subsystemId:string, project: Project, selected:string|null, onDeleted?:()=>void }){
+  const update = useStore(s=>s.subsystemUpdateNode)
+  const removeNode = useStore(s=>s.subsystemRemoveNode)
+  const updateEdge = useStore(s=>s.subsystemUpdateEdge)
+  const removeEdge = useStore(s=>s.subsystemRemoveEdge)
+  const updateProject = useStore(s=>s.updateSubsystemProject)
   const fileRef = React.useRef<HTMLInputElement>(null)
+
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
   const analysis = compute(project)
   const node = useMemo(()=> project.nodes.find(n=>n.id===selected) || null, [project.nodes, selected])
   const [tab, setTab] = React.useState('props')
+
   if (edge) {
     return (
       <div className="h-full flex flex-col">
@@ -27,7 +56,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="font-semibold">Edge <span className="text-xs text-slate-500">({edge.id})</span></div>
-              <Button variant="outline" size="sm" onClick={()=>{ removeEdge(edge.id); onDeleted && onDeleted() }}>Delete</Button>
+              <Button variant="outline" size="sm" onClick={()=>{ removeEdge(subsystemId, edge.id); onDeleted && onDeleted() }}>Delete</Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -38,7 +67,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                   className="input"
                   type="number"
                   value={edge.interconnect?.R_milliohm ?? 0}
-                  onChange={e=> updateEdge && updateEdge(edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
+                  onChange={e=> updateEdge(subsystemId, edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
                 />
               </label>
               <ReadOnlyRow label="Dissipation (W)" value={fmt(analysis.edges[edge.id]?.P_loss_edge ?? 0, 4)} />
@@ -48,8 +77,9 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
       </div>
     )
   }
+
   if (!node) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
-  const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(node.id, patch) }
+  const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(subsystemId, node.id, patch) }
   const curve = (node as any as ConverterNode)?.efficiency
   const points = (curve && curve.type==='curve') ? curve.points : []
   return (
@@ -58,19 +88,15 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="font-semibold">{node.name} <span className="text-xs text-slate-500">({node.type})</span></div>
-            <Button variant="outline" size="sm" onClick={()=>{ removeNode(node.id); onDeleted && onDeleted() }}>Delete</Button>
+            <Button variant="outline" size="sm" onClick={()=>{ removeNode(subsystemId, node.id); onDeleted && onDeleted() }}>Delete</Button>
           </div>
         </CardHeader>
         <CardContent>
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList value={tab} onValueChange={setTab} items={[{ value:'props', label:'Properties' }, { value:'warn', label:'Warnings' }, { value:'eta', label:'Efficiency Curve' }, ...(node.type==='Subsystem'? [{ value:'embed', label:'Embedded Tree' }] : [])]} />
+            <TabsList value={tab} onValueChange={setTab} items={[{ value:'props', label:'Properties' }, { value:'warn', label:'Warnings' }, { value:'eta', label:'Efficiency Curve' }]} />
             <TabsContent value={tab} when="props">
               <div className="space-y-2 text-sm">
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
-                {node.type==='Source' && <>
-                  <Field label="V_nom (V)" value={(node as any).V_nom} onChange={v=>onChange('V_nom', v)} />
-                  <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
-                </>}
                 {node.type==='Converter' && <>
                   <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
                   <Field label="Vin_max (V)" value={(node as any).Vin_max} onChange={v=>onChange('Vin_max', v)} />
@@ -92,14 +118,6 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
-                  <label className="flex items-center justify-between gap-2">
-                    <span>Critical Load</span>
-                    <input
-                      type="checkbox"
-                      checked={(node as any).critical !== false}
-                      onChange={e=>onChange('critical', e.target.checked)}
-                    />
-                  </label>
                   <div className="mt-3 text-xs text-slate-500">Computed</div>
                   <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
                 </>}
@@ -118,9 +136,9 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                           const file = e.target.files?.[0]
                           if (!file) return
                           const pj = await importJson(file)
-                          const cloned = JSON.parse(JSON.stringify(pj))
-                          onChange('project', cloned)
-                          onChange('projectFileName', file.name)
+                          const sanitized = sanitizeImportedProject(pj)
+                          updateProject(subsystemId, _ => sanitized)
+                          update(subsystemId, node.id, { projectFileName: file.name } as any)
                           e.currentTarget.value = ''
                         }}
                       />
@@ -132,7 +150,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                     const embedded = (node as any).project
                     const input = embedded?.nodes?.find((n:any)=> n.type==='SubsystemInput')
                     const vin = Number(input?.Vout)
-                    const fallback = ((analysis.nodes[node.id] as any)?.inputV_nom as any) ?? (node as any).inputV_nom
+                    const fallback = (analysis.nodes[node.id]?.inputV_nom as any) ?? (node as any).inputV_nom
                     return Number.isFinite(vin) && vin>0 ? vin : fallback
                   })()} />
                   <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
@@ -158,23 +176,13 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                 </div>
               ) : <div className="text-sm text-slate-500">Switch to curve to edit points.</div>}
             </TabsContent>
-            {node.type==='Subsystem' && (
-              <TabsContent value={tab} when="embed">
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div>Embedded project: <b>{(node as any).projectFileName || 'None'}</b></div>
-                    <Button size="sm" onClick={()=> onOpenSubsystemEditor && onOpenSubsystemEditor(node.id)}>Open Editor</Button>
-                  </div>
-                  <div className="text-xs text-slate-500">Double-click the Subsystem node on canvas to open as well.</div>
-                </div>
-              </TabsContent>
-            )}
           </Tabs>
         </CardContent>
       </Card>
     </div>
   )
 }
+
 function Field({label, value, onChange}:{label:string, value:any, onChange:(v:number)=>void}){
   const displayValue = Number.isFinite(value) ? value : ''
   return (
@@ -196,3 +204,5 @@ function Field({label, value, onChange}:{label:string, value:any, onChange:(v:nu
 function ReadOnlyRow({label, value}:{label:string, value:any}){
   return (<div className="flex items-center justify-between gap-2"><span>{label}</span><span>{value}</span></div>)
 }
+
+
