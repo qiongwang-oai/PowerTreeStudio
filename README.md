@@ -11,6 +11,8 @@ A visual editor and analyzer for DC power distribution trees ("power trees"). Mo
   - Converter (Vin_min/max, Vout, I/P limits, efficiency: fixed or curve)
   - Load (Vreq, I_typ, I_max, Critical Load flag)
   - Bus, Note
+  - Subsystem (embeds another project; single upstream input; imports JSON in Inspector)
+  - Subsystem Input Port (used inside embedded projects; acts as the external input; treated as a Source at the subsystem's input voltage during compute)
 - **Edge modeling**: editable resistance (mΩ). Labels show resistance and calculated current.
 - **Computation**:
   - Scenario current for loads (Typical/Max/Idle)
@@ -46,7 +48,7 @@ Open the printed local URL (Vite default is http://localhost:5173).
 - Bottom bar shows Σ Loads, Σ Sources, Overall η, Warnings.
 
 ### Data model (simplified)
-- Source, Converter, Load, Bus, Note (see `src/models.ts`).
+- Source, Converter, Load, Bus, Note, Subsystem, SubsystemInput (see `src/models.ts`).
 - Edge: `interconnect.R_milliohm` used for Vdrop and ohmic loss.
 - Project scenarios: `Typical | Max | Idle`.
 

@@ -1,4 +1,4 @@
-export type NodeType = 'Source'|'Converter'|'Load'|'Bus'|'Note'
+export type NodeType = 'Source'|'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'
 export type EfficiencyModel =
  | { type: 'fixed', value: number }
  | { type: 'curve', base: 'Pout_max' | 'Iout_max', points: { loadPct:number, eta:number }[] }
@@ -8,7 +8,9 @@ export type ConverterNode = BaseNode & { type: 'Converter'; topology?: 'buck'|'l
 export type LoadNode = BaseNode & { type: 'Load'; Vreq: number; I_typ: number; I_max: number; duty_cycle?: number; critical?: boolean }
 export type BusNode = BaseNode & { type: 'Bus'; V_bus: number }
 export type NoteNode = BaseNode & { type: 'Note'; text: string }
-export type AnyNode = SourceNode|ConverterNode|LoadNode|BusNode|NoteNode
+export type SubsystemNode = BaseNode & { type: 'Subsystem'; inputV_nom: number; project: Project; projectFileName?: string }
+export type SubsystemInputNode = BaseNode & { type: 'SubsystemInput' }
+export type AnyNode = SourceNode|ConverterNode|LoadNode|BusNode|NoteNode|SubsystemNode|SubsystemInputNode
 export type Edge = { id: string; from: string; to: string; netId?: string; interconnect?: { R_milliohm?: number, length_m?: number, awg?: string } }
 export type Scenario = 'Typical'|'Max'|'Idle'
 export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[] }

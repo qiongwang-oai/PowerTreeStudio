@@ -9,16 +9,22 @@ import type { NodeProps } from 'reactflow'
 function CustomNode(props: NodeProps) {
   const { data } = props;
   const nodeType = data.type;
+  const bgClass = nodeType === 'Source' ? 'bg-green-50'
+    : nodeType === 'Converter' ? 'bg-blue-50'
+    : nodeType === 'Load' ? 'bg-orange-50'
+    : nodeType === 'Subsystem' ? 'bg-violet-50'
+    : nodeType === 'SubsystemInput' ? 'bg-slate-50'
+    : 'bg-white'
   return (
-    <div className="rounded-lg border bg-white px-2 py-1 shadow text-xs text-center min-w-[120px]">
-      {nodeType !== 'Source' && (
+    <div className={`rounded-lg border ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[120px]`}>
+      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Subsystem') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
           <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
         </>
       )}
       {data.label}
-      {(nodeType === 'Source' || nodeType === 'Converter') && (
+      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput') && (
         <>
           <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
           <div style={{ fontSize: '10px', color: '#666', marginTop: 4 }}>output</div>
@@ -57,13 +63,21 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
                   <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
                   <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
                 </div>
-              ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+               ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
                   <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
                   <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
                 </div>
-              ) : null}
+               ) : n.type === 'Subsystem' ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
+                </div>
+               ) : n.type === 'SubsystemInput' ? (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
+                </div>
+               ) : null}
             </div>
             {/* Right power intentionally empty on init; will be filled by compute effect */}
           </div>
@@ -76,13 +90,18 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
     draggable: true
   })), [project.nodes])
 
-  const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>({
-    id: e.id,
-    source: e.from,
-    target: e.to,
-    animated: false,
-    label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(computeResult.edges[e.id]?.I_edge ?? 0).toFixed(3)} A`
-  })), [project.edges, computeResult])
+  const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
+    const I = computeResult.edges[e.id]?.I_edge ?? 0
+    const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+    return ({
+      id: e.id,
+      source: e.from,
+      target: e.to,
+      animated: false,
+      label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`,
+      style: { strokeWidth }
+    })
+  }), [project.edges, computeResult])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
@@ -111,13 +130,21 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
                         <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
                         <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
                       </div>
-                    ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+           ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                       <div>
                         <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
                         <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
                         <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
                       </div>
-                    ) : null}
+           ) : n.type === 'Subsystem' ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
+            </div>
+           ) : n.type === 'SubsystemInput' ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
+            </div>
+           ) : null}
                   </div>
                   {/* Right power intentionally empty here; compute effect will populate */}
                 </div>
@@ -198,13 +225,18 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
   }, [computeResult, project.nodes, setNodes])
 
   useEffect(()=>{
-    const mapped: RFEdge[] = project.edges.map(e=>({
-      id: e.id,
-      source: e.from,
-      target: e.to,
-      animated: false,
-      label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(computeResult.edges[e.id]?.I_edge ?? 0).toFixed(3)} A`
-    }))
+    const mapped: RFEdge[] = project.edges.map(e=>{
+      const I = computeResult.edges[e.id]?.I_edge ?? 0
+      const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+      return ({
+        id: e.id,
+        source: e.from,
+        target: e.to,
+        animated: false,
+        label: `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`,
+        style: { strokeWidth }
+      })
+    })
     setEdges(mapped)
   }, [project.edges, setEdges, computeResult])
 
@@ -247,6 +279,7 @@ export default function Canvas({onSelect}:{onSelect:(id:string|null)=>void}){
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
+        defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
         onNodeClick={(_,n)=>onSelect(n.id)}
         onEdgeClick={(_,e)=>onSelect(e.id)}
         onNodesChange={handleNodesChange}

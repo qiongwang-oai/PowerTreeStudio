@@ -5,6 +5,7 @@ import { compute } from '../calc'
 import { validate } from '../rules'
 import { exportReport } from '../report'
 import { download, importJson } from '../io'
+import { genId } from '../utils'
 export default function TotalsBar(){
   const project = useStore(s=>s.project)
   const setProject = useStore(s=>s.setProject)
@@ -13,6 +14,11 @@ export default function TotalsBar(){
   const onExport = ()=> download(project.name.replace(/\s+/g,'_') + '.json', JSON.stringify(project, null, 2))
   const onImport = async (f:File)=>{ const data = await importJson(f); setProject(data) }
   const onReport = ()=> exportReport(project, result)
+  const onClear = ()=>{
+    if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
+    const cleared = { ...project, nodes: [], edges: [] }
+    setProject(cleared)
+  }
   return (
     <div className="h-12 bg-white border-t border-slate-200 flex items-center justify-between px-3 text-sm">
       <div className="flex gap-6">
@@ -25,6 +31,7 @@ export default function TotalsBar(){
         <input aria-label="import" type="file" accept="application/json" onChange={e=>e.target.files && onImport(e.target.files[0])} />
         <Button variant="outline" onClick={onExport}>Export</Button>
         <Button onClick={onReport}>Report</Button>
+        <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={onClear}>Clear</Button>
       </div>
     </div>
   )

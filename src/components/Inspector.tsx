@@ -7,6 +7,7 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import { Button } from './ui/button'
 import { compute } from '../calc'
 import { fmt } from '../utils'
+import { importJson } from '../io'
 
 export default function Inspector({selected, onDeleted}:{selected:string|null, onDeleted?:()=>void}){
   const project = useStore(s=>s.project)
@@ -103,6 +104,30 @@ export default function Inspector({selected, onDeleted}:{selected:string|null, o
                 </>}
                 {node.type==='Bus' && <Field label="V_bus (V)" value={(node as any).V_bus} onChange={v=>onChange('V_bus', v)} />}
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
+                {node.type==='Subsystem' && <>
+                  <Field label="Input V_nom (V)" value={(node as any).inputV_nom} onChange={v=>onChange('inputV_nom', v)} />
+                  <div className="flex items-center justify-between gap-2">
+                    <span>Embedded Project: <b>{(node as any).projectFileName || 'None'}</b></span>
+                    <input type="file" accept="application/json" onChange={async e=>{
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      const pj = await importJson(file)
+                      const cloned = JSON.parse(JSON.stringify(pj))
+                      onChange('project', cloned)
+                      onChange('projectFileName', file.name)
+                      // allow selecting the same file again elsewhere
+                      e.target.value = ''
+                    }} />
+                  </div>
+                  <div className="mt-3 text-xs text-slate-500">Computed (embedded)</div>
+                  <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                  <ReadOnlyRow label="Σ Sources (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                  <ReadOnlyRow label="η (%)" value={((analysis.nodes[node.id]?.P_in||0)>0 ? ((analysis.nodes[node.id]?.P_out||0)/(analysis.nodes[node.id]?.P_in||1))*100 : 0).toFixed(2)} />
+                  <ReadOnlyRow label="Dissipation (W)" value={fmt(((analysis.nodes[node.id]?.P_in||0) - (analysis.nodes[node.id]?.P_out||0)), 3)} />
+                </>}
+                {node.type==='SubsystemInput' && (
+                  <div className="text-xs text-slate-500">Driven by parent subsystem input voltage at compute time.</div>
+                )}
               </div>
             </TabsContent>
             <TabsContent value={tab} when="warn">

@@ -1,4 +1,4 @@
-import { AnyNode, ConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scenario, SourceNode } from './models'
+import { AnyNode, ConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scenario, SourceNode, SubsystemNode } from './models'
 import { clamp } from './utils'
 
 export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge?: number, R_total?: number }
@@ -52,6 +52,27 @@ export function compute(project: Project): ComputeResult {
       const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out
       if (conv.Iout_max && I_out > conv.Iout_max*(1 - defaultMargins.currentPct/100)) conv.warnings.push(`I_out ${I_out.toFixed(3)}A exceeds limit ${conv.Iout_max}A (incl. margin).`)
       if (conv.Pout_max && P_out > conv.Pout_max*(1 - defaultMargins.powerPct/100)) conv.warnings.push(`P_out ${P_out.toFixed(2)}W exceeds limit ${conv.Pout_max}W (incl. margin).`) }
+    else if (node.type==='Subsystem'){
+      const sub = node as any as SubsystemNode & ComputeNode
+      const Vin = Math.max(sub.inputV_nom || 0, 1e-9)
+      // Clone embedded project and replace SubsystemInput with Source at Vin
+      const inner: Project = JSON.parse(JSON.stringify(sub.project))
+      const inputPorts = inner.nodes.filter(n=> (n as any).type === 'SubsystemInput')
+      if (inputPorts.length !== 1){ sub.warnings.push(`Subsystem must contain exactly 1 Subsystem Input Port (found ${inputPorts.length}).`) }
+      inner.nodes = inner.nodes.map(n=>{
+        if ((n as any).type === 'SubsystemInput'){
+          return { id: n.id, type: 'Source', name: n.name || 'Subsystem Input', V_nom: Vin } as any
+        }
+        return n as any
+      })
+      const innerResult = compute(inner)
+      const Pin = innerResult.totals.sourceInput
+      const Pout = innerResult.totals.loadPower
+      sub.P_in = Pin
+      sub.P_out = Pout
+      sub.loss = (Pin || 0) - (Pout || 0)
+      sub.I_in = (sub.P_in || 0) / Vin
+    }
     else if (node.type==='Source'){ const src=node as any as SourceNode & ComputeNode
       const outs = outgoing[src.id] || []
       let I = 0; for (const e of outs){ const child=nmap[e.to]; if (child?.I_in) I += child.I_in }
@@ -60,19 +81,22 @@ export function compute(project: Project): ComputeResult {
       if (src.redundancy==='N+1'){ const available=(count-1)* (src.P_max || (src.I_max||0)*src.V_nom); const required=P_in; if (available<required) src.warnings.push(`Redundancy shortfall: available ${available.toFixed(1)}W < required ${required.toFixed(1)}W`) }
       if (src.P_max && P_in > src.P_max*(1 - defaultMargins.powerPct/100)) src.warnings.push(`Source overpower ${P_in.toFixed(1)}W > ${src.P_max}W`)
       if (src.I_max && I > src.I_max*(1 - defaultMargins.currentPct/100)) src.warnings.push(`Source overcurrent ${I.toFixed(2)}A > ${src.I_max}A`) } }
-  for (const e of Object.values(emap)){ const child=nmap[e.to]; const parent=nmap[e.from]; const I=child?.I_in||0
+  for (const e of Object.values(emap)){
+    const child=nmap[e.to]; const parent=nmap[e.from]
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
+    const upV = parent?.type==='Source'? (parent as any).V_nom : parent?.type==='Converter'? (parent as any).Vout : parent?.type==='Bus'? (parent as any).V_bus : undefined
+    const I = child ? (
+      (child.type==='Converter' || child.type==='Subsystem')
+        ? ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
+        : (child.I_in || 0)
+    ) : 0
     const V_drop=I*R_total; const P_loss=I*I*R_total; e.I_edge=I; e.R_total=R_total; e.V_drop=V_drop; e.P_loss_edge=P_loss
-    if (parent && child && 'V_upstream' in child===false){ const upV = parent.type==='Source'? (parent as any).V_nom : parent.type==='Converter'? (parent as any).Vout : parent.type==='Bus'? (parent as any).V_bus : undefined; if (upV!==undefined) (child as any).V_upstream = upV - V_drop } }
+    if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
+  }
   // Adjust converters bottom-up so parents see updated child numbers
   for (const nodeId of reverseOrder){
     const node = nmap[nodeId]; if (!node) continue
     if (node.type === 'Converter'){
-      let edgeLossSum = 0
-      for (const e of Object.values(emap)){
-        if (e.from === node.id) edgeLossSum += (e.P_loss_edge || 0)
-      }
-      ;(node as any).P_out = (node.P_out || 0) + edgeLossSum
       const conv = node as any as ConverterNode & ComputeNode
       const updatedEta = etaFromModel(conv.efficiency, conv.P_out || 0, conv.I_out || 0, conv)
       conv.P_in = (conv.P_out || 0) / Math.max(updatedEta, 1e-9)
@@ -85,15 +109,15 @@ export function compute(project: Project): ComputeResult {
     if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
       let childInputSum = 0
-      let edgeLossSum = 0
+      let edgeLossSumToSubsystem = 0
       for (const e of Object.values(emap)){
         if (e.from === conv.id){
           const child = nmap[e.to]
           if (child?.P_in) childInputSum += child.P_in
-          edgeLossSum += (e.P_loss_edge || 0)
+          if (child?.type === 'Subsystem') edgeLossSumToSubsystem += (e.P_loss_edge || 0)
         }
       }
-      const P_out = childInputSum + edgeLossSum
+      const P_out = childInputSum + edgeLossSumToSubsystem
       const I_out = P_out / Math.max(conv.Vout, 1e-9)
       const eta = etaFromModel(conv.efficiency, P_out, I_out, conv)
       conv.P_out = P_out
@@ -121,9 +145,13 @@ export function compute(project: Project): ComputeResult {
     }
   }
   for (const node of Object.values(nmap)){ if (node.type==='Load'){ const load=node as any; const up=(load.V_upstream ?? load.Vreq); const allow=load.Vreq*(1 - project.defaultMargins.voltageMarginPct/100); if (up<allow) (node as any).warnings.push(`Voltage margin shortfall at load: upstream ${up.toFixed(3)}V < allowed ${allow.toFixed(3)}V`) } }
-  const totalLoad = Object.values(nmap)
+  const totalLoadLoads = Object.values(nmap)
     .filter(n=>n.type==='Load')
     .reduce((a,n)=> a + (((n as any).critical !== false ? (n.P_out||0) : 0)), 0)
+  const totalLoadSubsystems = Object.values(nmap)
+    .filter(n=>n.type==='Subsystem')
+    .reduce((a,n)=> a + (n.P_out || 0), 0)
+  const totalLoad = totalLoadLoads + totalLoadSubsystems
   const totalSource = Object.values(nmap).filter(n=>n.type==='Source').reduce((a,n)=>a+(n.P_in||0),0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
   return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }
