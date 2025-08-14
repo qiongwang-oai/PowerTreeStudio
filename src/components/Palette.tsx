@@ -20,12 +20,11 @@ export default function Palette(){
   const onAdd = (t:any)=> addNode(createPreset(t))
   return (
     <div className="p-3 space-y-3">
-      <h2 className="text-sm font-semibold text-slate-600">Palette</h2>
+      <h2 className="text-lg font-semibold text-slate-600">Palette</h2>
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={()=>onAdd('Source')}>Source</Button>
         <Button onClick={()=>onAdd('Converter')}>Converter</Button>
         <Button onClick={()=>onAdd('Load')}>Load</Button>
-        <Button onClick={()=>onAdd('Bus')}>Bus/Net</Button>
         <Button variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
         <div className="col-span-2 h-px bg-slate-200 my-1" aria-hidden="true" />
         <Button onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
@@ -33,7 +32,7 @@ export default function Palette(){
       </div>
       <Alert>Drag from node handle to connect. DAG enforced.</Alert>
       <div>
-        <h3 className="text-sm mt-3 font-semibold">Quick presets</h3>
+        <h3 className="text-lg mt-3 font-semibold">Quick presets</h3>
         <div className="flex flex-wrap gap-2 mt-2">
           <Button variant="outline" onClick={()=>addNode(createPreset('Source'))}>48V Source</Button>
           <Button variant="outline" onClick={()=>addNode(createPreset('Converter'))}>12V Buck 95%</Button>

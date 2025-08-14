@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo } from 'react'
-import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete } from 'reactflow'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
 import { compute } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
+import { Button } from './ui/button'
+import { validate } from '../rules'
 
 function CustomNode(props: NodeProps) {
   const { data } = props;
@@ -40,6 +42,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const updatePos = useStore(s=>s.updateNodePos)
   const removeNode = useStore(s=>s.removeNode)
   const removeEdge = useStore(s=>s.removeEdge)
+  const clipboardNode = useStore(s=>s.clipboardNode)
+  const setClipboardNode = useStore(s=>s.setClipboardNode)
+  const { screenToFlowPosition } = useReactFlow()
+
+  const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
 
@@ -326,24 +334,130 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     for (const e of deleted){ removeEdge(e.id) }
   }, [removeEdge])
 
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
+    e.preventDefault()
+    setContextMenu({ type: 'node', x: e.clientX, y: e.clientY, targetId: n.id })
+  }, [])
+
+  const onPaneContextMenu = useCallback((e: React.MouseEvent)=>{
+    e.preventDefault()
+    setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
+  }, [])
+
+  const handleCopy = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const node = project.nodes.find(n=>n.id===contextMenu.targetId)
+    if (!node) return
+    const copied = JSON.parse(JSON.stringify(node)) as any
+    setClipboardNode(copied)
+    setContextMenu(null)
+  }, [contextMenu, project.nodes, setClipboardNode])
+
+  const handleDelete = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    removeNode(contextMenu.targetId)
+    setContextMenu(null)
+  }, [contextMenu, removeNode])
+
+  const handlePaste = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'pane' || !clipboardNode) return
+    const flowPos = screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y })
+    const newId = (Math.random().toString(36).slice(2,10))
+    const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
+    useStore.getState().addNode(newNode as any)
+    setContextMenu(null)
+  }, [contextMenu, clipboardNode, screenToFlowPosition])
+
+  // Keyboard shortcuts for copy, paste, delete
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only trigger if a node is selected and no input/textarea is focused
+      const active = document.activeElement
+      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)
+      if (isInput) return
+      if (selectedNodeId) {
+        if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
+          // Copy
+          const node = project.nodes.find(n => n.id === selectedNodeId)
+          if (node) {
+            const copied = JSON.parse(JSON.stringify(node))
+            setClipboardNode(copied)
+          }
+          e.preventDefault()
+        } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
+          // Delete
+          removeNode(selectedNodeId)
+          setSelectedNodeId(null)
+          e.preventDefault()
+        }
+      }
+      if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
+        // Paste
+        if (clipboardNode) {
+          // Paste at center of viewport
+          const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+          const newId = (Math.random().toString(36).slice(2,10))
+          const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
+          useStore.getState().addNode(newNode as any)
+        }
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [selectedNodeId, clipboardNode, project.nodes, removeNode, setClipboardNode, screenToFlowPosition])
+
   return (
-    <div className="h-full" aria-label="canvas">
+    <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)}>
+      {/* Floating Banner */}
+      <div className="absolute top-3 left-3 z-40 bg-white/90 border border-slate-300 rounded-lg shadow-md px-4 py-2 flex flex-col gap-2 min-w-[340px]">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-600 font-medium">Scenario:</span>
+          <div className="flex gap-1" role="tablist" aria-label="Scenario">
+            {['Typical','Max','Idle'].map(s=>(
+              <Button key={s} variant={project.currentScenario===s?'default':'outline'} size="sm" className="px-2 py-1 text-xs" aria-selected={project.currentScenario===s} onClick={()=>useStore.getState().setScenario(s as any)}>{s}</Button>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-6 text-sm">
+          <div>Σ Loads: <b>{computeResult.totals.loadPower.toFixed(2)} W</b></div>
+          <div>Σ Sources: <b>{computeResult.totals.sourceInput.toFixed(2)} W</b></div>
+          <div>Overall η: <b>{(computeResult.totals.overallEta*100).toFixed(2)}%</b></div>
+          <div>Warnings: <b>{[...computeResult.globalWarnings, ...validate(project)].length}</b></div>
+        </div>
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
         defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
-        onNodeClick={(_,n)=>onSelect(n.id)}
+        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id)}}
         onEdgeClick={(_,e)=>onSelect(e.id)}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(n.id) }}
       >
         <MiniMap /><Controls /><Background gap={16} />
       </ReactFlow>
+      {contextMenu && (
+        <div className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
+          {contextMenu.type==='node' ? (
+            <div className="py-1">
+              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
+              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
+            </div>
+          ) : (
+            <div className="py-1">
+              <button className={`block w-full text-left px-3 py-1 ${clipboardNode? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboardNode? handlePaste : undefined}>Paste</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

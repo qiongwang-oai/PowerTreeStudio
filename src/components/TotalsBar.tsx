@@ -23,13 +23,7 @@ export default function TotalsBar(){
     setImportedFileName(null)
   }
   return (
-    <div className="h-12 bg-white border-t border-slate-200 flex items-center justify-between px-3 text-sm">
-      <div className="flex gap-6">
-        <div>Σ Loads: <b>{result.totals.loadPower.toFixed(2)} W</b></div>
-        <div>Σ Sources: <b>{result.totals.sourceInput.toFixed(2)} W</b></div>
-        <div>Overall η: <b>{(result.totals.overallEta*100).toFixed(2)}%</b></div>
-        <div>Warnings: <b>{warns.length}</b></div>
-      </div>
+    <div className="h-12 bg-white border-t border-slate-200 flex items-center justify-end px-3 text-sm">
       <div className="flex items-center gap-2">
         <input
           ref={fileInputRef}

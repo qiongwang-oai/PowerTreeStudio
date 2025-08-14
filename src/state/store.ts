@@ -6,6 +6,7 @@ import { autosave, loadAutosave } from '../io'
 type State = {
   project: Project
   importedFileName: string | null
+  clipboardNode: AnyNode | null
   setProject: (p: Project) => void
   setImportedFileName: (name: string | null) => void
   addNode: (n: AnyNode) => void
@@ -16,6 +17,7 @@ type State = {
   updateNodePos: (id: string, x: number, y: number) => void
   removeNode: (id: string) => void
   removeEdge: (id: string) => void
+  setClipboardNode: (n: AnyNode | null) => void
   updateSubsystemProject: (subsystemId: string, updater: (p: Project) => Project) => void
   updateSubsystemProjectAtPath: (subsystemPath: string[], updater: (p: Project) => Project) => void
   subsystemAddNode: (subsystemId: string, node: AnyNode) => void
@@ -39,6 +41,7 @@ const saved = loadAutosave()
 export const useStore = create<State>((set,get)=>({
   project: saved || sampleProject,
   importedFileName: null,
+  clipboardNode: null,
   setProject: (p) => { set({project:p}); autosave(p) },
   setImportedFileName: (name) => { set({ importedFileName: name }) },
   addNode: (n) => { const p=get().project; p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
@@ -49,6 +52,7 @@ export const useStore = create<State>((set,get)=>({
   updateNodePos: (id, x, y) => { const p=get().project; p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
   removeNode: (id) => { const p=get().project; p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
   removeEdge: (id) => { const p=get().project; p.edges=p.edges.filter(e=>e.id!==id); set({project:{...p}}); autosave(get().project) }
+  ,setClipboardNode: (n) => { set({ clipboardNode: n }) }
   ,updateSubsystemProject: (subsystemId, updater) => {
     const p=get().project
     p.nodes=p.nodes.map(n=>{

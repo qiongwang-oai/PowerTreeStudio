@@ -63,7 +63,16 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
         </CardHeader>
         <CardContent>
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList value={tab} onValueChange={setTab} items={[{ value:'props', label:'Properties' }, { value:'warn', label:'Warnings' }, { value:'eta', label:'Efficiency Curve' }, ...(node.type==='Subsystem'? [{ value:'embed', label:'Embedded Tree' }] : [])]} />
+            <TabsList
+              value={tab}
+              onValueChange={setTab}
+              items={[
+                { value: 'props', label: 'Properties' },
+                { value: 'warn', label: 'Warnings' },
+                ...(!['Subsystem', 'Source', 'SubsystemInput'].includes(node.type) ? [{ value: 'eta', label: 'Efficiency Curve' }] : []),
+                ...(node.type === 'Subsystem' ? [{ value: 'embed', label: 'Embedded Tree' }] : [])
+              ]}
+            />
             <TabsContent value={tab} when="props">
               <div className="space-y-2 text-sm">
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
@@ -151,15 +160,18 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
             <TabsContent value={tab} when="warn">
               <div className="text-sm">{(node as any).warnings?.length? <ul className="list-disc pl-5">{(node as any).warnings!.map((w:string,i:number)=><li key={i}>{w}</li>)}</ul> : 'No warnings'}</div>
             </TabsContent>
-            <TabsContent value={tab} when="eta">
-              {curve && curve.type==='curve' ? (
-                <div className="h-40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={points}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="loadPct" unit="%" /><YAxis domain={[0,1]} /><Tooltip /><Line type="monotone" dataKey="eta" dot /></LineChart>
-                  </ResponsiveContainer>
-                </div>
-              ) : <div className="text-sm text-slate-500">Switch to curve to edit points.</div>}
-            </TabsContent>
+            {/* Only render the Efficiency Curve tab content if the tab is present */}
+            {!['Subsystem', 'Source', 'SubsystemInput'].includes(node.type) && (
+              <TabsContent value={tab} when="eta">
+                {curve && curve.type === 'curve' ? (
+                  <div className="h-40">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={points}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="loadPct" unit="%" /><YAxis domain={[0,1]} /><Tooltip /><Line type="monotone" dataKey="eta" dot /></LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : <div className="text-sm text-slate-500">Switch to curve to edit points.</div>}
+              </TabsContent>
+            )}
             {node.type==='Subsystem' && (
               <TabsContent value={tab} when="embed">
                 <div className="space-y-2 text-sm">

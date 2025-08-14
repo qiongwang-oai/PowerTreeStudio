@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo } from 'react'
-import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete } from 'reactflow'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Project, AnyNode } from '../../models'
 import { compute } from '../../calc'
@@ -40,6 +40,12 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
   const removeNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
+  const clipboardNode = useStore(s=>s.clipboardNode)
+  const setClipboardNode = useStore(s=>s.setClipboardNode)
+  const { screenToFlowPosition } = useReactFlow()
+
+  const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const path = (subsystemPath || [subsystemId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
@@ -314,8 +320,42 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     for (const e of deleted){ removeEdge(path, e.id) }
   }, [removeEdge, path])
 
+  const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
+    e.preventDefault()
+    setContextMenu({ type: 'node', x: e.clientX, y: e.clientY, targetId: n.id })
+  }, [])
+
+  const onPaneContextMenu = useCallback((e: React.MouseEvent)=>{
+    e.preventDefault()
+    setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
+  }, [])
+
+  const handleCopy = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const node = project.nodes.find(n=>n.id===contextMenu.targetId)
+    if (!node) return
+    const copied = JSON.parse(JSON.stringify(node)) as any
+    setClipboardNode(copied)
+    setContextMenu(null)
+  }, [contextMenu, project.nodes, setClipboardNode])
+
+  const handleDelete = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    removeNode(path, contextMenu.targetId)
+    setContextMenu(null)
+  }, [contextMenu, removeNode, path])
+
+  const handlePaste = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'pane' || !clipboardNode) return
+    const flowPos = screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y })
+    const newId = (Math.random().toString(36).slice(2,10))
+    const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
+    addNodeNested(path, newNode as any)
+    setContextMenu(null)
+  }, [contextMenu, clipboardNode, screenToFlowPosition, addNodeNested, path])
+
   return (
-    <div className="h-full" aria-label="subsystem-canvas">
+    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -328,10 +368,26 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
+        onNodeContextMenu={onNodeContextMenu}
+        onPaneContextMenu={onPaneContextMenu}
         onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenNested) onOpenNested(n.id) }}
       >
         <MiniMap /><Controls /><Background gap={16} />
       </ReactFlow>
+      {contextMenu && (
+        <div className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
+          {contextMenu.type==='node' ? (
+            <div className="py-1">
+              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
+              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
+            </div>
+          ) : (
+            <div className="py-1">
+              <button className={`block w-full text-left px-3 py-1 ${clipboardNode? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboardNode? handlePaste : undefined}>Paste</button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
