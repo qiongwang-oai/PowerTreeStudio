@@ -218,6 +218,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
               <div style={{fontSize:'11px',color:'#555'}}>Vin: {(((computeResult.nodes[n.id] as any)?.inputV_nom) ?? (n as any).inputV_nom ?? 0).toFixed(2)}V</div>
               <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
             </div>
+          ) : n.type === 'SubsystemInput' ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
+            </div>
           ) : n.type === 'Note' && 'text' in n ? (
             <div>
               <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
@@ -226,17 +230,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         </div>
       )
       // Right power info respecting type rules
-      const pin = computeResult.nodes[n.id]?.P_in
       const pout = computeResult.nodes[n.id]?.P_out
-      const showPin = (pin !== undefined) && (n.type !== 'Source')
       const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const right = (showPin || showPout) ? (
+      const right = (showPout) ? (
         <>
           <div className="w-px bg-slate-300 mx-1" />
           <div className="text-left min-w-[70px]">
-            {showPin && (
-              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
-            )}
             {showPout && (
               <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
             )}

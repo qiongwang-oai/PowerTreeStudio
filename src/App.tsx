@@ -32,8 +32,8 @@ export default function App(){
     window.addEventListener('mouseup', onUp)
   }
   return (
-    <div className="h-screen grid" style={{gridTemplateRows:'72px 1fr 48px', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
-      <div className="col-span-3 px-3 border-b bg-white">
+    <div className="h-screen grid" style={{gridTemplateRows:'88px 1fr 48px', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
+      <div className="col-span-3 px-3 py-2 border-b bg-white">
         <div className="flex items-center">
           <div className="font-semibold text-3xl">PowerTree Studio</div>
         </div>

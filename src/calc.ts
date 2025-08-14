@@ -97,7 +97,18 @@ export function compute(project: Project): ComputeResult {
       const count=src.count||1
       if (src.redundancy==='N+1'){ const available=(count-1)* (src.P_max || (src.I_max||0)*src.Vout); const required=P_in; if (available<required) src.warnings.push(`Redundancy shortfall: available ${available.toFixed(1)}W < required ${required.toFixed(1)}W`) }
       if (src.P_max && P_in > src.P_max*(1 - defaultMargins.powerPct/100)) src.warnings.push(`Source overpower ${P_in.toFixed(1)}W > ${src.P_max}W`)
-      if (src.I_max && I > src.I_max*(1 - defaultMargins.currentPct/100)) src.warnings.push(`Source overcurrent ${I.toFixed(2)}A > ${src.I_max}A`) } }
+      if (src.I_max && I > src.I_max*(1 - defaultMargins.currentPct/100)) src.warnings.push(`Source overcurrent ${I.toFixed(2)}A > ${src.I_max}A`) }
+    else if (node.type==='SubsystemInput'){
+      const input = node as any as ComputeNode
+      const outs = outgoing[input.id] || []
+      let I = 0; for (const e of outs){ const child=nmap[e.to]; if (child?.I_in) I += child.I_in }
+      const Vout = (input as any).Vout || 0
+      const P_in = I * Vout
+      input.I_out = I
+      input.P_out = P_in
+      input.P_in = P_in
+      input.I_in = I
+    } }
   for (const e of Object.values(emap)){
     const child=nmap[e.to]; const parent=nmap[e.from]
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
@@ -147,10 +158,10 @@ export function compute(project: Project): ComputeResult {
       conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
     }
   }
-  // Update Source totals after converters are reconciled
+  // Update Source-like totals after converters are reconciled
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Source'){
+    if (node.type === 'Source' || node.type === 'SubsystemInput'){
       let childInputSum = 0
       let edgeLossSum = 0
       for (const e of Object.values(emap)){
@@ -173,7 +184,9 @@ export function compute(project: Project): ComputeResult {
     .filter(n=>n.type==='Subsystem')
     .reduce((a,n)=> a + (n.P_out || 0), 0)
   const totalLoad = totalLoadLoads + totalLoadSubsystems
-  const totalSource = Object.values(nmap).filter(n=>n.type==='Source').reduce((a,n)=>a+(n.P_in||0),0)
+  const totalSource = Object.values(nmap)
+    .filter(n=> n.type==='Source' || n.type==='SubsystemInput')
+    .reduce((a,n)=> a + (n.P_in || 0), 0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
   return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }
 }

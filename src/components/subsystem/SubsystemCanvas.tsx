@@ -219,17 +219,12 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           ) : null}
         </div>
       )
-      const pin = computeResult.nodes[n.id]?.P_in
       const pout = computeResult.nodes[n.id]?.P_out
-      const showPin = (pin !== undefined) && (n.type !== 'Source')
       const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const right = (showPin || showPout) ? (
+      const right = (showPout) ? (
         <>
           <div className="w-px bg-slate-300 mx-1" />
           <div className="text-left min-w-[70px]">
-            {showPin && (
-              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
-            )}
             {showPout && (
               <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
             )}
