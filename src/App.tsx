@@ -10,6 +10,7 @@ import SubsystemEditor from './components/subsystem/SubsystemEditor'
 export default function App(){
   const project = useStore(s=>s.project)
   const setScenario = useStore(s=>s.setScenario)
+  const importedFileName = useStore(s=>s.importedFileName)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
   const [openSubsystemIds, setOpenSubsystemIds] = React.useState<string[]>([])
@@ -31,18 +32,22 @@ export default function App(){
     window.addEventListener('mouseup', onUp)
   }
   return (
-    <div className="h-screen grid" style={{gridTemplateRows:'48px 1fr 48px', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
-      <div className="col-span-3 flex items-center justify-between px-3 border-b bg-white">
-        <div className="flex items-center gap-2">
-          <div className="font-semibold">PowerTree Studio</div>
-          <div className="text-xs text-slate-500">Scenario:</div>
-          <div className="flex gap-1" role="tablist" aria-label="Scenario">
-            {['Typical','Max','Idle'].map(s=>(
-              <Button key={s} variant={project.currentScenario===s?'default':'outline'} size="sm" aria-selected={project.currentScenario===s} onClick={()=>setScenario(s as any)}>{s}</Button>
-            ))}
-          </div>
+    <div className="h-screen grid" style={{gridTemplateRows:'72px 1fr 48px', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
+      <div className="col-span-3 px-3 border-b bg-white">
+        <div className="flex items-center">
+          <div className="font-semibold text-3xl">PowerTree Studio</div>
         </div>
-        <div className="text-xs text-slate-500">Project: {project.name}</div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="flex items-center gap-2">
+            <div className="text-sm text-slate-600 font-medium">Scenario:</div>
+            <div className="flex gap-1" role="tablist" aria-label="Scenario">
+              {['Typical','Max','Idle'].map(s=>(
+                <Button key={s} variant={project.currentScenario===s?'default':'outline'} size="sm" className="px-2 py-1 text-xs" aria-selected={project.currentScenario===s} onClick={()=>setScenario(s as any)}>{s}</Button>
+              ))}
+            </div>
+          </div>
+          <div className="text-xs text-slate-500">Project: {importedFileName || 'New Project'}</div>
+        </div>
       </div>
       <aside className="border-r bg-white overflow-auto"><Palette /></aside>
       <main className="overflow-hidden"><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds(ids=>[...ids, id])} /></main>

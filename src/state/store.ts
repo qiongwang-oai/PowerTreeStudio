@@ -5,7 +5,9 @@ import { autosave, loadAutosave } from '../io'
 
 type State = {
   project: Project
+  importedFileName: string | null
   setProject: (p: Project) => void
+  setImportedFileName: (name: string | null) => void
   addNode: (n: AnyNode) => void
   addEdge: (e: Edge) => void
   updateNode: (id: string, patch: Partial<AnyNode>) => void
@@ -36,7 +38,9 @@ const saved = loadAutosave()
 
 export const useStore = create<State>((set,get)=>({
   project: saved || sampleProject,
+  importedFileName: null,
   setProject: (p) => { set({project:p}); autosave(p) },
+  setImportedFileName: (name) => { set({ importedFileName: name }) },
   addNode: (n) => { const p=get().project; p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
   addEdge: (e) => { const p=get().project; if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
   updateNode: (id, patch) => { const p=get().project; p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },

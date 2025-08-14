@@ -9,16 +9,18 @@ import { genId } from '../utils'
 export default function TotalsBar(){
   const project = useStore(s=>s.project)
   const setProject = useStore(s=>s.setProject)
+  const setImportedFileName = useStore(s=>s.setImportedFileName)
   const result = compute(project)
   const warns = [...validate(project), ...result.globalWarnings]
   const onExport = ()=> download(project.name.replace(/\s+/g,'_') + '.json', JSON.stringify(project, null, 2))
-  const onImport = async (f:File)=>{ const data = await importJson(f); setProject(data) }
+  const onImport = async (f:File)=>{ const data = await importJson(f); setProject(data); setImportedFileName(f.name) }
   const onReport = ()=> exportReport(project, result)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
     const cleared = { ...project, nodes: [], edges: [] }
     setProject(cleared)
+    setImportedFileName(null)
   }
   return (
     <div className="h-12 bg-white border-t border-slate-200 flex items-center justify-between px-3 text-sm">
