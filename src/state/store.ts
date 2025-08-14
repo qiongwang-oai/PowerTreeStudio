@@ -34,6 +34,8 @@ type State = {
   nestedSubsystemUpdateNodePos: (subsystemPath: string[], nodeId: string, x: number, y: number) => void
   nestedSubsystemRemoveNode: (subsystemPath: string[], nodeId: string) => void
   nestedSubsystemRemoveEdge: (subsystemPath: string[], edgeId: string) => void
+  openSubsystemIds: string[],
+  setOpenSubsystemIds: (ids: string[]) => void
 }
 
 const saved = loadAutosave()
@@ -139,4 +141,6 @@ export const useStore = create<State>((set,get)=>({
     const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.filter(e=>e.id!==edgeId) })
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
+  ,openSubsystemIds: [] as string[],
+  setOpenSubsystemIds: (ids) => set({ openSubsystemIds: ids })
 }))

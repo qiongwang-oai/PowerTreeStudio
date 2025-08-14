@@ -46,6 +46,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const { screenToFlowPosition } = useReactFlow()
 
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
+  const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const path = (subsystemPath || [subsystemId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
@@ -354,6 +355,44 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     setContextMenu(null)
   }, [contextMenu, clipboardNode, screenToFlowPosition, addNodeNested, path])
 
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
+      if (isInput) return;
+      if (selectedNodeId) {
+        if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
+          // Copy
+          const node = project.nodes.find(n => n.id === selectedNodeId);
+          if (node) {
+            const copied = JSON.parse(JSON.stringify(node));
+            setClipboardNode(copied);
+          }
+          e.preventDefault();
+        } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
+          // Delete
+          removeNode(path, selectedNodeId);
+          setSelectedNodeId(null);
+          onSelect(null);
+          e.preventDefault();
+        }
+      }
+      if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
+        // Paste
+        if (clipboardNode) {
+          // Paste at center of viewport
+          const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+          const newId = (Math.random().toString(36).slice(2,10));
+          const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y };
+          addNodeNested(path, newNode as any);
+        }
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedNodeId, clipboardNode, project.nodes, removeNode, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect]);
+
   return (
     <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)}>
       <ReactFlow
@@ -362,7 +401,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         nodeTypes={nodeTypes}
         fitView
         defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
-        onNodeClick={(_,n)=>onSelect(n.id)}
+        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id)}}
         onEdgeClick={(_,e)=>onSelect(e.id)}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}

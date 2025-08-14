@@ -45,6 +45,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
   const { screenToFlowPosition } = useReactFlow()
+  const [openSubsystemIds, setOpenSubsystemIds] = useStore(s => [s.openSubsystemIds, s.setOpenSubsystemIds]);
 
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
@@ -371,7 +372,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   // Keyboard shortcuts for copy, paste, delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Only trigger if a node is selected and no input/textarea is focused
+      // Prevent shortcuts if any subsystem editor is open
+      if (openSubsystemIds && openSubsystemIds.length > 0) return;
       const active = document.activeElement
       const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)
       if (isInput) return
@@ -405,7 +407,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, clipboardNode, project.nodes, removeNode, setClipboardNode, screenToFlowPosition])
+  }, [selectedNodeId, clipboardNode, project.nodes, removeNode, setClipboardNode, screenToFlowPosition, openSubsystemIds])
 
   return (
     <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)}>

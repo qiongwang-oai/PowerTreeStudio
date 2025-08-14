@@ -16,7 +16,8 @@ export default function App(){
   const importedFileName = useStore(s=>s.importedFileName)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
-  const [openSubsystemIds, setOpenSubsystemIds] = React.useState<string[]>([])
+  const openSubsystemIds = useStore(s => s.openSubsystemIds);
+  const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const minRight = 220, maxRight = 640
   const onDragStart = (e: React.MouseEvent)=>{
     e.preventDefault()
@@ -44,7 +45,7 @@ export default function App(){
         </div>
       </div>
       <aside className="border-r bg-white overflow-auto"><Palette /></aside>
-      <main className="overflow-hidden"><ReactFlowProvider><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds(ids=>[...ids, id])} /></ReactFlowProvider></main>
+      <main className="overflow-hidden"><ReactFlowProvider><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} /></ReactFlowProvider></main>
       <aside className="relative border-l bg-white overflow-auto">
         <div
           role="separator"
@@ -56,7 +57,7 @@ export default function App(){
             background: 'transparent'
           }}
         />
-        <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds(ids=>[...ids, id])} />
+        <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} />
       </aside>
       <div className="col-span-3"><TotalsBar /></div>
       {openSubsystemIds.map((id, idx)=>{
@@ -72,8 +73,8 @@ export default function App(){
             subsystemId={id}
             subsystemPath={openSubsystemIds.slice(0, idx+1)}
             projectContext={ctx}
-            onClose={()=>setOpenSubsystemIds(ids=>ids.slice(0, -1))}
-            onOpenSubsystem={(nextId)=>setOpenSubsystemIds(ids=>[...ids, nextId])}
+            onClose={()=>setOpenSubsystemIds(openSubsystemIds.slice(0, -1))}
+            onOpenSubsystem={(nextId)=>setOpenSubsystemIds([...openSubsystemIds, nextId])}
           />
         )
       })}
