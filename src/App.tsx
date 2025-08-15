@@ -81,7 +81,7 @@ export default function App(){
               background: 'transparent'
             }}
           />
-          <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} />
+          <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} onSelect={(id)=>setSelected(id)} />
         </aside>
         <div className="col-span-3"><TotalsBar /></div>
         {openSubsystemIds.map((id, idx)=>{

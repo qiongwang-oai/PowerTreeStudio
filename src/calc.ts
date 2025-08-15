@@ -77,10 +77,26 @@ export function compute(project: Project): ComputeResult {
       const nestedInput = (sub.project?.nodes || []).find((n:any)=> n.type==='SubsystemInput') as any
       const nestedVout = Number(nestedInput?.Vout || 0)
       const Vin = Math.max((Number.isFinite(nestedVout) && nestedVout>0 ? nestedVout : (sub.inputV_nom || 0)), 1e-9)
-      // Clone embedded project and replace SubsystemInput with Source at Vin
-      const inner: Project = JSON.parse(JSON.stringify(sub.project))
-      // Sync scenario with parent project to ensure consistent analysis
-      inner.currentScenario = project.currentScenario
+      // Clone embedded project and replace SubsystemInput with Source at Vin. Harden for missing project.
+      let inner: Project
+      if (!sub.project || typeof sub.project !== 'object'){
+        // Create a minimal empty embedded project and warn
+        sub.warnings.push('Subsystem has no embedded project; assuming empty project.')
+        inner = {
+          id: 'embedded-empty',
+          name: 'Embedded',
+          units: project.units,
+          defaultMargins: project.defaultMargins,
+          scenarios: project.scenarios,
+          currentScenario: project.currentScenario,
+          nodes: [],
+          edges: []
+        }
+      } else {
+        inner = JSON.parse(JSON.stringify(sub.project))
+        // Sync scenario with parent project to ensure consistent analysis
+        inner.currentScenario = project.currentScenario
+      }
       const inputPorts = inner.nodes.filter(n=> (n as any).type === 'SubsystemInput')
       if (inputPorts.length !== 1){ sub.warnings.push(`Subsystem must contain exactly 1 Subsystem Input Port (found ${inputPorts.length}).`) }
       inner.nodes = inner.nodes.map(n=>{

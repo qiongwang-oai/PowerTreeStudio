@@ -9,7 +9,7 @@ import { compute, etaFromModel } from '../calc'
 import { fmt } from '../utils'
 import { importJson } from '../io'
 
-export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void}){
+export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, onSelect}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(id:string)=>void}){
   const project = useStore(s=>s.project)
   const update = useStore(s=>s.updateNode)
   const removeNode = useStore(s=>s.removeNode)
@@ -78,7 +78,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
   // Write: always store as { loadPct, eta }
   function updateCurvePoints(newPoints: { current: number, eta: number }[]) {
     const pts = newPoints.map(p => ({ loadPct: Math.round(100 * p.current / maxCurrent), eta: p.eta }))
-    update(node.id, { efficiency: { ...curve, type: 'curve', base: 'Iout_max', points: pts } })
+    update(node!.id, { efficiency: { ...curve, type: 'curve', base: 'Iout_max', points: pts } })
   }
   function handlePointChange(idx: number, field: 'current' | 'eta', value: number) {
     const newPoints = currentPoints.map((p, i) => i === idx ? { ...p, [field]: value } : p)
@@ -110,8 +110,8 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
               onValueChange={setTab}
               items={[
                 { value: 'props', label: 'Properties' },
-                { value: 'warn', label: 'Warnings' },
-                ...(!['Subsystem', 'Source', 'SubsystemInput'].includes(node!.type) ? [{ value: 'eta', label: 'Efficiency Curve' }] : []),
+                ...((node!.type !== 'Note') ? [{ value: 'warn', label: 'Node Summary' }] : []),
+                ...((!['Subsystem', 'Source', 'SubsystemInput', 'Note'].includes(node!.type)) ? [{ value: 'eta', label: 'Efficiency Curve' }] : []),
                 ...(node!.type === 'Subsystem' ? [{ value: 'embed', label: 'Embedded Tree' }] : [])
               ]}
             />
@@ -245,11 +245,145 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                 </>}
               </div>
             </TabsContent>
-            <TabsContent value={tab} when="warn">
-              <div className="text-sm">{(node as any).warnings?.length? <ul className="list-disc pl-5">{(node as any).warnings!.map((w:string,i:number)=><li key={i}>{w}</li>)}</ul> : 'No warnings'}</div>
-            </TabsContent>
+            {(node.type !== 'Note') && (
+              <TabsContent value={tab} when="warn">
+                <div className="text-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-slate-500 mr-2">Scenario</span>
+                      <span className="inline-block text-xs px-2 py-0.5 rounded border bg-slate-50">{project.currentScenario}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-slate-600">Warnings: <b>{(analysis.nodes[node.id]?.warnings || []).length}</b></div>
+                      <Button size="sm" variant="outline" onClick={()=>setTab('props')}>Edit Properties</Button>
+                    </div>
+                  </div>
+                  {(() => {
+                    const warns = analysis.nodes[node.id]?.warnings || []
+                    return warns.length
+                      ? <ul className="list-disc pl-5">{warns.map((w:string,i:number)=><li key={i}>{w}</li>)}</ul>
+                      : <div className="text-slate-500">No warnings</div>
+                  })()}
+                  <div className="border-t pt-2">
+                    <div className="font-medium mb-1">Context</div>
+                    {(() => {
+                      const res = analysis.nodes[node.id] as any
+                      if (!res) return null
+                      if (node.type === 'Converter') {
+                        const eff = (node as any).efficiency
+                        const eta = (()=>{ try{ return etaFromModel(eff, res.P_out||0, res.I_out||0, node as any) }catch(e){ return 0 } })()
+                        return (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <div>P_in: <b>{(res.P_in||0).toFixed(3)} W</b></div>
+                            <div>P_out: <b>{(res.P_out||0).toFixed(3)} W</b></div>
+                            <div>I_in: <b>{(res.I_in||0).toFixed(3)} A</b></div>
+                            <div>I_out: <b>{(res.I_out||0).toFixed(3)} A</b></div>
+                            <div>Loss: <b>{(res.loss||0).toFixed(3)} W</b></div>
+                            <div>η(at op): <b>{eta.toFixed(4)}</b></div>
+                          </div>
+                        )
+                      }
+                      if (node.type === 'Load') {
+                        const up = (res.V_upstream ?? (node as any).Vreq) as number
+                        const allow = (node as any).Vreq * (1 - project.defaultMargins.voltageMarginPct/100)
+                        return (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <div>V_upstream: <b>{(up||0).toFixed(3)} V</b></div>
+                            <div>Allow ≥ <b>{allow.toFixed(3)} V</b></div>
+                            <div>P_in: <b>{(res.P_in||0).toFixed(3)} W</b></div>
+                            <div>I_in: <b>{(res.I_in||0).toFixed(3)} A</b></div>
+                          </div>
+                        )
+                      }
+                      if (node.type === 'Source' || node.type === 'SubsystemInput') {
+                        return (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <div>P_out: <b>{(res.P_out||0).toFixed(3)} W</b></div>
+                            <div>I_out: <b>{(res.I_out||0).toFixed(3)} A</b></div>
+                          </div>
+                        )
+                      }
+                      if (node.type === 'Subsystem') {
+                        return (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <div>Vin (resolved): <b>{((res as any).inputV_nom||0).toFixed(3)} V</b></div>
+                            <div>Paralleled: <b>{(((node as any).numParalleledSystems ?? 1))}</b></div>
+                            <div>P_in: <b>{(res.P_in||0).toFixed(3)} W</b></div>
+                            <div>P_out: <b>{(res.P_out||0).toFixed(3)} W</b></div>
+                            <div>Loss: <b>{(res.loss||0).toFixed(3)} W</b></div>
+                          </div>
+                        )
+                      }
+                      if (node.type === 'Bus') {
+                        return (
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                            <div>V_bus: <b>{((node as any).V_bus||0).toFixed(3)} V</b></div>
+                          </div>
+                        )
+                      }
+                      return null
+                    })()}
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="font-medium mb-1">Edge impact</div>
+                    {(() => {
+                      const emap = analysis.edges
+                      const incoming = [...project.edges.filter(e=>e.to===node.id)].sort((a,b)=>{
+                        const va = (emap[a.id]?.V_drop || 0)
+                        const vb = (emap[b.id]?.V_drop || 0)
+                        return vb - va
+                      })
+                      const outgoing = [...project.edges.filter(e=>e.from===node.id)].sort((a,b)=>{
+                        const va = (emap[a.id]?.V_drop || 0)
+                        const vb = (emap[b.id]?.V_drop || 0)
+                        return vb - va
+                      })
+                      const Item = ({id}:{id:string}) => {
+                        const e = project.edges.find(x=>x.id===id)
+                        if (!e) return null
+                        const ce = emap[id] || {}
+                        const I = (ce.I_edge||0)
+                        const Vd = (ce.V_drop||0)
+                        const Pl = (ce.P_loss_edge||0)
+                        const Rm = (e.interconnect?.R_milliohm ?? 0)
+                        return (
+                          <div className="flex items-center justify-between gap-2 py-0.5">
+                            <div className="text-xs">
+                              <b>{id}</b> — {Rm} mΩ | I {I.toFixed(3)} A | ΔV {Vd.toFixed(4)} V | P_loss {Pl.toFixed(4)} W
+                            </div>
+                            {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect(id)}>Select</Button>}
+                          </div>
+                        )
+                      }
+                      return (
+                        <div className="space-y-2">
+                          <div>
+                            <div className="text-xs text-slate-600 mb-1">Incoming</div>
+                            {incoming.length? incoming.map(e=> <Item key={e.id} id={e.id} />) : <div className="text-xs text-slate-400">None</div>}
+                          </div>
+                          <div>
+                            <div className="text-xs text-slate-600 mb-1">Outgoing</div>
+                            {outgoing.length? outgoing.map(e=> <Item key={e.id} id={e.id} />) : <div className="text-xs text-slate-400">None</div>}
+                          </div>
+                        </div>
+                      )
+                    })()}
+                  </div>
+                  {(() => {
+                    const warns = analysis.nodes[node.id]?.warnings || []
+                    if (!warns.length) return null
+                    const text = warns.join('\n')
+                    return (
+                      <div className="pt-1">
+                        <Button size="sm" variant="outline" onClick={()=>{ try{ navigator.clipboard.writeText(text) }catch(e){} }}>Copy warnings</Button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </TabsContent>
+            )}
             {/* Only render the Efficiency Curve tab content if the tab is present */}
-            {!['Subsystem', 'Source', 'SubsystemInput'].includes(node.type) && (
+            {(!['Subsystem', 'Source', 'SubsystemInput', 'Note'].includes(node.type)) && (
               <TabsContent value={tab} when="eta">
                 {isCurve ? (
                   <div className="mt-4">
@@ -266,7 +400,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor}:{
                             const Iout = Math.max(0, Math.min(maxCurrent, (analysis.nodes[node.id]?.I_out) ?? 0))
                             const Pout = (analysis.nodes[node.id]?.P_out) ?? 0
                             let eta = 0
-                            try { eta = etaFromModel(eff, Pout, Iout, node) } catch (e) { eta = 0 }
+                            try { eta = etaFromModel(eff, Pout, Iout, node as any) } catch (e) { eta = 0 }
                             eta = Math.max(0, Math.min(1, eta))
                             return <ReferenceDot x={Iout} y={eta} r={4} fill="#ef4444" stroke="none" />
                           })()}

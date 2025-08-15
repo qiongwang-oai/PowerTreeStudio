@@ -7,6 +7,7 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { validate } from '../rules'
+import type { Project, Scenario } from '../models'
 
 function CustomNode(props: NodeProps) {
   const { data } = props;
@@ -54,6 +55,24 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
 
   // Compute analysis each render to reflect immediate edits
   const computeResult = compute(project)
+
+  const deepWarningCount = useMemo(()=>{
+    const countWarningsDeep = (p: Project, scenario: Scenario): number => {
+      // Clone to avoid mutating store; force scenario alignment
+      const cloned: Project = JSON.parse(JSON.stringify(p))
+      cloned.currentScenario = scenario
+      const r = compute(cloned)
+      let total = validate(cloned).length + r.globalWarnings.length
+      total += Object.values(r.nodes).reduce((acc, n:any) => acc + ((n.warnings||[]).length), 0)
+      for (const n of cloned.nodes as any[]) {
+        if (n.type === 'Subsystem' && n.project) {
+          total += countWarningsDeep(n.project as Project, scenario)
+        }
+      }
+      return total
+    }
+    return countWarningsDeep(project, project.currentScenario)
+  }, [project])
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
     id: n.id,
@@ -464,7 +483,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           <div>Σ Loads: <b>{computeResult.totals.loadPower.toFixed(2)} W</b></div>
           <div>Σ Sources: <b>{computeResult.totals.sourceInput.toFixed(2)} W</b></div>
           <div>Overall η: <b>{(computeResult.totals.overallEta*100).toFixed(2)}%</b></div>
-          <div>Warnings: <b>{[...computeResult.globalWarnings, ...validate(project)].length}</b></div>
+          <div>Warnings: <b>{deepWarningCount}</b></div>
         </div>
       </div>
       <ReactFlow
