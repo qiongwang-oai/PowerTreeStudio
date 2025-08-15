@@ -75,9 +75,9 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
     if (pts[pts.length - 1].current < max) pts.push({ current: max, eta: pts[pts.length - 1].eta })
     return pts
   })()
-  // Write: always store as { loadPct, eta }
+  // Write: store both exact 'current' for UI fidelity and 'loadPct' for calculations/back-compat
   function updateCurvePoints(newPoints: { current: number, eta: number }[]) {
-    const pts = newPoints.map(p => ({ loadPct: Math.round(100 * p.current / maxCurrent), eta: p.eta }))
+    const pts = newPoints.map(p => ({ current: p.current, loadPct: Math.round(100 * p.current / maxCurrent), eta: p.eta }))
     update(node!.id, { efficiency: { ...curve, type: 'curve', base: 'Iout_max', points: pts } })
   }
   function handlePointChange(idx: number, field: 'current' | 'eta', value: number) {
