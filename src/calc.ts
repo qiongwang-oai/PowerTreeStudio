@@ -13,20 +13,26 @@ export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
   }
   return load.I_typ
 }
-function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
+export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
   if (model.type==='fixed') return model.value
-  const points = [...model.points].sort((a,b)=>a.loadPct-b.loadPct)
+  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9; // default efficiency if points missing
+  // Support both loadPct and current for backward compatibility
   const base = model.base
   const maxBase = base==='Pout_max'? node.Pout_max : node.Iout_max
   if (!maxBase) return 0.9
+  let points = [...model.points]
+  if ('current' in points[0] && typeof (points[0] as any).current === 'number') {
+    points = points.map(p => ({ loadPct: 'current' in p && typeof p.current === 'number' ? Math.round(100 * p.current / maxBase) : (p.loadPct ?? 0), eta: p.eta }))
+  }
+  points.sort((a,b)=>a.loadPct-b.loadPct)
   const frac = base==='Pout_max'? (P_out/ maxBase) : (I_out/ maxBase)
   const pct = clamp(frac*100, 0, 100)
   let prev = points[0], next = points[points.length-1]
   for (let i=0;i<points.length-1;i++){ if (pct>=points[i].loadPct && pct<=points[i+1].loadPct){ prev=points[i]; next=points[i+1]; break } }
   if (pct<=points[0].loadPct){ prev=points[0]; next=points[0] }
   if (pct>=points[points.length-1].loadPct){ prev=points[points.length-1]; next=points[points.length-1] }
-  const t = prev===next? 0 : (pct-prev.loadPct)/(next.loadPct-prev.loadPct)
-  return clamp(prev.eta + t*(next.eta - prev.eta), 0.01, 0.999)
+  const eta = prev.eta + (next.eta-prev.eta)*(pct-prev.loadPct)/(next.loadPct-prev.loadPct||1)
+  return eta
 }
 export function detectCycle(nodes: AnyNode[], edges: Edge[]): {hasCycle:boolean, order:string[]} {
   const adj: Record<string, string[]> = {}; const indeg: Record<string, number> = {}
@@ -53,7 +59,13 @@ export function compute(project: Project): ComputeResult {
       const P_out=load.Vreq*I; load.P_out=P_out; load.P_in=P_out; load.I_out=I; load.I_in=I }
     else if (node.type==='Converter'){ const conv=node as any as ConverterNode & ComputeNode
       let P_children=0; for (const e of (outgoing[conv.id]||[])){ const child=nmap[e.to]; if (child?.P_in) P_children+=child.P_in }
-      const I_out = P_children / Math.max(conv.Vout, 1e-9)
+      // Calculate I_out as the sum of outgoing edge currents
+      let I_out = 0;
+      for (const e of (outgoing[conv.id]||[])) {
+        if (typeof emap[e.id]?.I_edge === 'number') I_out += emap[e.id].I_edge || 0;
+      }
+      // Fallback if edge currents are not yet available
+      if (I_out === 0) I_out = P_children / Math.max(conv.Vout, 1e-9);
       const eta = etaFromModel(conv.efficiency, P_children, I_out, conv)
       const P_out=P_children; const P_in=P_out/Math.max(eta,1e-9); conv.P_out=P_out; conv.P_in=P_in; conv.I_out=I_out
       const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out
@@ -142,15 +154,16 @@ export function compute(project: Project): ComputeResult {
       const conv = node as any as ConverterNode & ComputeNode
       let childInputSum = 0
       let edgeLossSum = 0
+      let I_out = 0
       for (const e of Object.values(emap)){
         if (e.from === conv.id){
           const child = nmap[e.to]
           if (child?.P_in) childInputSum += child.P_in
           edgeLossSum += (e.P_loss_edge || 0)
+          if (child?.I_in) I_out += child.I_in
         }
       }
       const P_out = childInputSum + edgeLossSum
-      const I_out = P_out / Math.max(conv.Vout, 1e-9)
       const eta = etaFromModel(conv.efficiency, P_out, I_out, conv)
       conv.P_out = P_out
       conv.I_out = I_out

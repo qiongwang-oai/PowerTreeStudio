@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
-import { compute } from '../calc'
+import { compute, etaFromModel } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
@@ -70,7 +70,20 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
               ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                    const nodeResult = computeResult.nodes[n.id];
+                    const eff = (n as any).efficiency;
+                    if (eff?.type === 'curve' && nodeResult) {
+                      const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                      return (eta * 100).toFixed(1) + '%';
+                    } else if (eff?.type === 'fixed') {
+                      return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                    } else if (eff?.points?.[0]?.eta) {
+                      return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                    } else {
+                      return '—';
+                    }
+                  })()}</div>
                 </div>
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                 <div>
@@ -160,7 +173,20 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                     ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                       <div>
                         <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                          const nodeResult = computeResult.nodes[n.id];
+                          const eff = (n as any).efficiency;
+                          if (eff?.type === 'curve' && nodeResult) {
+                            const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                            return (eta * 100).toFixed(1) + '%';
+                          } else if (eff?.type === 'fixed') {
+                            return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                          } else if (eff?.points?.[0]?.eta) {
+                            return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                          } else {
+                            return '—';
+                          }
+                        })()}</div>
                       </div>
            ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                       <div>
@@ -214,7 +240,20 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+              <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                const nodeResult = computeResult.nodes[n.id];
+                const eff = (n as any).efficiency;
+                if (eff?.type === 'curve' && nodeResult) {
+                  const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                  return (eta * 100).toFixed(1) + '%';
+                } else if (eff?.type === 'fixed') {
+                  return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                } else if (eff?.points?.[0]?.eta) {
+                  return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                } else {
+                  return '—';
+                }
+              })()}</div>
             </div>
           ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
             <div>
