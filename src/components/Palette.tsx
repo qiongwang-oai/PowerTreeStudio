@@ -8,7 +8,7 @@ function createPreset(type:'Source'|'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|
   const id = genId('n_')
   if (type==='Source') return { id, type, name:'Source', Vout:48, x: 80, y: 80 } as any
   if (type==='Converter') return { id, type, name:'Buck', Vin_min:40, Vin_max:60, Vout:12, efficiency:{type:'fixed', value:0.95}, x: 320, y: 160 } as any
-  if (type==='Load') return { id, type, name:'Load', Vreq:12, I_typ:1, I_idle:1, I_max:2, x: 560, y: 240 } as any
+  if (type==='Load') return { id, type, name:'Load', Vreq:12, I_typ:1, I_idle:1, I_max:2, numParalleledDevices: 1, x: 560, y: 240 } as any
   if (type==='Bus') return { id, type, name:'Bus', V_bus:12, x: 420, y: 220 } as any
   if (type==='Subsystem') return { id, type, name:'Subsystem', inputV_nom:12, numParalleledSystems: 1,
     project: { id: genId('p_'), name: 'Embedded', units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }, defaultMargins: { currentPct:10, powerPct:10, voltageDropPct:5, voltageMarginPct:3 }, scenarios: ['Typical','Max','Idle'], currentScenario: 'Typical', nodes: [], edges: [] }, x: 420, y: 300 } as any

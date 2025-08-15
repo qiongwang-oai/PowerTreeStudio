@@ -195,6 +195,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
                   <Field label="I_idle (A)" value={(node as any).I_idle} onChange={v=>onChange('I_idle', v)} />
+                  <Field label="Number of Paralleled Devices" value={(node as any).numParalleledDevices ?? 1} onChange={v=>onChange('numParalleledDevices', Math.max(1, Math.round(v)))} />
                   <label className="flex items-center justify-between gap-2">
                     <span>Critical Load</span>
                     <input
@@ -235,12 +236,12 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                   </div>
                   <div className="border-t mt-4 pt-2">
                     <div className="text-base text-slate-600 font-medium mb-1">Computed (embedded)</div>
-                    <ReadOnlyRow label="Vin (V)" value={(() => {
+                    <ReadOnlyRow label="Inputs (V)" value={(() => {
                     const embedded = (node as any).project
-                    const input = embedded?.nodes?.find((n:any)=> n.type==='SubsystemInput')
-                    const vin = Number(input?.Vout)
-                    const fallback = ((analysis.nodes[node.id] as any)?.inputV_nom as any) ?? (node as any).inputV_nom
-                    return Number.isFinite(vin) && vin>0 ? vin : fallback
+                    const inputs = embedded?.nodes?.filter((n:any)=> n.type==='SubsystemInput') || []
+                    if (inputs.length===0) return '—'
+                    if (inputs.length===1) return Number(inputs[0]?.Vout || 0)
+                    return inputs.map((i:any)=>i.Vout).join(', ')
                   })()} />
                     <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
                     <ReadOnlyRow label="Σ Sources (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />

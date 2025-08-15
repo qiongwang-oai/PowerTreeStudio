@@ -19,12 +19,40 @@ function CustomNode(props: NodeProps) {
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
     : 'bg-white'
   return (
-    <div className={`rounded-lg border ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[120px]`}>
-      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Subsystem') && (
+    <div className={`rounded-lg border ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
+      {(nodeType==='Converter' || nodeType==='Load') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
           <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
         </>
+      )}
+      {nodeType==='Subsystem' && (
+        (() => {
+          const ports = Array.isArray((data as any).inputPorts) ? (data as any).inputPorts : []
+          const count = ports.length
+          if (count === 0) return (
+            <>
+              <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
+              <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
+            </>
+          )
+          return (
+            <>
+              {ports.map((p:any, idx:number) => {
+                const pct = ((idx+1)/(count+1))*100
+                const label = `${Number(p.Vout ?? 0)} V`
+                return (
+                  <React.Fragment key={p.id}>
+                    <Handle type="target" position={Position.Top} id={p.id} style={{ background: '#555', left: `${pct}%`, transform: 'translate(-50%, -50%)' }} />
+                    <div style={{ position:'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', fontSize: '10px', color: '#334155', whiteSpace: 'nowrap' }}>{label}</div>
+                  </React.Fragment>
+                )
+              })}
+              {/* Spacer to avoid label overlap */}
+              <div style={{ height: 18 }} />
+            </>
+          )
+        })()
       )}
       {data.label}
       {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput') && (
@@ -109,10 +137,11 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                   <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
                   <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
                   <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
                 </div>
                ) : n.type === 'Subsystem' ? (
                 <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>x.Vout).join(', ') || '—')}</div>
                   <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
                 </div>
                ) : n.type === 'SubsystemInput' ? (
@@ -130,7 +159,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           </div>
         </div>
       ),
-      type: n.type
+      type: n.type,
+      ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
@@ -149,7 +179,15 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       : undefined
     const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
     const childDirectVin = child?.type==='Load'? child?.Vreq
-      : child?.type==='Subsystem'? ((computeResult.nodes[child.id] as any)?.inputV_nom ?? child?.inputV_nom)
+      : child?.type==='Subsystem'? (()=>{
+          const portId = (e as any).toHandle
+          if (portId){
+            const p = (child as any)?.project?.nodes?.find((x:any)=>x.id===portId)
+            return p?.Vout
+          }
+          const ports = (child as any)?.project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')
+          return ports?.length===1? ports[0]?.Vout : undefined
+        })()
       : undefined
     const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
     const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
@@ -160,6 +198,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       id: e.id,
       source: e.from,
       target: e.to,
+      sourceHandle: (e as any).fromHandle,
+      targetHandle: (e as any).toHandle,
       animated: false,
       label,
       ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
@@ -212,6 +252,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                         <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
                         <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
                         <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
                       </div>
            ) : n.type === 'Subsystem' ? (
             <div>
@@ -233,7 +274,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                 </div>
               </div>
             ),
-            type: n.type
+            type: n.type,
+            ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
           },
           position,
           type: 'custom',
@@ -279,10 +321,11 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
               <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
               <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
               <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
             </div>
           ) : n.type === 'Subsystem' ? (
             <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vin: {(((computeResult.nodes[n.id] as any)?.inputV_nom) ?? (n as any).inputV_nom ?? 0).toFixed(2)}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Inputs: {(((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>x.Vout).join(', ')) || '—'}</div>
               <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
             </div>
           ) : n.type === 'SubsystemInput' ? (
@@ -341,7 +384,15 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         : undefined
       const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
       const childDirectVin = child?.type==='Load'? child?.Vreq
-        : child?.type==='Subsystem'? ((computeResult.nodes[child.id] as any)?.inputV_nom ?? child?.inputV_nom)
+        : child?.type==='Subsystem'? (()=>{
+            const portId = (e as any).toHandle
+            if (portId){
+              const p = (child as any)?.project?.nodes?.find((x:any)=>x.id===portId)
+              return p?.Vout
+            }
+            const ports = (child as any)?.project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')
+            return ports?.length===1? ports[0]?.Vout : undefined
+          })()
         : undefined
       const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
       const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
@@ -352,6 +403,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         id: e.id,
         source: e.from,
         target: e.to,
+        sourceHandle: (e as any).fromHandle,
+        targetHandle: (e as any).toHandle,
         animated: false,
         label,
         ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
@@ -381,8 +434,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       return false
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
-    setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}` } as any, eds))
-    if (c.source && c.target) addEdgeStore({ id: `${c.source}-${c.target}`, from: c.source, to: c.target })
+    setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}`, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle } as any, eds))
+    if (c.source && c.target) addEdgeStore({ id: `${c.source}-${c.target}`, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined })
   }, [project.edges])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{

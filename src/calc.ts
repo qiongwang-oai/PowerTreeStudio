@@ -6,12 +6,15 @@ export type ComputeNode = AnyNode & { P_out?: number; P_in?: number; I_out?: num
 export type ComputeResult = { nodes: Record<string, ComputeNode>; edges: Record<string, ComputeEdge>; totals: { loadPower: number, sourceInput: number, overallEta: number }; globalWarnings: string[]; order: string[] }
 
 export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
-  if (scenario==='Max') return load.I_max
+  const countRaw = (load as any).numParalleledDevices
+  const count = Math.max(1, Math.round(Number.isFinite(countRaw) ? (countRaw as any as number) : 1))
+  if (scenario==='Max') return load.I_max * count
   if (scenario==='Idle') {
     const idle = (load as any).I_idle
-    return Number.isFinite(idle) && idle>0 ? idle as number : load.I_typ*0.2
+    const perDevice = Number.isFinite(idle) && (idle as number)>0 ? (idle as number) : load.I_typ*0.2
+    return perDevice * count
   }
-  return load.I_typ
+  return load.I_typ * count
 }
 export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
   if (model.type==='fixed') return model.value
@@ -58,26 +61,25 @@ export function compute(project: Project): ComputeResult {
     if (node.type==='Load'){ const load = node as any as LoadNode & ComputeNode; const I=scenarioCurrent(load, currentScenario)
       const P_out=load.Vreq*I; load.P_out=P_out; load.P_in=P_out; load.I_out=I; load.I_in=I }
     else if (node.type==='Converter'){ const conv=node as any as ConverterNode & ComputeNode
-      let P_children=0; for (const e of (outgoing[conv.id]||[])){ const child=nmap[e.to]; if (child?.P_in) P_children+=child.P_in }
-      // Calculate I_out as the sum of outgoing edge currents
+      // Only consider edges from the converter's output handle
+      const outEdges = (outgoing[conv.id]||[]).filter(e=>{
+        const h = (e as any).fromHandle
+        return (h === undefined || h === 'output')
+      })
+      let P_children=0; for (const e of outEdges){ const child=nmap[e.to]; if (child?.P_in) P_children+=child.P_in }
+      // Calculate I_out as the sum of outgoing edge currents from the output handle only
       let I_out = 0;
-      for (const e of (outgoing[conv.id]||[])) {
+      for (const e of outEdges) {
         if (typeof emap[e.id]?.I_edge === 'number') I_out += emap[e.id].I_edge || 0;
       }
       // Fallback if edge currents are not yet available
       if (I_out === 0) I_out = P_children / Math.max(conv.Vout, 1e-9);
       const eta = etaFromModel(conv.efficiency, P_children, I_out, conv)
       const P_out=P_children; const P_in=P_out/Math.max(eta,1e-9); conv.P_out=P_out; conv.P_in=P_in; conv.I_out=I_out
-      const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out
-      if (conv.Iout_max && I_out > conv.Iout_max*(1 - defaultMargins.currentPct/100)) conv.warnings.push(`I_out ${I_out.toFixed(3)}A exceeds limit ${conv.Iout_max}A (incl. margin).`)
-      if (conv.Pout_max && P_out > conv.Pout_max*(1 - defaultMargins.powerPct/100)) conv.warnings.push(`P_out ${P_out.toFixed(2)}W exceeds limit ${conv.Pout_max}W (incl. margin).`) }
+      const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
-      // Prefer nested SubsystemInput.Vout as the subsystem's input voltage
-      const nestedInput = (sub.project?.nodes || []).find((n:any)=> n.type==='SubsystemInput') as any
-      const nestedVout = Number(nestedInput?.Vout || 0)
-      const Vin = Math.max((Number.isFinite(nestedVout) && nestedVout>0 ? nestedVout : (sub.inputV_nom || 0)), 1e-9)
-      // Clone embedded project and replace SubsystemInput with Source at Vin. Harden for missing project.
+      // Clone embedded project and replace each SubsystemInput with a Source at its own Vout
       let inner: Project
       if (!sub.project || typeof sub.project !== 'object'){
         // Create a minimal empty embedded project and warn
@@ -97,26 +99,56 @@ export function compute(project: Project): ComputeResult {
         // Sync scenario with parent project to ensure consistent analysis
         inner.currentScenario = project.currentScenario
       }
-      const inputPorts = inner.nodes.filter(n=> (n as any).type === 'SubsystemInput')
-      if (inputPorts.length !== 1){ sub.warnings.push(`Subsystem must contain exactly 1 Subsystem Input Port (found ${inputPorts.length}).`) }
+      const inputPorts = inner.nodes.filter(n=> (n as any).type === 'SubsystemInput') as any[]
+      // Replace each SubsystemInput with a Source at that node's own Vout
+      const portVoltageMap: Record<string, number> = {}
       inner.nodes = inner.nodes.map(n=>{
         if ((n as any).type === 'SubsystemInput'){
-          return { id: n.id, type: 'Source', name: n.name || 'Subsystem Input', Vout: Vin } as any
+          const fallbackV = Number((sub as any).inputV_nom || 0)
+          const rawV = Number((n as any).Vout)
+          const V = Number.isFinite(rawV) && rawV>0 ? rawV : fallbackV
+          portVoltageMap[n.id] = V
+          return { id: n.id, type: 'Source', name: n.name || 'Subsystem Input', Vout: V } as any
         }
         return n as any
       })
       const innerResult = compute(inner)
-      const PinSingle = innerResult.totals.sourceInput
-      const PoutSingle = innerResult.totals.loadPower
       const count = Math.max(1, Math.round((sub as any as SubsystemNode).numParalleledSystems || 1))
+      // Aggregate per-port power and totals
+      const perPortPower: Record<string, number> = {}
+      let PinSingle = 0
+      for (const p of inputPorts){
+        const nid = p.id
+        const srcNode = innerResult.nodes[nid]
+        const pout = (srcNode?.P_out || 0)
+        perPortPower[nid] = pout
+        PinSingle += pout
+      }
+      const PoutSingle = innerResult.totals.loadPower
       const Pin = PinSingle * count
       const Pout = PoutSingle * count
       sub.P_in = Pin
       sub.P_out = Pout
       sub.loss = (Pin || 0) - (Pout || 0)
-      sub.I_in = (sub.P_in || 0) / Vin
-      // Reflect resolved input voltage onto the compute clone for UI display
-      ;(sub as any).inputV_nom = Vin
+      // Approximate overall input current as sum over ports of (P_port / V_port)
+      let I_total = 0
+      for (const pid of Object.keys(perPortPower)){
+        const V = Math.max(portVoltageMap[pid] || 0, 1e-9)
+        I_total += (perPortPower[pid] * count) / V
+      }
+      sub.I_in = I_total
+      // Expose per-port details for edge calculations and UI
+      ;(sub as any).__portPowerMap = Object.fromEntries(Object.entries(perPortPower).map(([k,v])=>[k, v*count]))
+      ;(sub as any).__portVoltageMap = portVoltageMap
+      // For backward-compat displays, if exactly one port exists, reflect that voltage
+      if (inputPorts.length === 1){
+        const only = inputPorts[0]
+        const onlyV = Number(only?.Vout || 0)
+        ;(sub as any).inputV_nom = onlyV
+      } else {
+        // Multiple inputs: clear single-value display
+        ;(sub as any).inputV_nom = undefined as any
+      }
     }
     else if (node.type==='Source'){ const src=node as any as SourceNode & ComputeNode
       const outs = outgoing[src.id] || []
@@ -145,11 +177,40 @@ export function compute(project: Project): ComputeResult {
       : parent?.type==='Bus'? (parent as any).V_bus
       : parent?.type==='SubsystemInput'? (parent as any).Vout
       : undefined
-    const I = child ? (
-      (child.type==='Converter' || child.type==='Subsystem')
-        ? ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
-        : (child.I_in || 0)
-    ) : 0
+    let I = 0
+    if (child){
+      if (child.type==='Converter'){
+        I = ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
+      } else if (child.type==='Subsystem'){
+        // Use per-port power if available and targetHandle provided; otherwise try voltage match
+        const toHandle = (e as any).toHandle as string | undefined
+        const ports: Record<string, number> = ((child as any).__portPowerMap) || {}
+        const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
+        let P_for_edge = 0
+        if (toHandle && toHandle in ports){
+          P_for_edge = ports[toHandle] || 0
+        } else if (upV !== undefined){
+          // try exact voltage match first, then nearest
+          const entries = Object.entries(portVs)
+          let bestId: string | null = null
+          let bestDiff = Infinity
+          for (const [pid, v] of entries){
+            const diff = Math.abs((v||0) - (upV||0))
+            if (diff < bestDiff){ bestDiff = diff; bestId = pid }
+          }
+          if (bestId){
+            // If single port, always use it; otherwise require closest, even if not exact
+            const totalPorts = entries.length
+            if (totalPorts === 1) P_for_edge = ports[bestId] || 0
+            else if (bestDiff <= 1e-3) P_for_edge = ports[bestId] || 0
+            else P_for_edge = ports[bestId] || 0
+          }
+        }
+        I = P_for_edge / Math.max((upV ?? 0), 1e-9)
+      } else {
+        I = (child.I_in || 0)
+      }
+    }
     const V_drop=I*R_total; const P_loss=I*I*R_total; e.I_edge=I; e.R_total=R_total; e.V_drop=V_drop; e.P_loss_edge=P_loss
     if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
     // Voltage compatibility warnings between upstream (parent) and downstream (child)
@@ -171,9 +232,17 @@ export function compute(project: Project): ComputeResult {
           (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != bus ${Number(vbus).toFixed(3)}V`)
         }
       } else if (child.type === 'Subsystem') {
-        const vinom = (child as any).inputV_nom
-        if (Number.isFinite(vinom) && Math.abs(upV - vinom) > 1e-6) {
-          (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != subsystem input ${Number(vinom).toFixed(3)}V`)
+        const toHandle = (e as any).toHandle as string | undefined
+        const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
+        let vexpected: number | undefined = undefined
+        if (toHandle && (toHandle in portVs)) vexpected = portVs[toHandle]
+        if (vexpected === undefined) {
+          // fallback: if there's exactly one port, use it, else skip strict check
+          const vals = Object.values(portVs)
+          if (vals.length === 1) vexpected = vals[0]
+        }
+        if (vexpected !== undefined && Math.abs(upV - vexpected) > 1e-6) {
+          (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != subsystem port ${vexpected.toFixed(3)}V`)
         }
       }
     }
@@ -198,10 +267,24 @@ export function compute(project: Project): ComputeResult {
       let I_out = 0
       for (const e of Object.values(emap)){
         if (e.from === conv.id){
+          const fromH = (e as any).fromHandle
+          if (fromH !== undefined && fromH !== 'output') continue
           const child = nmap[e.to]
-          if (child?.P_in) childInputSum += child.P_in
+          // Accumulate edge current from per-edge values for output handle only
+          I_out += (e.I_edge || 0)
           edgeLossSum += (e.P_loss_edge || 0)
-          if (child?.I_in) I_out += child.I_in
+          if (child){
+            if (child.type === 'Subsystem'){
+              const toHandle = (e as any).toHandle as string | undefined
+              const perPort: Record<string, number> = ((child as any).__portPowerMap) || {}
+              const vals = Object.values(perPort)
+              if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+              else if (vals.length === 1) childInputSum += vals[0] || 0
+              else childInputSum += 0 // ambiguous; avoid double counting
+            } else {
+              childInputSum += (child.P_in || 0)
+            }
+          }
         }
       }
       const P_out = childInputSum + edgeLossSum
@@ -212,22 +295,145 @@ export function compute(project: Project): ComputeResult {
       conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
     }
   }
+  // Recompute edge currents with updated child P_in after reconciliation
+  for (const e of Object.values(emap)){
+    const child=nmap[e.to]; const parent=nmap[e.from]
+    const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
+    const upV = parent?.type==='Source'? (parent as any).Vout
+      : parent?.type==='Converter'? (parent as any).Vout
+      : parent?.type==='Bus'? (parent as any).V_bus
+      : parent?.type==='SubsystemInput'? (parent as any).Vout
+      : undefined
+    let I = 0
+    if (child){
+      if (child.type==='Converter'){
+        I = ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
+      } else if (child.type==='Subsystem'){
+        const toHandle = (e as any).toHandle as string | undefined
+        const ports: Record<string, number> = ((child as any).__portPowerMap) || {}
+        const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
+        let P_for_edge = 0
+        if (toHandle && toHandle in ports){
+          P_for_edge = ports[toHandle] || 0
+        } else if (upV !== undefined){
+          const entries = Object.entries(portVs)
+          let bestId: string | null = null
+          let bestDiff = Infinity
+          for (const [pid, v] of entries){
+            const diff = Math.abs((v||0) - (upV||0))
+            if (diff < bestDiff){ bestDiff = diff; bestId = pid }
+          }
+          if (bestId){
+            const totalPorts = entries.length
+            if (totalPorts === 1) P_for_edge = ports[bestId] || 0
+            else P_for_edge = ports[bestId] || 0
+          }
+        }
+        I = P_for_edge / Math.max((upV ?? 0), 1e-9)
+      } else {
+        I = (child.I_in || 0)
+      }
+    }
+    const V_drop=I*R_total; const P_loss=I*I*R_total; e.I_edge=I; e.R_total=R_total; e.V_drop=V_drop; e.P_loss_edge=P_loss
+    if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
+  }
+  // Recompute converter input current from incoming edges connected to the input handle only
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter'){
+      const conv = node as any as ConverterNode & ComputeNode
+      let I_in_sum = 0
+      for (const e of Object.values(emap)){
+        if (e.to === conv.id){
+          const toH = (e as any).toHandle
+          if (toH !== undefined && toH !== 'input') continue
+          I_in_sum += (e.I_edge || 0)
+        }
+      }
+      conv.I_in = I_in_sum
+    }
+  }
+  // Finalize converter output current strictly from directly connected output edges
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter'){
+      const conv = node as any as ConverterNode & ComputeNode
+      let I_out_sum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === conv.id){
+          const fromH = (e as any).fromHandle
+          if (fromH !== undefined && fromH !== 'output') continue
+          I_out_sum += (e.I_edge || 0)
+        }
+      }
+      conv.I_out = I_out_sum
+    }
+  }
+  // Apply converter limit warnings using finalized values
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter'){
+      const conv = node as any as ConverterNode & ComputeNode
+      const I_out = conv.I_out || 0
+      const P_out = conv.P_out || 0
+      if (conv.Iout_max && I_out > (conv.Iout_max as any as number) * (1 - defaultMargins.currentPct/100)){
+        conv.warnings.push(`I_out ${I_out.toFixed(3)}A exceeds limit ${conv.Iout_max}A (incl. margin).`)
+      }
+      if (conv.Pout_max && P_out > (conv.Pout_max as any as number) * (1 - defaultMargins.powerPct/100)){
+        conv.warnings.push(`P_out ${P_out.toFixed(2)}W exceeds limit ${conv.Pout_max}W (incl. margin).`)
+      }
+    }
+  }
   // Update Source-like totals after converters are reconciled
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
     if (node.type === 'Source' || node.type === 'SubsystemInput'){
-      let childInputSum = 0
-      let edgeLossSum = 0
+      // Upstream voltage at the source-like node itself
+      const upV = (node as any).Vout || 0
+      let I_sum = 0
+      let P_out_sum = 0
       for (const e of Object.values(emap)){
-        if (e.from === node.id){
-          const child = nmap[e.to]
-          if (child?.P_in) childInputSum += child.P_in
-          edgeLossSum += (e.P_loss_edge || 0)
+        if (e.from !== node.id) continue
+        const child = nmap[e.to]
+        const edgeLoss = (e.P_loss_edge || 0)
+        I_sum += (e.I_edge || 0)
+        let P_edge = 0
+        if (child && child.type === 'Subsystem'){
+          // Use per-port power for the specific edge handle
+          const toHandle = (e as any).toHandle as string | undefined
+          const perPort: Record<string, number> = ((child as any).__portPowerMap) || {}
+          const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
+          if (toHandle && (toHandle in perPort)){
+            P_edge = (perPort[toHandle] || 0) + edgeLoss
+          } else {
+            // Fallback: choose best matching port by voltage (or only port if single)
+            const entries = Object.entries(portVs)
+            if (entries.length === 1){
+              const [pid] = entries[0]
+              P_edge = (perPort[pid] || 0) + edgeLoss
+            } else if (entries.length > 1){
+              let bestId: string | null = null
+              let bestDiff = Infinity
+              for (const [pid, v] of entries){
+                const diff = Math.abs((v||0) - upV)
+                if (diff < bestDiff){ bestDiff = diff; bestId = pid }
+              }
+              if (bestId) P_edge = (perPort[bestId] || 0) + edgeLoss
+            }
+          }
+        } else if (child) {
+          // Non-subsystem child: attribute entire child input to this edge
+          P_edge = (child.P_in || 0) + edgeLoss
+        } else {
+          // No child found; fall back to electrical calculation
+          P_edge = ((e.I_edge || 0) * upV) + edgeLoss
         }
+        P_out_sum += P_edge
       }
-      const totalOut = childInputSum + edgeLossSum
-      ;(node as any).P_out = totalOut
-      ;(node as any).P_in = totalOut
+      ;(node as any).I_out = I_sum
+      ;(node as any).I_in = I_sum
+      ;(node as any).P_out = P_out_sum
+      ;(node as any).P_in = P_out_sum
     }
   }
   for (const node of Object.values(nmap)){ if (node.type==='Load'){ const load=node as any; const up=(load.V_upstream ?? load.Vreq); const allow=load.Vreq*(1 - project.defaultMargins.voltageMarginPct/100); if (up<allow) (node as any).warnings.push(`Voltage margin shortfall at load: upstream ${up.toFixed(3)}V < allowed ${allow.toFixed(3)}V`) } }

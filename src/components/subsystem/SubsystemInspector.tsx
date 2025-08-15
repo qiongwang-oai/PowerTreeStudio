@@ -19,19 +19,11 @@ function sanitizeImportedProject(pj: Project): Project {
     const removedIds = new Set(sources.map(s=>s.id))
     p.edges = p.edges.filter(e=>!removedIds.has(e.from) && !removedIds.has(e.to))
   }
-  // Ensure exactly one SubsystemInput
+  // Ensure at least one SubsystemInput exists; allow multiple
   const inputs = p.nodes.filter(n=> (n as any).type==='SubsystemInput')
   if (inputs.length===0){
-    const inputNode: AnyNode = { id: genId('n_'), type:'SubsystemInput' as any, name:'Subsystem Input', x:80, y:80 } as any
+    const inputNode: AnyNode = { id: genId('n_'), type:'SubsystemInput' as any, name:'Subsystem Input', Vout: 12, x:80, y:80 } as any
     p.nodes = [inputNode, ...p.nodes]
-  }
-  if (inputs.length>1){
-    const [keep, ...rest] = inputs
-    const restIds = new Set(rest.map(r=>r.id))
-    const notice: AnyNode = { id: genId('n_'), type:'Note' as any, name:'Import Notice', text:`Multiple Subsystem Inputs found. Kept one (${keep.name || keep.id}); converted ${rest.length} to notes.` } as any
-    const converted: AnyNode[] = rest.map(r=>({ id: genId('n_'), type:'Note' as any, name:'Extra Input', text:`Extra input ${r.name || r.id} removed.` } as any))
-    p.nodes = [notice, ...p.nodes.filter(n=> (n as any).type!=='SubsystemInput' || n.id===keep.id), ...converted]
-    p.edges = p.edges.filter(e=> !restIds.has(e.from) && !restIds.has(e.to))
   }
   return p
 }
@@ -229,6 +221,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
                   <Field label="I_max (A)" value={(node as any).I_max} onChange={v=>onChange('I_max', v)} />
                   <Field label="I_idle (A)" value={(node as any).I_idle} onChange={v=>onChange('I_idle', v)} />
+                  <Field label="Number of Paralleled Devices" value={(node as any).numParalleledDevices ?? 1} onChange={v=>onChange('numParalleledDevices', Math.max(1, Math.round(v)))} />
                   <label className="flex items-center justify-between gap-2">
                     <span>Critical Load</span>
                     <input
@@ -268,12 +261,12 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                   </div>
                   <div className="border-t mt-4 pt-2">
                     <div className="text-base text-slate-600 font-medium mb-1">Computed (embedded)</div>
-                    <ReadOnlyRow label="Vin (V)" value={(() => {
+                    <ReadOnlyRow label="Inputs (V)" value={(() => {
                     const embedded = (node as any).project
-                    const input = embedded?.nodes?.find((n:any)=> n.type==='SubsystemInput')
-                    const vin = Number(input?.Vout)
-                    const fallback = (analysis.nodes[node.id]?.inputV_nom as any) ?? (node as any).inputV_nom
-                    return Number.isFinite(vin) && vin>0 ? vin : fallback
+                    const inputs = embedded?.nodes?.filter((n:any)=> n.type==='SubsystemInput') || []
+                    if (inputs.length===0) return '—'
+                    if (inputs.length===1) return Number(inputs[0]?.Vout || 0)
+                    return inputs.map((i:any)=>i.Vout).join(', ')
                   })()} />
                     <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
                     <ReadOnlyRow label="Σ Sources (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
