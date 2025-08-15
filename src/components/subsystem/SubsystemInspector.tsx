@@ -41,11 +41,17 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
   const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  const rootScenario = useStore(s=>s.project.currentScenario)
   // project import will be applied directly to the selected subsystem node via nestedSubsystemUpdateNode
   const fileRef = React.useRef<HTMLInputElement>(null)
 
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
-  const analysis = compute(project)
+  const projectForAnalysis = React.useMemo(()=>{
+    const cloned: Project = JSON.parse(JSON.stringify(project))
+    cloned.currentScenario = rootScenario as any
+    return cloned
+  }, [project, rootScenario])
+  const analysis = compute(projectForAnalysis)
   const node = useMemo(()=> project.nodes.find(n=>n.id===selected) || null, [project.nodes, selected])
   const [tab, setTab] = React.useState('props')
 
@@ -145,10 +151,14 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
             />
             <TabsContent value={tab} when="props">
               <div className="space-y-2 text-sm">
+                <div className="text-base text-slate-600 font-medium mb-1">Editable Properties</div>
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
                 {node.type==='Source' && <>
                   <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
-                  <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                  <div className="border-t mt-4 pt-2">
+                    <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
+                    <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                  </div>
                 </>}
                 {node.type==='Converter' && <>
                   <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
@@ -196,10 +206,10 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       } catch (e) { eta = 0; }
                       return (
                         <>
-                          <div className="text-xs text-slate-600 mt-1">
+                          <div className="text-sm text-slate-600 mt-1">
                             I<sub>out</sub> (computed): <b>{Iout.toFixed(4)} A</b>
                           </div>
-                          <div className="text-xs text-slate-600 mt-1">
+                          <div className="text-sm text-slate-600 mt-1">
                             η (at I<sub>out</sub> = {Iout.toFixed(3)} A): <b>{eta.toFixed(4)}</b>
                           </div>
                         </>
@@ -207,10 +217,12 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                     })()
                   )}
                   {(node as any).efficiency?.type==='fixed' && <Field label="η value (0-1)" value={(node as any).efficiency.value} onChange={v=>onChange('efficiency',{type:'fixed', value:v})} />}
-                  <div className="mt-3 text-xs text-slate-500">Computed</div>
-                  <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
-                  <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
-                  <ReadOnlyRow label="Dissipation (W)" value={fmt((analysis.nodes[node.id]?.P_in ?? 0) - (analysis.nodes[node.id]?.P_out ?? 0), 3)} />
+                  <div className="border-t mt-4 pt-2">
+                    <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
+                    <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                    <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                    <ReadOnlyRow label="Dissipation (W)" value={fmt((analysis.nodes[node.id]?.P_in ?? 0) - (analysis.nodes[node.id]?.P_out ?? 0), 3)} />
+                  </div>
                 </>}
                 {node.type==='Load' && <>
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
@@ -225,8 +237,10 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       onChange={e=>onChange('critical', e.target.checked)}
                     />
                   </label>
-                  <div className="mt-3 text-xs text-slate-500">Computed</div>
-                  <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                  <div className="border-t mt-4 pt-2">
+                    <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
+                    <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                  </div>
                 </>}
                 {node.type==='Bus' && <Field label="V_bus (V)" value={(node as any).V_bus} onChange={v=>onChange('V_bus', v)} />}
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
@@ -252,18 +266,20 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Choose File</Button>
                     </>
                   </div>
-                  <div className="mt-3 text-xs text-slate-500">Computed (embedded)</div>
-                  <ReadOnlyRow label="Vin (V)" value={(() => {
+                  <div className="border-t mt-4 pt-2">
+                    <div className="text-base text-slate-600 font-medium mb-1">Computed (embedded)</div>
+                    <ReadOnlyRow label="Vin (V)" value={(() => {
                     const embedded = (node as any).project
                     const input = embedded?.nodes?.find((n:any)=> n.type==='SubsystemInput')
                     const vin = Number(input?.Vout)
                     const fallback = (analysis.nodes[node.id]?.inputV_nom as any) ?? (node as any).inputV_nom
                     return Number.isFinite(vin) && vin>0 ? vin : fallback
                   })()} />
-                  <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
-                  <ReadOnlyRow label="Σ Sources (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
-                  <ReadOnlyRow label="η (%)" value={((analysis.nodes[node.id]?.P_in||0)>0 ? ((analysis.nodes[node.id]?.P_out||0)/(analysis.nodes[node.id]?.P_in||1))*100 : 0).toFixed(2)} />
-                  <ReadOnlyRow label="Dissipation (W)" value={fmt(((analysis.nodes[node.id]?.P_in||0) - (analysis.nodes[node.id]?.P_out||0)), 3)} />
+                    <ReadOnlyRow label="Σ Loads (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
+                    <ReadOnlyRow label="Σ Sources (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
+                    <ReadOnlyRow label="η (%)" value={((analysis.nodes[node.id]?.P_in||0)>0 ? ((analysis.nodes[node.id]?.P_out||0)/(analysis.nodes[node.id]?.P_in||1))*100 : 0).toFixed(2)} />
+                    <ReadOnlyRow label="Dissipation (W)" value={fmt(((analysis.nodes[node.id]?.P_in||0) - (analysis.nodes[node.id]?.P_out||0)), 3)} />
+                  </div>
                 </>}
                 {node.type==='SubsystemInput' && <>
                   <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
@@ -276,22 +292,34 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                 <div className="text-sm space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <span className="text-xs text-slate-500 mr-2">Scenario</span>
-                      <span className="inline-block text-xs px-2 py-0.5 rounded border bg-slate-50">{project.currentScenario}</span>
+                      <span className="text-sm text-slate-500 mr-2">Scenario</span>
+                      <span className="inline-block text-sm px-2 py-0.5 rounded border bg-slate-50">{rootScenario}</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <div className="text-xs text-slate-600">Warnings: <b>{(analysis.nodes[node.id]?.warnings || []).length}</b></div>
+                      <div className="text-sm text-slate-600">Warnings: <b>{(analysis.nodes[node.id]?.warnings || []).length}</b></div>
                       <Button size="sm" variant="outline" onClick={()=>setTab('props')}>Edit Properties</Button>
                     </div>
                   </div>
-                  {(() => {
-                    const warns = analysis.nodes[node.id]?.warnings || []
-                    return warns.length
-                      ? <ul className="list-disc pl-5">{warns.map((w:string,i:number)=><li key={i}>{w}</li>)}</ul>
-                      : <div className="text-slate-500">No warnings</div>
-                  })()}
                   <div className="border-t pt-2">
-                    <div className="font-medium mb-1">Context</div>
+                    <div className="text-base text-slate-600 font-medium mb-1">Warnings</div>
+                    {(() => {
+                      const warns = analysis.nodes[node.id]?.warnings || []
+                      if (warns.length) {
+                        const text = warns.join('\n')
+                        return (
+                          <>
+                            <ul className="list-disc pl-5">{warns.map((w:string,i:number)=><li key={i}>{w}</li>)}</ul>
+                            <div className="pt-1">
+                              <Button size="sm" variant="outline" onClick={()=>{ try{ navigator.clipboard.writeText(text) }catch(e){} }}>Copy warnings</Button>
+                            </div>
+                          </>
+                        )
+                      }
+                      return <div className="text-sm text-slate-500">No warnings</div>
+                    })()}
+                  </div>
+                  <div className="border-t pt-2">
+                    <div className="text-base text-slate-600 font-medium mb-1">Context</div>
                     {(() => {
                       const res = analysis.nodes[node.id] as any
                       if (!res) return null
@@ -299,7 +327,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                         const eff = (node as any).efficiency
                         const eta = (()=>{ try{ return etaFromModel(eff, res.P_out||0, res.I_out||0, node as any) }catch(e){ return 0 } })()
                         return (
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                             <div>P_in: <b>{(res.P_in||0).toFixed(3)} W</b></div>
                             <div>P_out: <b>{(res.P_out||0).toFixed(3)} W</b></div>
                             <div>I_in: <b>{(res.I_in||0).toFixed(3)} A</b></div>
@@ -313,7 +341,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                         const up = (res.V_upstream ?? (node as any).Vreq) as number
                         const allow = (node as any).Vreq * (1 - project.defaultMargins.voltageMarginPct/100)
                         return (
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                             <div>V_upstream: <b>{(up||0).toFixed(3)} V</b></div>
                             <div>Allow ≥ <b>{allow.toFixed(3)} V</b></div>
                             <div>P_in: <b>{(res.P_in||0).toFixed(3)} W</b></div>
@@ -324,7 +352,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       if (node.type === 'Subsystem' || node.type === 'SubsystemInput' || node.type === 'Source') {
                         // Source nodes are not expected inside embedded, but handle generically
                         return (
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                             {node.type !== 'Load' && <div>P_out: <b>{(res.P_out||0).toFixed(3)} W</b></div>}
                             <div>I_out: <b>{(res.I_out||0).toFixed(3)} A</b></div>
                           </div>
@@ -332,7 +360,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       }
                       if (node.type === 'Bus') {
                         return (
-                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                             <div>V_bus: <b>{((node as any).V_bus||0).toFixed(3)} V</b></div>
                           </div>
                         )
@@ -341,7 +369,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                     })()}
                   </div>
                   <div className="border-t pt-2">
-                    <div className="font-medium mb-1">Edge impact</div>
+                    <div className="text-base text-slate-600 font-medium mb-1">Power integrity check</div>
                     {(() => {
                       const emap = analysis.edges
                       const incoming = [...project.edges.filter(e=>e.to===node.id)].sort((a,b)=>{
@@ -367,7 +395,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                         const displayName = otherNode?.name || otherNodeId
                         return (
                           <div className="flex items-center justify-between gap-2 py-0.5">
-                            <div className="text-xs">
+                            <div className="text-sm">
                               <b>{displayName}</b> — {Rm} mΩ | I {I.toFixed(3)} A | ΔV {Vd.toFixed(4)} V | P_loss {Pl.toFixed(4)} W
                             </div>
                           </div>
@@ -376,34 +404,25 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       return (
                         <div className="space-y-2">
                           <div>
-                            <div className="text-xs text-slate-600 mb-1">Incoming</div>
-                            {incoming.length? incoming.map(e=> <Item key={e.id} edgeId={e.id} direction="incoming" />) : <div className="text-xs text-slate-400">None</div>}
+                            <div className="text-sm text-slate-600 mb-1">Incoming connections</div>
+                            {incoming.length? incoming.map(e=> <Item key={e.id} edgeId={e.id} direction="incoming" />) : <div className="text-sm text-slate-400">None</div>}
                           </div>
                           <div>
-                            <div className="text-xs text-slate-600 mb-1">Outgoing</div>
-                            {outgoing.length? outgoing.map(e=> <Item key={e.id} edgeId={e.id} direction="outgoing" />) : <div className="text-xs text-slate-400">None</div>}
+                            <div className="text-sm text-slate-600 mb-1">Outgoing connections</div>
+                            {outgoing.length? outgoing.map(e=> <Item key={e.id} edgeId={e.id} direction="outgoing" />) : <div className="text-sm text-slate-400">None</div>}
                           </div>
                         </div>
                       )
                     })()}
                   </div>
-                  {(() => {
-                    const warns = analysis.nodes[node.id]?.warnings || []
-                    if (!warns.length) return null
-                    const text = warns.join('\n')
-                    return (
-                      <div className="pt-1">
-                        <Button size="sm" variant="outline" onClick={()=>{ try{ navigator.clipboard.writeText(text) }catch(e){} }}>Copy warnings</Button>
-                      </div>
-                    )
-                  })()}
+                  
                 </div>
               </TabsContent>
             )}
             {(!['Subsystem', 'Source', 'SubsystemInput', 'Note'].includes(node.type)) && (
               <TabsContent value={tab} when="eta">
                 {isCurve ? (
-                  <div className="mt-4">
+                  <div className="mt-4 text-sm">
                     <div className="h-40">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={graphData}>
