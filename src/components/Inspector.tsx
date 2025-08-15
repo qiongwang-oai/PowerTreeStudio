@@ -338,20 +338,23 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                         const vb = (emap[b.id]?.V_drop || 0)
                         return vb - va
                       })
-                      const Item = ({id}:{id:string}) => {
-                        const e = project.edges.find(x=>x.id===id)
+                      const Item = ({edgeId, direction}:{edgeId:string, direction:'incoming'|'outgoing'}) => {
+                        const e = project.edges.find(x=>x.id===edgeId)
                         if (!e) return null
-                        const ce = emap[id] || {}
+                        const ce = emap[edgeId] || {}
                         const I = (ce.I_edge||0)
                         const Vd = (ce.V_drop||0)
                         const Pl = (ce.P_loss_edge||0)
                         const Rm = (e.interconnect?.R_milliohm ?? 0)
+                        const otherNodeId = direction==='incoming' ? e.from : e.to
+                        const otherNode = project.nodes.find(n=>n.id===otherNodeId)
+                        const displayName = otherNode?.name || otherNodeId
                         return (
                           <div className="flex items-center justify-between gap-2 py-0.5">
                             <div className="text-xs">
-                              <b>{id}</b> — {Rm} mΩ | I {I.toFixed(3)} A | ΔV {Vd.toFixed(4)} V | P_loss {Pl.toFixed(4)} W
+                              <b>{displayName}</b> — {Rm} mΩ | I {I.toFixed(3)} A | ΔV {Vd.toFixed(4)} V | P_loss {Pl.toFixed(4)} W
                             </div>
-                            {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect(id)}>Select</Button>}
+                            {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect(edgeId)}>Select</Button>}
                           </div>
                         )
                       }
@@ -359,11 +362,11 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                         <div className="space-y-2">
                           <div>
                             <div className="text-xs text-slate-600 mb-1">Incoming</div>
-                            {incoming.length? incoming.map(e=> <Item key={e.id} id={e.id} />) : <div className="text-xs text-slate-400">None</div>}
+                            {incoming.length? incoming.map(e=> <Item key={e.id} edgeId={e.id} direction="incoming" />) : <div className="text-xs text-slate-400">None</div>}
                           </div>
                           <div>
                             <div className="text-xs text-slate-600 mb-1">Outgoing</div>
-                            {outgoing.length? outgoing.map(e=> <Item key={e.id} id={e.id} />) : <div className="text-xs text-slate-400">None</div>}
+                            {outgoing.length? outgoing.map(e=> <Item key={e.id} edgeId={e.id} direction="outgoing" />) : <div className="text-xs text-slate-400">None</div>}
                           </div>
                         </div>
                       )

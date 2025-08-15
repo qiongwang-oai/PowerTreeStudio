@@ -152,6 +152,31 @@ export function compute(project: Project): ComputeResult {
     ) : 0
     const V_drop=I*R_total; const P_loss=I*I*R_total; e.I_edge=I; e.R_total=R_total; e.V_drop=V_drop; e.P_loss_edge=P_loss
     if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
+    // Voltage compatibility warnings between upstream (parent) and downstream (child)
+    if (parent && child && upV !== undefined) {
+      if (child.type === 'Converter') {
+        const min = (child as any).Vin_min
+        const max = (child as any).Vin_max
+        if (Number.isFinite(min) && Number.isFinite(max) && (upV < min || upV > max)) {
+          (child as any).warnings.push(`Upstream voltage ${upV.toFixed(3)}V outside converter Vin range [${Number(min).toFixed(3)}, ${Number(max).toFixed(3)}]V`)
+        }
+      } else if (child.type === 'Load') {
+        const vreq = (child as any).Vreq
+        if (Number.isFinite(vreq) && Math.abs(upV - vreq) > 1e-6) {
+          (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != load Vreq ${Number(vreq).toFixed(3)}V`)
+        }
+      } else if (child.type === 'Bus') {
+        const vbus = (child as any).V_bus
+        if (Number.isFinite(vbus) && Math.abs(upV - vbus) > 1e-6) {
+          (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != bus ${Number(vbus).toFixed(3)}V`)
+        }
+      } else if (child.type === 'Subsystem') {
+        const vinom = (child as any).inputV_nom
+        if (Number.isFinite(vinom) && Math.abs(upV - vinom) > 1e-6) {
+          (child as any).warnings.push(`Voltage mismatch: upstream ${upV.toFixed(3)}V != subsystem input ${Number(vinom).toFixed(3)}V`)
+        }
+      }
+    }
   }
   // Adjust converters bottom-up so parents see updated child numbers
   for (const nodeId of reverseOrder){
