@@ -21,954 +21,6 @@
   "currentScenario": "Typical",
   "nodes": [
     {
-      "id": "n_clcezx",
-      "type": "Subsystem",
-      "name": "CPU0 Subsystem",
-      "inputV_nom": 12,
-      "numParalleledSystems": 1,
-      "project": {
-        "id": "p_zhu6ek",
-        "name": "Sample Server Tree",
-        "units": {
-          "voltage": "V",
-          "current": "A",
-          "power": "W",
-          "resistance": "mΩ"
-        },
-        "defaultMargins": {
-          "currentPct": 10,
-          "powerPct": 10,
-          "voltageDropPct": 5,
-          "voltageMarginPct": 3
-        },
-        "scenarios": [
-          "Typical",
-          "Max",
-          "Idle"
-        ],
-        "currentScenario": "Typical",
-        "nodes": [
-          {
-            "id": "n_0zawcd",
-            "type": "SubsystemInput",
-            "name": "CPU Subsystem Input",
-            "Vout": 12,
-            "x": 537.9669261316633,
-            "y": -60.54290871156512
-          },
-          {
-            "id": "n_8u7zib",
-            "type": "Load",
-            "name": "CPU SOC",
-            "Vreq": 0.9,
-            "I_typ": 105,
-            "I_idle": 10,
-            "I_max": 130,
-            "x": 185.53599540277867,
-            "y": 314.8247263728454
-          },
-          {
-            "id": "n_zltg82",
-            "type": "Load",
-            "name": "CPU CPU0 PVDDCR",
-            "Vreq": 0.9,
-            "I_typ": 175,
-            "I_idle": 5,
-            "I_max": 230,
-            "x": -10.084593789329347,
-            "y": 315.9729542883547
-          },
-          {
-            "id": "bk09sxxb",
-            "type": "Load",
-            "name": "CPU CPU1 PVDDCR",
-            "Vreq": 0.9,
-            "I_typ": 175,
-            "I_idle": 5,
-            "I_max": 230,
-            "x": 362.81233183809445,
-            "y": 315.20243694475084
-          },
-          {
-            "id": "n_nywk4w",
-            "type": "Load",
-            "name": "PVDD11",
-            "Vreq": 1.1,
-            "I_typ": 65,
-            "I_idle": 5,
-            "I_max": 80,
-            "x": 566.1181193180853,
-            "y": 312.22385320856074
-          },
-          {
-            "id": "9s5ypvn8",
-            "type": "Load",
-            "name": "PVDDIO",
-            "Vreq": 1.1,
-            "I_typ": 120,
-            "I_idle": 5,
-            "I_max": 140,
-            "x": 758.3582034956668,
-            "y": 310.24532685117134
-          },
-          {
-            "id": "buox1yv6",
-            "type": "Load",
-            "name": "PVDD18_S5",
-            "Vreq": 1.8,
-            "I_typ": 11,
-            "I_idle": 5,
-            "I_max": 12,
-            "x": 944.9481317859032,
-            "y": 307.1904457778792
-          },
-          {
-            "id": "u1ym352k",
-            "type": "Load",
-            "name": "PVDD33_S5",
-            "Vreq": 3.3,
-            "I_typ": 3,
-            "I_idle": 5,
-            "I_max": 3.75,
-            "x": 1132.396745469417,
-            "y": 305.5523723821595
-          },
-          {
-            "id": "n_smzusp",
-            "type": "Converter",
-            "name": "SOC VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 23,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 50,
-                  "eta": 0.92
-                },
-                {
-                  "current": 300,
-                  "loadPct": 100,
-                  "eta": 0.9
-                }
-              ]
-            },
-            "x": -29.875099501263833,
-            "y": 157.89181715341854,
-            "Iout_max": 300,
-            "Pout_max": 300
-          },
-          {
-            "id": "0mdc4h33",
-            "type": "Converter",
-            "name": "Core VR CPU1",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 23,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 50,
-                  "eta": 0.92
-                },
-                {
-                  "current": 300,
-                  "loadPct": 100,
-                  "eta": 0.9
-                }
-              ]
-            },
-            "x": 339.79771557052015,
-            "y": 159.43221837023182,
-            "Iout_max": 300,
-            "Pout_max": 300
-          },
-          {
-            "id": "j2es02we",
-            "type": "Converter",
-            "name": "SOC VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 158.72904548994416,
-            "y": 157.97226343915946,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "9iradanc",
-            "type": "Converter",
-            "name": "PVDD11 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.1,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 541.0638567929783,
-            "y": 160.0775614254327,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "pc3n4qpt",
-            "type": "Converter",
-            "name": "PVDDIO VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.1,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 730.2613339985986,
-            "y": 158.43948802971306,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "u8884ca5",
-            "type": "Converter",
-            "name": "PVDD18 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.8,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.8
-                },
-                {
-                  "current": 15,
-                  "loadPct": 50,
-                  "eta": 0.9
-                },
-                {
-                  "current": 30,
-                  "loadPct": 100,
-                  "eta": 0.85
-                }
-              ]
-            },
-            "x": 921.0968845999382,
-            "y": 160.89659812329256,
-            "Iout_max": 30,
-            "Pout_max": 50
-          },
-          {
-            "id": "woteht8g",
-            "type": "Converter",
-            "name": "PVDD33 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 3.3,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.8
-                },
-                {
-                  "current": 15,
-                  "loadPct": 50,
-                  "eta": 0.9
-                },
-                {
-                  "current": 30,
-                  "loadPct": 100,
-                  "eta": 0.85
-                }
-              ]
-            },
-            "x": 1106.1991783162591,
-            "y": 158.439488029713,
-            "Iout_max": 30,
-            "Pout_max": 50
-          }
-        ],
-        "edges": [
-          {
-            "id": "n_smzusp-n_zltg82",
-            "from": "n_smzusp",
-            "to": "n_zltg82",
-            "interconnect": {
-              "R_milliohm": 0.1
-            }
-          },
-          {
-            "id": "0mdc4h33-bk09sxxb",
-            "from": "0mdc4h33",
-            "to": "bk09sxxb",
-            "interconnect": {
-              "R_milliohm": 0.1
-            }
-          },
-          {
-            "id": "j2es02we-n_8u7zib",
-            "from": "j2es02we",
-            "to": "n_8u7zib",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "9iradanc-n_nywk4w",
-            "from": "9iradanc",
-            "to": "n_nywk4w",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "pc3n4qpt-9s5ypvn8",
-            "from": "pc3n4qpt",
-            "to": "9s5ypvn8",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "u8884ca5-buox1yv6",
-            "from": "u8884ca5",
-            "to": "buox1yv6",
-            "interconnect": {
-              "R_milliohm": 2
-            }
-          },
-          {
-            "id": "woteht8g-u1ym352k",
-            "from": "woteht8g",
-            "to": "u1ym352k",
-            "interconnect": {
-              "R_milliohm": 2
-            }
-          },
-          {
-            "id": "n_0zawcd-n_smzusp",
-            "from": "n_0zawcd",
-            "to": "n_smzusp",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-j2es02we",
-            "from": "n_0zawcd",
-            "to": "j2es02we",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-0mdc4h33",
-            "from": "n_0zawcd",
-            "to": "0mdc4h33",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-9iradanc",
-            "from": "n_0zawcd",
-            "to": "9iradanc",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-pc3n4qpt",
-            "from": "n_0zawcd",
-            "to": "pc3n4qpt",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-u8884ca5",
-            "from": "n_0zawcd",
-            "to": "u8884ca5",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-woteht8g",
-            "from": "n_0zawcd",
-            "to": "woteht8g",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          }
-        ]
-      },
-      "x": 230.32882679190607,
-      "y": 177.38429206749487,
-      "projectFileName": "CPU_subsystem.json"
-    },
-    {
-      "id": "jn2oz0cv",
-      "type": "Subsystem",
-      "name": "CPU1 Subsystem Copy",
-      "inputV_nom": 12,
-      "numParalleledSystems": 1,
-      "project": {
-        "id": "p_zhu6ek",
-        "name": "Sample Server Tree",
-        "units": {
-          "voltage": "V",
-          "current": "A",
-          "power": "W",
-          "resistance": "mΩ"
-        },
-        "defaultMargins": {
-          "currentPct": 10,
-          "powerPct": 10,
-          "voltageDropPct": 5,
-          "voltageMarginPct": 3
-        },
-        "scenarios": [
-          "Typical",
-          "Max",
-          "Idle"
-        ],
-        "currentScenario": "Typical",
-        "nodes": [
-          {
-            "id": "n_0zawcd",
-            "type": "SubsystemInput",
-            "name": "CPU Subsystem Input",
-            "Vout": 12,
-            "x": 537.9669261316633,
-            "y": -60.54290871156512
-          },
-          {
-            "id": "n_8u7zib",
-            "type": "Load",
-            "name": "CPU SOC",
-            "Vreq": 0.9,
-            "I_typ": 105,
-            "I_idle": 10,
-            "I_max": 130,
-            "x": 185.53599540277867,
-            "y": 314.8247263728454
-          },
-          {
-            "id": "n_zltg82",
-            "type": "Load",
-            "name": "CPU CPU0 PVDDCR",
-            "Vreq": 0.9,
-            "I_typ": 175,
-            "I_idle": 5,
-            "I_max": 230,
-            "x": -10.084593789329347,
-            "y": 315.9729542883547
-          },
-          {
-            "id": "bk09sxxb",
-            "type": "Load",
-            "name": "CPU CPU1 PVDDCR",
-            "Vreq": 0.9,
-            "I_typ": 175,
-            "I_idle": 5,
-            "I_max": 230,
-            "x": 362.81233183809445,
-            "y": 315.20243694475084
-          },
-          {
-            "id": "n_nywk4w",
-            "type": "Load",
-            "name": "PVDD11",
-            "Vreq": 1.1,
-            "I_typ": 65,
-            "I_idle": 5,
-            "I_max": 80,
-            "x": 566.1181193180853,
-            "y": 312.22385320856074
-          },
-          {
-            "id": "9s5ypvn8",
-            "type": "Load",
-            "name": "PVDDIO",
-            "Vreq": 1.1,
-            "I_typ": 120,
-            "I_idle": 5,
-            "I_max": 140,
-            "x": 758.3582034956668,
-            "y": 310.24532685117134
-          },
-          {
-            "id": "buox1yv6",
-            "type": "Load",
-            "name": "PVDD18_S5",
-            "Vreq": 1.8,
-            "I_typ": 11,
-            "I_idle": 5,
-            "I_max": 12,
-            "x": 944.9481317859032,
-            "y": 307.1904457778792
-          },
-          {
-            "id": "u1ym352k",
-            "type": "Load",
-            "name": "PVDD33_S5",
-            "Vreq": 3.3,
-            "I_typ": 3,
-            "I_idle": 5,
-            "I_max": 3.75,
-            "x": 1132.396745469417,
-            "y": 305.5523723821595
-          },
-          {
-            "id": "n_smzusp",
-            "type": "Converter",
-            "name": "SOC VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 23,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 50,
-                  "eta": 0.92
-                },
-                {
-                  "current": 300,
-                  "loadPct": 100,
-                  "eta": 0.9
-                }
-              ]
-            },
-            "x": -29.875099501263833,
-            "y": 157.89181715341854,
-            "Iout_max": 300,
-            "Pout_max": 300
-          },
-          {
-            "id": "0mdc4h33",
-            "type": "Converter",
-            "name": "Core VR CPU1",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 23,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 50,
-                  "eta": 0.92
-                },
-                {
-                  "current": 300,
-                  "loadPct": 100,
-                  "eta": 0.9
-                }
-              ]
-            },
-            "x": 339.79771557052015,
-            "y": 159.43221837023182,
-            "Iout_max": 300,
-            "Pout_max": 300
-          },
-          {
-            "id": "j2es02we",
-            "type": "Converter",
-            "name": "SOC VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 0.9,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 158.72904548994416,
-            "y": 157.97226343915946,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "9iradanc",
-            "type": "Converter",
-            "name": "PVDD11 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.1,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 541.0638567929783,
-            "y": 160.0775614254327,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "pc3n4qpt",
-            "type": "Converter",
-            "name": "PVDDIO VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.1,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.85
-                },
-                {
-                  "current": 70,
-                  "loadPct": 35,
-                  "eta": 0.94
-                },
-                {
-                  "current": 150,
-                  "loadPct": 75,
-                  "eta": 0.92
-                }
-              ]
-            },
-            "x": 730.2613339985986,
-            "y": 158.43948802971306,
-            "Iout_max": 200,
-            "Pout_max": 200
-          },
-          {
-            "id": "u8884ca5",
-            "type": "Converter",
-            "name": "PVDD18 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 1.8,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.8
-                },
-                {
-                  "current": 15,
-                  "loadPct": 50,
-                  "eta": 0.9
-                },
-                {
-                  "current": 30,
-                  "loadPct": 100,
-                  "eta": 0.85
-                }
-              ]
-            },
-            "x": 921.0968845999382,
-            "y": 160.89659812329256,
-            "Iout_max": 30,
-            "Pout_max": 50
-          },
-          {
-            "id": "woteht8g",
-            "type": "Converter",
-            "name": "PVDD33 VR",
-            "Vin_min": 10,
-            "Vin_max": 13,
-            "Vout": 3.3,
-            "efficiency": {
-              "type": "curve",
-              "base": "Iout_max",
-              "points": [
-                {
-                  "current": 0,
-                  "loadPct": 0,
-                  "eta": 0.8
-                },
-                {
-                  "current": 15,
-                  "loadPct": 50,
-                  "eta": 0.9
-                },
-                {
-                  "current": 30,
-                  "loadPct": 100,
-                  "eta": 0.85
-                }
-              ]
-            },
-            "x": 1106.1991783162591,
-            "y": 158.439488029713,
-            "Iout_max": 30,
-            "Pout_max": 50
-          }
-        ],
-        "edges": [
-          {
-            "id": "n_smzusp-n_zltg82",
-            "from": "n_smzusp",
-            "to": "n_zltg82",
-            "interconnect": {
-              "R_milliohm": 0.1
-            }
-          },
-          {
-            "id": "0mdc4h33-bk09sxxb",
-            "from": "0mdc4h33",
-            "to": "bk09sxxb",
-            "interconnect": {
-              "R_milliohm": 0.1
-            }
-          },
-          {
-            "id": "j2es02we-n_8u7zib",
-            "from": "j2es02we",
-            "to": "n_8u7zib",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "9iradanc-n_nywk4w",
-            "from": "9iradanc",
-            "to": "n_nywk4w",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "pc3n4qpt-9s5ypvn8",
-            "from": "pc3n4qpt",
-            "to": "9s5ypvn8",
-            "interconnect": {
-              "R_milliohm": 0.2
-            }
-          },
-          {
-            "id": "u8884ca5-buox1yv6",
-            "from": "u8884ca5",
-            "to": "buox1yv6",
-            "interconnect": {
-              "R_milliohm": 2
-            }
-          },
-          {
-            "id": "woteht8g-u1ym352k",
-            "from": "woteht8g",
-            "to": "u1ym352k",
-            "interconnect": {
-              "R_milliohm": 2
-            }
-          },
-          {
-            "id": "n_0zawcd-n_smzusp",
-            "from": "n_0zawcd",
-            "to": "n_smzusp",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-j2es02we",
-            "from": "n_0zawcd",
-            "to": "j2es02we",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-0mdc4h33",
-            "from": "n_0zawcd",
-            "to": "0mdc4h33",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-9iradanc",
-            "from": "n_0zawcd",
-            "to": "9iradanc",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-pc3n4qpt",
-            "from": "n_0zawcd",
-            "to": "pc3n4qpt",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-u8884ca5",
-            "from": "n_0zawcd",
-            "to": "u8884ca5",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          },
-          {
-            "id": "n_0zawcd-woteht8g",
-            "from": "n_0zawcd",
-            "to": "woteht8g",
-            "interconnect": {
-              "R_milliohm": 1
-            }
-          }
-        ]
-      },
-      "x": 458.4520481715948,
-      "y": 176.15220563810848,
-      "projectFileName": "CPU_subsystem.json"
-    },
-    {
       "id": "n_bruydm",
       "type": "Converter",
       "name": "IBC CPU",
@@ -1001,8 +53,8 @@
           }
         ]
       },
-      "x": 360.23327916535334,
-      "y": -29.67117320809389,
+      "x": 368.26984598061085,
+      "y": 16.357562588066685,
       "Pout_max": 1600,
       "Iout_max": 150
     },
@@ -1020,7 +72,7 @@
           {
             "current": 0,
             "loadPct": 0,
-            "eta": 0.85
+            "eta": 0.92
           },
           {
             "current": 50,
@@ -1039,8 +91,8 @@
           }
         ]
       },
-      "x": 714.2207514370548,
-      "y": -35.55147758910738,
+      "x": 872.4665000058046,
+      "y": 8.039319835992302,
       "Pout_max": 1600,
       "Iout_max": 150
     },
@@ -1052,8 +104,8 @@
       "I_typ": 1.2,
       "I_idle": 0.2,
       "I_max": 1.5,
-      "x": 692.0688657694002,
-      "y": 174.4865995061886,
+      "x": 1029.375347526302,
+      "y": 369.5900219952959,
       "numParalleledDevices": 24
     },
     {
@@ -1063,42 +115,1094 @@
       "Vout": 50,
       "x": 550.3461921473439,
       "y": -234.20275157704444
+    },
+    {
+      "id": "n_zcx44h",
+      "type": "Load",
+      "name": "Fan",
+      "Vreq": 50,
+      "I_typ": 1,
+      "I_idle": 0.2,
+      "I_max": 2,
+      "numParalleledDevices": 1,
+      "x": 185.21796305022679,
+      "y": 15.681025033274636
+    },
+    {
+      "id": "n_4lkfgr",
+      "type": "Subsystem",
+      "name": "CPU0",
+      "inputV_nom": 12,
+      "numParalleledSystems": 1,
+      "project": {
+        "id": "p_zhu6ek",
+        "name": "Sample Server Tree",
+        "units": {
+          "voltage": "V",
+          "current": "A",
+          "power": "W",
+          "resistance": "mΩ"
+        },
+        "defaultMargins": {
+          "currentPct": 10,
+          "powerPct": 10,
+          "voltageDropPct": 5,
+          "voltageMarginPct": 3
+        },
+        "scenarios": [
+          "Typical",
+          "Max",
+          "Idle"
+        ],
+        "currentScenario": "Typical",
+        "nodes": [
+          {
+            "id": "n_0zawcd",
+            "type": "SubsystemInput",
+            "name": "CPU Subsystem Input",
+            "Vout": 12,
+            "x": 537.9669261316633,
+            "y": -52.83353232264295
+          },
+          {
+            "id": "n_8u7zib",
+            "type": "Load",
+            "name": "CPU SOC",
+            "Vreq": 0.9,
+            "I_typ": 105,
+            "I_idle": 10,
+            "I_max": 130,
+            "x": 185.53599540277867,
+            "y": 314.8247263728454
+          },
+          {
+            "id": "n_zltg82",
+            "type": "Load",
+            "name": "CPU CPU0 PVDDCR",
+            "Vreq": 0.9,
+            "I_typ": 175,
+            "I_idle": 5,
+            "I_max": 230,
+            "x": -10.084593789329347,
+            "y": 315.9729542883547
+          },
+          {
+            "id": "bk09sxxb",
+            "type": "Load",
+            "name": "CPU CPU1 PVDDCR",
+            "Vreq": 0.9,
+            "I_typ": 175,
+            "I_idle": 5,
+            "I_max": 230,
+            "x": 362.81233183809445,
+            "y": 315.20243694475084
+          },
+          {
+            "id": "n_nywk4w",
+            "type": "Load",
+            "name": "PVDD11",
+            "Vreq": 1.1,
+            "I_typ": 65,
+            "I_idle": 5,
+            "I_max": 80,
+            "x": 566.1181193180853,
+            "y": 312.22385320856074
+          },
+          {
+            "id": "9s5ypvn8",
+            "type": "Load",
+            "name": "PVDDIO",
+            "Vreq": 1.1,
+            "I_typ": 120,
+            "I_idle": 5,
+            "I_max": 140,
+            "x": 758.3582034956668,
+            "y": 310.24532685117134
+          },
+          {
+            "id": "buox1yv6",
+            "type": "Load",
+            "name": "PVDD18_S5",
+            "Vreq": 1.8,
+            "I_typ": 11,
+            "I_idle": 5,
+            "I_max": 12,
+            "x": 944.9481317859032,
+            "y": 307.1904457778792
+          },
+          {
+            "id": "u1ym352k",
+            "type": "Load",
+            "name": "PVDD33_S5",
+            "Vreq": 3.3,
+            "I_typ": 3,
+            "I_idle": 5,
+            "I_max": 3.75,
+            "x": 1122.4967242416885,
+            "y": 307.3523762417465
+          },
+          {
+            "id": "n_smzusp",
+            "type": "Converter",
+            "name": "SOC VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 23,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 50,
+                  "eta": 0.92
+                },
+                {
+                  "current": 300,
+                  "loadPct": 100,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": -29.875099501263833,
+            "y": 157.89181715341854,
+            "Iout_max": 300,
+            "Pout_max": 300
+          },
+          {
+            "id": "0mdc4h33",
+            "type": "Converter",
+            "name": "Core VR CPU1",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 23,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 50,
+                  "eta": 0.92
+                },
+                {
+                  "current": 300,
+                  "loadPct": 100,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": 339.79771557052015,
+            "y": 159.43221837023182,
+            "Iout_max": 300,
+            "Pout_max": 300
+          },
+          {
+            "id": "j2es02we",
+            "type": "Converter",
+            "name": "SOC VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 158.72904548994416,
+            "y": 157.97226343915946,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "9iradanc",
+            "type": "Converter",
+            "name": "PVDD11 VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.1,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 541.0638567929783,
+            "y": 160.0775614254327,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "pc3n4qpt",
+            "type": "Converter",
+            "name": "PVDDIO VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.1,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 730.2613339985986,
+            "y": 158.43948802971306,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "u8884ca5",
+            "type": "Converter",
+            "name": "PVDD18 VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.8,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.8
+                },
+                {
+                  "current": 15,
+                  "loadPct": 50,
+                  "eta": 0.9
+                },
+                {
+                  "current": 30,
+                  "loadPct": 100,
+                  "eta": 0.85
+                }
+              ]
+            },
+            "x": 921.0968845999382,
+            "y": 160.89659812329256,
+            "Iout_max": 30,
+            "Pout_max": 50
+          },
+          {
+            "id": "n_8uh5f8",
+            "type": "SubsystemInput",
+            "name": "CPU 3V3 Input",
+            "Vout": 3.3,
+            "x": 1097.902182596463,
+            "y": -59.50029911799449
+          }
+        ],
+        "edges": [
+          {
+            "id": "n_smzusp-n_zltg82",
+            "from": "n_smzusp",
+            "to": "n_zltg82",
+            "interconnect": {
+              "R_milliohm": 0.1
+            }
+          },
+          {
+            "id": "0mdc4h33-bk09sxxb",
+            "from": "0mdc4h33",
+            "to": "bk09sxxb",
+            "interconnect": {
+              "R_milliohm": 0.1
+            }
+          },
+          {
+            "id": "j2es02we-n_8u7zib",
+            "from": "j2es02we",
+            "to": "n_8u7zib",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "9iradanc-n_nywk4w",
+            "from": "9iradanc",
+            "to": "n_nywk4w",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "pc3n4qpt-9s5ypvn8",
+            "from": "pc3n4qpt",
+            "to": "9s5ypvn8",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "u8884ca5-buox1yv6",
+            "from": "u8884ca5",
+            "to": "buox1yv6",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          },
+          {
+            "id": "n_0zawcd-n_smzusp",
+            "from": "n_0zawcd",
+            "to": "n_smzusp",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-j2es02we",
+            "from": "n_0zawcd",
+            "to": "j2es02we",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-0mdc4h33",
+            "from": "n_0zawcd",
+            "to": "0mdc4h33",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-9iradanc",
+            "from": "n_0zawcd",
+            "to": "9iradanc",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-pc3n4qpt",
+            "from": "n_0zawcd",
+            "to": "pc3n4qpt",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-u8884ca5",
+            "from": "n_0zawcd",
+            "to": "u8884ca5",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_8uh5f8-u1ym352k",
+            "from": "n_8uh5f8",
+            "to": "u1ym352k",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          }
+        ]
+      },
+      "x": 189.75110373681014,
+      "y": 410.38209894658024,
+      "projectFileName": "CPU_subsystem_multi_input.json"
+    },
+    {
+      "id": "n_itrvpp",
+      "type": "Converter",
+      "name": "3V3 Buck",
+      "Vin_min": 10,
+      "Vin_max": 15,
+      "Vout": 3.3,
+      "efficiency": {
+        "type": "fixed",
+        "value": 0.95
+      },
+      "x": 560.46176218483,
+      "y": 191.85766996901918,
+      "Pout_max": 100,
+      "Iout_max": 40
+    },
+    {
+      "id": "n_sqaqnb",
+      "type": "Subsystem",
+      "name": "PCIe NIC",
+      "inputV_nom": 12,
+      "numParalleledSystems": 8,
+      "project": {
+        "id": "p_zhu6ek",
+        "name": "Sample Server Tree",
+        "units": {
+          "voltage": "V",
+          "current": "A",
+          "power": "W",
+          "resistance": "mΩ"
+        },
+        "defaultMargins": {
+          "currentPct": 10,
+          "powerPct": 10,
+          "voltageDropPct": 5,
+          "voltageMarginPct": 3
+        },
+        "scenarios": [
+          "Typical",
+          "Max",
+          "Idle"
+        ],
+        "currentScenario": "Typical",
+        "nodes": [
+          {
+            "id": "n_rs7kxh",
+            "type": "SubsystemInput",
+            "name": "PCIe 12V Input",
+            "Vout": 12,
+            "x": 300.0058590439865,
+            "y": -78.30679894308986
+          },
+          {
+            "id": "n_yo5h9n",
+            "type": "SubsystemInput",
+            "name": "PCIe 3V3 Input",
+            "Vout": 3.3,
+            "x": 639.3506895989175,
+            "y": -82.36594763393832
+          },
+          {
+            "id": "n_w6rcyl",
+            "type": "Load",
+            "name": "PCIe 12V Load",
+            "Vreq": 12,
+            "I_typ": 5,
+            "I_idle": 1,
+            "I_max": 6,
+            "numParalleledDevices": 1,
+            "x": 310.7682703819047,
+            "y": 80.06954158057076
+          },
+          {
+            "id": "rfmalevv",
+            "type": "Load",
+            "name": "PCIe 3.3V Load",
+            "Vreq": 3.3,
+            "I_typ": 3,
+            "I_idle": 1,
+            "I_max": 3,
+            "numParalleledDevices": 1,
+            "x": 656.4286742101762,
+            "y": 76.60896753765954
+          }
+        ],
+        "edges": [
+          {
+            "id": "n_rs7kxh-n_w6rcyl",
+            "from": "n_rs7kxh",
+            "to": "n_w6rcyl",
+            "fromHandle": "output",
+            "toHandle": "input",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          },
+          {
+            "id": "n_yo5h9n-rfmalevv",
+            "from": "n_yo5h9n",
+            "to": "rfmalevv",
+            "fromHandle": "output",
+            "toHandle": "input",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          }
+        ]
+      },
+      "x": 769.0588034194186,
+      "y": 404.0409172868237,
+      "projectFileName": "PCIe_subsystem.json"
+    },
+    {
+      "id": "7sdaagl0",
+      "type": "Subsystem",
+      "name": "CPU1",
+      "inputV_nom": 12,
+      "numParalleledSystems": 1,
+      "project": {
+        "id": "p_zhu6ek",
+        "name": "Sample Server Tree",
+        "units": {
+          "voltage": "V",
+          "current": "A",
+          "power": "W",
+          "resistance": "mΩ"
+        },
+        "defaultMargins": {
+          "currentPct": 10,
+          "powerPct": 10,
+          "voltageDropPct": 5,
+          "voltageMarginPct": 3
+        },
+        "scenarios": [
+          "Typical",
+          "Max",
+          "Idle"
+        ],
+        "currentScenario": "Typical",
+        "nodes": [
+          {
+            "id": "n_0zawcd",
+            "type": "SubsystemInput",
+            "name": "CPU Subsystem Input",
+            "Vout": 12,
+            "x": 537.9669261316633,
+            "y": -52.83353232264295
+          },
+          {
+            "id": "n_8u7zib",
+            "type": "Load",
+            "name": "CPU SOC",
+            "Vreq": 0.9,
+            "I_typ": 105,
+            "I_idle": 10,
+            "I_max": 130,
+            "x": 185.53599540277867,
+            "y": 314.8247263728454
+          },
+          {
+            "id": "n_zltg82",
+            "type": "Load",
+            "name": "CPU CPU0 PVDDCR",
+            "Vreq": 0.9,
+            "I_typ": 175,
+            "I_idle": 5,
+            "I_max": 230,
+            "x": -10.084593789329347,
+            "y": 315.9729542883547
+          },
+          {
+            "id": "bk09sxxb",
+            "type": "Load",
+            "name": "CPU CPU1 PVDDCR",
+            "Vreq": 0.9,
+            "I_typ": 175,
+            "I_idle": 5,
+            "I_max": 230,
+            "x": 362.81233183809445,
+            "y": 315.20243694475084
+          },
+          {
+            "id": "n_nywk4w",
+            "type": "Load",
+            "name": "PVDD11",
+            "Vreq": 1.1,
+            "I_typ": 65,
+            "I_idle": 5,
+            "I_max": 80,
+            "x": 566.1181193180853,
+            "y": 312.22385320856074
+          },
+          {
+            "id": "9s5ypvn8",
+            "type": "Load",
+            "name": "PVDDIO",
+            "Vreq": 1.1,
+            "I_typ": 120,
+            "I_idle": 5,
+            "I_max": 140,
+            "x": 758.3582034956668,
+            "y": 310.24532685117134
+          },
+          {
+            "id": "buox1yv6",
+            "type": "Load",
+            "name": "PVDD18_S5",
+            "Vreq": 1.8,
+            "I_typ": 11,
+            "I_idle": 5,
+            "I_max": 12,
+            "x": 944.9481317859032,
+            "y": 307.1904457778792
+          },
+          {
+            "id": "u1ym352k",
+            "type": "Load",
+            "name": "PVDD33_S5",
+            "Vreq": 3.3,
+            "I_typ": 3,
+            "I_idle": 5,
+            "I_max": 3.75,
+            "x": 1122.4967242416885,
+            "y": 307.3523762417465
+          },
+          {
+            "id": "n_smzusp",
+            "type": "Converter",
+            "name": "SOC VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 23,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 50,
+                  "eta": 0.92
+                },
+                {
+                  "current": 300,
+                  "loadPct": 100,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": -29.875099501263833,
+            "y": 157.89181715341854,
+            "Iout_max": 300,
+            "Pout_max": 300
+          },
+          {
+            "id": "0mdc4h33",
+            "type": "Converter",
+            "name": "Core VR CPU1",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 23,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 50,
+                  "eta": 0.92
+                },
+                {
+                  "current": 300,
+                  "loadPct": 100,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": 339.79771557052015,
+            "y": 159.43221837023182,
+            "Iout_max": 300,
+            "Pout_max": 300
+          },
+          {
+            "id": "j2es02we",
+            "type": "Converter",
+            "name": "SOC VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 158.72904548994416,
+            "y": 157.97226343915946,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "9iradanc",
+            "type": "Converter",
+            "name": "PVDD11 VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.1,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 541.0638567929783,
+            "y": 160.0775614254327,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "pc3n4qpt",
+            "type": "Converter",
+            "name": "PVDDIO VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.1,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 70,
+                  "loadPct": 35,
+                  "eta": 0.94
+                },
+                {
+                  "current": 150,
+                  "loadPct": 75,
+                  "eta": 0.92
+                }
+              ]
+            },
+            "x": 730.2613339985986,
+            "y": 158.43948802971306,
+            "Iout_max": 200,
+            "Pout_max": 200
+          },
+          {
+            "id": "u8884ca5",
+            "type": "Converter",
+            "name": "PVDD18 VR",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 1.8,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "loadPct": 0,
+                  "eta": 0.8
+                },
+                {
+                  "current": 15,
+                  "loadPct": 50,
+                  "eta": 0.9
+                },
+                {
+                  "current": 30,
+                  "loadPct": 100,
+                  "eta": 0.85
+                }
+              ]
+            },
+            "x": 921.0968845999382,
+            "y": 160.89659812329256,
+            "Iout_max": 30,
+            "Pout_max": 50
+          },
+          {
+            "id": "n_8uh5f8",
+            "type": "SubsystemInput",
+            "name": "CPU 3V3 Input",
+            "Vout": 3.3,
+            "x": 1097.902182596463,
+            "y": -59.50029911799449
+          }
+        ],
+        "edges": [
+          {
+            "id": "n_smzusp-n_zltg82",
+            "from": "n_smzusp",
+            "to": "n_zltg82",
+            "interconnect": {
+              "R_milliohm": 0.1
+            }
+          },
+          {
+            "id": "0mdc4h33-bk09sxxb",
+            "from": "0mdc4h33",
+            "to": "bk09sxxb",
+            "interconnect": {
+              "R_milliohm": 0.1
+            }
+          },
+          {
+            "id": "j2es02we-n_8u7zib",
+            "from": "j2es02we",
+            "to": "n_8u7zib",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "9iradanc-n_nywk4w",
+            "from": "9iradanc",
+            "to": "n_nywk4w",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "pc3n4qpt-9s5ypvn8",
+            "from": "pc3n4qpt",
+            "to": "9s5ypvn8",
+            "interconnect": {
+              "R_milliohm": 0.2
+            }
+          },
+          {
+            "id": "u8884ca5-buox1yv6",
+            "from": "u8884ca5",
+            "to": "buox1yv6",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          },
+          {
+            "id": "n_0zawcd-n_smzusp",
+            "from": "n_0zawcd",
+            "to": "n_smzusp",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-j2es02we",
+            "from": "n_0zawcd",
+            "to": "j2es02we",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-0mdc4h33",
+            "from": "n_0zawcd",
+            "to": "0mdc4h33",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-9iradanc",
+            "from": "n_0zawcd",
+            "to": "9iradanc",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-pc3n4qpt",
+            "from": "n_0zawcd",
+            "to": "pc3n4qpt",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_0zawcd-u8884ca5",
+            "from": "n_0zawcd",
+            "to": "u8884ca5",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_8uh5f8-u1ym352k",
+            "from": "n_8uh5f8",
+            "to": "u1ym352k",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          }
+        ]
+      },
+      "x": 475.55926815138173,
+      "y": 406.1865536741738,
+      "projectFileName": "CPU_subsystem_multi_input.json"
     }
   ],
   "edges": [
     {
-      "id": "n_bruydm-n_clcezx",
-      "from": "n_bruydm",
-      "to": "n_clcezx",
-      "interconnect": {
-        "R_milliohm": 1
-      }
-    },
-    {
-      "id": "n_bruydm-jn2oz0cv",
-      "from": "n_bruydm",
-      "to": "jn2oz0cv",
-      "interconnect": {
-        "R_milliohm": 1
-      }
-    },
-    {
-      "id": "a7rlqiem-n_i4fae0",
-      "from": "a7rlqiem",
-      "to": "n_i4fae0",
-      "interconnect": {
-        "R_milliohm": 3
-      }
-    },
-    {
       "id": "n_um6jax-n_bruydm",
       "from": "n_um6jax",
-      "to": "n_bruydm"
+      "to": "n_bruydm",
+      "interconnect": {
+        "R_milliohm": 1
+      }
     },
     {
       "id": "n_um6jax-a7rlqiem",
       "from": "n_um6jax",
-      "to": "a7rlqiem"
+      "to": "a7rlqiem",
+      "interconnect": {
+        "R_milliohm": 1
+      }
+    },
+    {
+      "id": "a7rlqiem:output-n_i4fae0:input",
+      "from": "a7rlqiem",
+      "to": "n_i4fae0",
+      "sourceHandle": "output",
+      "targetHandle": "input"
+    },
+    {
+      "id": "n_um6jax-n_zcx44h",
+      "from": "n_um6jax",
+      "to": "n_zcx44h",
+      "interconnect": {
+        "R_milliohm": 8
+      }
+    },
+    {
+      "id": "n_bruydm-n_4lkfgr",
+      "from": "n_bruydm",
+      "to": "n_4lkfgr",
+      "fromHandle": "output",
+      "toHandle": "n_0zawcd"
+    },
+    {
+      "id": "n_itrvpp-n_4lkfgr",
+      "from": "n_itrvpp",
+      "to": "n_4lkfgr",
+      "fromHandle": "output",
+      "toHandle": "n_8uh5f8"
+    },
+    {
+      "id": "a7rlqiem-n_sqaqnb",
+      "from": "a7rlqiem",
+      "to": "n_sqaqnb",
+      "fromHandle": "output",
+      "toHandle": "n_rs7kxh"
+    },
+    {
+      "id": "n_itrvpp-n_sqaqnb",
+      "from": "n_itrvpp",
+      "to": "n_sqaqnb",
+      "fromHandle": "output",
+      "toHandle": "n_yo5h9n"
+    },
+    {
+      "id": "n_bruydm-7sdaagl0",
+      "from": "n_bruydm",
+      "to": "7sdaagl0",
+      "fromHandle": "output",
+      "toHandle": "n_0zawcd"
+    },
+    {
+      "id": "n_itrvpp-7sdaagl0",
+      "from": "n_itrvpp",
+      "to": "7sdaagl0",
+      "fromHandle": "output",
+      "toHandle": "n_8uh5f8"
+    },
+    {
+      "id": "n_bruydm-n_itrvpp",
+      "from": "n_bruydm",
+      "to": "n_itrvpp",
+      "fromHandle": "output",
+      "toHandle": "input"
     }
   ]
 }
