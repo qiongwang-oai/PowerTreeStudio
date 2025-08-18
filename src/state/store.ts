@@ -7,6 +7,8 @@ type State = {
   project: Project
   importedFileName: string | null
   clipboardNode: AnyNode | null
+  past: Project[]
+  future: Project[]
   setProject: (p: Project) => void
   setImportedFileName: (name: string | null) => void
   addNode: (n: AnyNode) => void
@@ -18,6 +20,8 @@ type State = {
   removeNode: (id: string) => void
   removeEdge: (id: string) => void
   setClipboardNode: (n: AnyNode | null) => void
+  undo: () => void
+  redo: () => void
   updateSubsystemProject: (subsystemId: string, updater: (p: Project) => Project) => void
   updateSubsystemProjectAtPath: (subsystemPath: string[], updater: (p: Project) => Project) => void
   subsystemAddNode: (subsystemId: string, node: AnyNode) => void
@@ -44,19 +48,24 @@ export const useStore = create<State>((set,get)=>({
   project: saved || sampleProject,
   importedFileName: null,
   clipboardNode: null,
-  setProject: (p) => { set({project:p}); autosave(p) },
+  past: [],
+  future: [],
+  setProject: (p) => { const prev = JSON.parse(JSON.stringify(get().project)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); set({project:p}); autosave(p) },
   setImportedFileName: (name) => { set({ importedFileName: name }) },
-  addNode: (n) => { const p=get().project; p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
-  addEdge: (e) => { const p=get().project; if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
-  updateNode: (id, patch) => { const p=get().project; p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
-  updateEdge: (id, patch) => { const p=get().project; p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
-  setScenario: (s) => { const p=get().project; p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
-  updateNodePos: (id, x, y) => { const p=get().project; p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
-  removeNode: (id) => { const p=get().project; p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
-  removeEdge: (id) => { const p=get().project; p.edges=p.edges.filter(e=>e.id!==id); set({project:{...p}}); autosave(get().project) }
+  addNode: (n) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
+  addEdge: (e) => { const p=get().project; if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
+  updateNode: (id, patch) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
+  updateEdge: (id, patch) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
+  setScenario: (s) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
+  updateNodePos: (id, x, y) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
+  removeNode: (id) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
+  removeEdge: (id) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.filter(e=>e.id!==id); set({project:{...p}}); autosave(get().project) }
   ,setClipboardNode: (n) => { set({ clipboardNode: n }) }
+  ,undo: () => { const { past, project, future } = get(); if (past.length===0) return; const prev = past[past.length-1]; set({ past: past.slice(0,-1), future: [...future, JSON.parse(JSON.stringify(project))], project: prev }); autosave(get().project) }
+  ,redo: () => { const { past, project, future } = get(); if (future.length===0) return; const next = future[future.length-1]; set({ past: [...past, JSON.parse(JSON.stringify(project))], future: future.slice(0,-1), project: next }); autosave(get().project) }
   ,updateSubsystemProject: (subsystemId, updater) => {
     const p=get().project
+    const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] }));
     p.nodes=p.nodes.map(n=>{
       if (n.id!==subsystemId || (n as any).type!=='Subsystem') return n
       const sub = n as any
@@ -82,6 +91,7 @@ export const useStore = create<State>((set,get)=>({
       }
     }
     const root = get().project
+    const prev = JSON.parse(JSON.stringify(root)) as Project; set(state=>({ past:[...state.past, prev], future: [] }));
     const nextRoot = applyAtPath(root, subsystemPath)
     set({ project: nextRoot }); autosave(get().project)
   }

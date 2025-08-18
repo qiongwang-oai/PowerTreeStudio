@@ -20,7 +20,7 @@ export default function Palette(){
   const onAdd = (t:any)=> addNode(createPreset(t))
   return (
     <div className="p-3 space-y-3">
-      <h2 className="text-lg font-semibold text-slate-600">Palette</h2>
+      <h2 className="text-lg font-semibold text-black">Palette</h2>
       <div className="grid grid-cols-2 gap-2">
         <Button onClick={()=>onAdd('Source')}>Source</Button>
         <Button onClick={()=>onAdd('Converter')}>Converter</Button>
