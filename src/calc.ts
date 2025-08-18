@@ -115,14 +115,26 @@ export function compute(project: Project): ComputeResult {
       const innerResult = compute(inner)
       const count = Math.max(1, Math.round((sub as any as SubsystemNode).numParalleledSystems || 1))
       // Aggregate per-port power and totals
-      const perPortPower: Record<string, number> = {}
+      const perPortPower_includingInnerEdgeLoss: Record<string, number> = {}
+      const perPortPower_excludingInnerEdgeLoss: Record<string, number> = {}
       let PinSingle = 0
       for (const p of inputPorts){
         const nid = p.id
         const srcNode = innerResult.nodes[nid]
-        const pout = (srcNode?.P_out || 0)
-        perPortPower[nid] = pout
-        PinSingle += pout
+        // Include inner edge losses: use computed P_out of the replaced Source
+        const pout_at_port = (srcNode?.P_out || 0)
+        perPortPower_includingInnerEdgeLoss[nid] = pout_at_port
+        PinSingle += pout_at_port
+        // Exclude inner edge losses: sum P_in of direct downstream nodes of this port
+        let sumChildPin = 0
+        for (const ie of inner.edges){
+          if ((ie as any).from === nid){
+            const childId = (ie as any).to
+            const childNode = innerResult.nodes[childId]
+            sumChildPin += (childNode?.P_in || 0)
+          }
+        }
+        perPortPower_excludingInnerEdgeLoss[nid] = sumChildPin
       }
       const PoutSingle = innerResult.totals.loadPower
       const Pin = PinSingle * count
@@ -132,13 +144,14 @@ export function compute(project: Project): ComputeResult {
       sub.loss = (Pin || 0) - (Pout || 0)
       // Approximate overall input current as sum over ports of (P_port / V_port)
       let I_total = 0
-      for (const pid of Object.keys(perPortPower)){
+      for (const pid of Object.keys(perPortPower_includingInnerEdgeLoss)){
         const V = Math.max(portVoltageMap[pid] || 0, 1e-9)
-        I_total += (perPortPower[pid] * count) / V
+        I_total += (perPortPower_includingInnerEdgeLoss[pid] * count) / V
       }
       sub.I_in = I_total
       // Expose per-port details for edge calculations and UI
-      ;(sub as any).__portPowerMap = Object.fromEntries(Object.entries(perPortPower).map(([k,v])=>[k, v*count]))
+      ;(sub as any).__portPowerMap_includeEdgeLoss = Object.fromEntries(Object.entries(perPortPower_includingInnerEdgeLoss).map(([k,v])=>[k, v*count]))
+      ;(sub as any).__portPowerMap_excludeEdgeLoss = Object.fromEntries(Object.entries(perPortPower_excludingInnerEdgeLoss).map(([k,v])=>[k, v*count]))
       ;(sub as any).__portVoltageMap = portVoltageMap
       // For backward-compat displays, if exactly one port exists, reflect that voltage
       if (inputPorts.length === 1){
@@ -184,7 +197,7 @@ export function compute(project: Project): ComputeResult {
       } else if (child.type==='Subsystem'){
         // Use per-port power if available and targetHandle provided; otherwise try voltage match
         const toHandle = (e as any).toHandle as string | undefined
-        const ports: Record<string, number> = ((child as any).__portPowerMap) || {}
+        const ports: Record<string, number> = ((child as any).__portPowerMap_excludeEdgeLoss) || {}
         const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
         let P_for_edge = 0
         if (toHandle && toHandle in ports){
@@ -276,7 +289,7 @@ export function compute(project: Project): ComputeResult {
           if (child){
             if (child.type === 'Subsystem'){
               const toHandle = (e as any).toHandle as string | undefined
-              const perPort: Record<string, number> = ((child as any).__portPowerMap) || {}
+              const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
               const vals = Object.values(perPort)
               if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
               else if (vals.length === 1) childInputSum += vals[0] || 0
@@ -310,7 +323,7 @@ export function compute(project: Project): ComputeResult {
         I = ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
       } else if (child.type==='Subsystem'){
         const toHandle = (e as any).toHandle as string | undefined
-        const ports: Record<string, number> = ((child as any).__portPowerMap) || {}
+        const ports: Record<string, number> = ((child as any).__portPowerMap_excludeEdgeLoss) || {}
         const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
         let P_for_edge = 0
         if (toHandle && toHandle in ports){
@@ -401,7 +414,7 @@ export function compute(project: Project): ComputeResult {
         if (child && child.type === 'Subsystem'){
           // Use per-port power for the specific edge handle
           const toHandle = (e as any).toHandle as string | undefined
-          const perPort: Record<string, number> = ((child as any).__portPowerMap) || {}
+          const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
           const portVs: Record<string, number> = ((child as any).__portVoltageMap) || {}
           if (toHandle && (toHandle in perPort)){
             P_edge = (perPort[toHandle] || 0) + edgeLoss
