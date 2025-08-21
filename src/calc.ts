@@ -183,8 +183,11 @@ export function compute(project: Project): ComputeResult {
       let I = 0; for (const e of outs){ const child=nmap[e.to]; if (child?.I_in) I += child.I_in }
       const Vout = (input as any).Vout || 0
       const P_in = I * Vout
+      // Include direct edge dissipations in P_out when available
+      let edgeLossSum = 0
+      for (const e of outs){ const em = emap[e.id]; if (em && typeof em.P_loss_edge === 'number') edgeLossSum += (em.P_loss_edge || 0) }
       input.I_out = I
-      input.P_out = P_in
+      input.P_out = P_in + edgeLossSum
       input.P_in = P_in
       input.I_in = I
     } }

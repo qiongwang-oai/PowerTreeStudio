@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Project, AnyNode } from '../../models'
-import { compute } from '../../calc'
+import { compute, etaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { useStore } from '../../state/store'
@@ -95,7 +95,20 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
               ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                    const nodeResult = computeResult.nodes[n.id];
+                    const eff = (n as any).efficiency;
+                    if (eff?.type === 'curve' && nodeResult) {
+                      const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                      return (eta * 100).toFixed(1) + '%';
+                    } else if (eff?.type === 'fixed') {
+                      return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                    } else if (eff?.points?.[0]?.eta) {
+                      return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                    } else {
+                      return '—';
+                    }
+                  })()}</div>
                 </div>
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                 <div>
@@ -194,7 +207,20 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                     ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
                       <div>
                         <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                          const nodeResult = computeResult.nodes[n.id];
+                          const eff = (n as any).efficiency;
+                          if (eff?.type === 'curve' && nodeResult) {
+                            const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                            return (eta * 100).toFixed(1) + '%';
+                          } else if (eff?.type === 'fixed') {
+                            return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                          } else if (eff?.points?.[0]?.eta) {
+                            return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                          } else {
+                            return '—';
+                          }
+                        })()}</div>
                       </div>
            ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                       <div>
@@ -246,7 +272,20 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>η: {(((n as any).efficiency?.value ?? ((n as any).efficiency?.points?.[0]?.eta ?? 0)) * 100).toFixed(1)}%</div>
+              <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                const nodeResult = computeResult.nodes[n.id];
+                const eff = (n as any).efficiency;
+                if (eff?.type === 'curve' && nodeResult) {
+                  const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                  return (eta * 100).toFixed(1) + '%';
+                } else if (eff?.type === 'fixed') {
+                  return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                } else if (eff?.points?.[0]?.eta) {
+                  return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                } else {
+                  return '—';
+                }
+              })()}</div>
             </div>
           ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
             <div>
@@ -267,12 +306,18 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           ) : null}
         </div>
       )
-      const pout = computeResult.nodes[n.id]?.P_out
+      const nodeRes = computeResult.nodes[n.id]
+      const pout = nodeRes?.P_out
+      const pin = nodeRes?.P_in
       const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const right = (showPout) ? (
+      const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Subsystem')
+      const right = (showPout || showPin) ? (
         <>
           <div className="w-px bg-slate-300 mx-1" />
           <div className="text-left min-w-[70px]">
+            {showPin && (
+              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
+            )}
             {showPout && (
               <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
             )}

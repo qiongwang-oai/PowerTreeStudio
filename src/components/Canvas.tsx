@@ -340,12 +340,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         </div>
       )
       // Right power info respecting type rules
-      const pout = computeResult.nodes[n.id]?.P_out
+      const nodeRes = computeResult.nodes[n.id]
+      const pout = nodeRes?.P_out
+      const pin = nodeRes?.P_in
       const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const right = (showPout) ? (
+      const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Subsystem')
+      const right = (showPout || showPin) ? (
         <>
           <div className="w-px bg-slate-300 mx-1" />
           <div className="text-left min-w-[70px]">
+            {showPin && (
+              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
+            )}
             {showPout && (
               <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
             )}
