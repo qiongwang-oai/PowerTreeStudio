@@ -20,7 +20,7 @@ function CustomNode(props: NodeProps) {
     : 'bg-white'
   return (
     <div className={`rounded-lg border ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
-      {(nodeType==='Converter' || nodeType==='Load') && (
+      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
           <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
@@ -55,7 +55,7 @@ function CustomNode(props: NodeProps) {
         })()
       )}
       {data.label}
-      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput') && (
+      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
         <>
           <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
           <div style={{ fontSize: '10px', color: '#666', marginTop: 4 }}>output</div>
@@ -78,6 +78,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
 
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
 
@@ -344,7 +345,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       const pout = nodeRes?.P_out
       const pin = nodeRes?.P_in
       const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Subsystem')
+      const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Subsystem' || n.type === 'Bus')
       const right = (showPout || showPin) ? (
         <>
           <div className="w-px bg-slate-300 mx-1" />
@@ -510,6 +511,13 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           e.preventDefault()
         }
       }
+      // Edge deletion via keyboard when an edge is selected and no node is selected
+      if (!selectedNodeId && selectedEdgeId && (e.key === 'Delete' || e.key === 'Backspace')){
+        removeEdge(selectedEdgeId)
+        setSelectedEdgeId(null)
+        onSelect && onSelect(null)
+        e.preventDefault()
+      }
       if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
         // Paste
         if (clipboardNode) {
@@ -524,7 +532,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, clipboardNode, project.nodes, removeNode, setClipboardNode, screenToFlowPosition, openSubsystemIds])
+  }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, openSubsystemIds, onSelect])
 
   return (
     <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)}>
@@ -551,8 +559,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         nodeTypes={nodeTypes}
         fitView
         defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
-        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id)}}
-        onEdgeClick={(_,e)=>onSelect(e.id)}
+        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id); setSelectedEdgeId(null)}}
+        onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}

@@ -83,6 +83,40 @@ export function compute(project: Project): ComputeResult {
       const eta = etaFromModel(conv.efficiency, P_children, I_out, conv)
       const P_out=P_children; const P_in=P_out/Math.max(eta,1e-9); conv.P_out=P_out; conv.P_in=P_in; conv.I_out=I_out
       const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out }
+    else if (node.type==='Bus'){
+      // Treat Bus as an ideal pass-through converter: η = 100%, Vin == Vout == V_bus, no limits
+      const bus = node as any as ComputeNode
+      const outEdges = (outgoing[bus.id]||[]).filter(e=>{
+        const h = (e as any).fromHandle
+        return (h === undefined || h === 'output')
+      })
+      let childInputSum = 0
+      let edgeLossSum = 0
+      let I_out = 0
+      for (const e of outEdges){
+        const em = emap[e.id]
+        if (em && typeof em.I_edge === 'number') I_out += (em.I_edge || 0)
+        if (em && typeof em.P_loss_edge === 'number') edgeLossSum += (em.P_loss_edge || 0)
+        const child = nmap[e.to]
+        if (child){
+          if (child.type === 'Subsystem'){
+            const toHandle = (e as any).toHandle as string | undefined
+            const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+            const vals = Object.values(perPort)
+            if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+            else if (vals.length === 1) childInputSum += vals[0] || 0
+            else childInputSum += 0
+          } else {
+            childInputSum += (child.P_in || 0)
+          }
+        }
+      }
+      const Vbus = Math.max(((bus as any).V_bus || 0), 1e-9)
+      if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
+      const P_out = childInputSum + edgeLossSum
+      const P_in = P_out // ideal
+      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; (bus as any).loss = 0
+    }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
       // Clone embedded project and replace each SubsystemInput with a Source at its own Vout
@@ -362,7 +396,7 @@ export function compute(project: Project): ComputeResult {
   // Recompute converter input current from incoming edges connected to the input handle only
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter'){
+    if (node.type === 'Converter' || node.type === 'Bus'){
       const conv = node as any as ConverterNode & ComputeNode
       let I_in_sum = 0
       for (const e of Object.values(emap)){
@@ -378,7 +412,7 @@ export function compute(project: Project): ComputeResult {
   // Finalize converter output current strictly from directly connected output edges
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter'){
+    if (node.type === 'Converter' || node.type === 'Bus'){
       const conv = node as any as ConverterNode & ComputeNode
       let I_out_sum = 0
       for (const e of Object.values(emap)){
@@ -389,6 +423,27 @@ export function compute(project: Project): ComputeResult {
         }
       }
       conv.I_out = I_out_sum
+    }
+  }
+  // Ensure edges into Bus carry the sum of outgoing currents of that Bus
+  for (const e of Object.values(emap)){
+    const child = nmap[e.to]
+    if (child && child.type === 'Bus'){
+      const I = ((child as any).I_out || 0)
+      const R_total = e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
+      const V_drop = I * R_total
+      const P_loss = I * I * R_total
+      e.I_edge = I
+      e.R_total = R_total
+      e.V_drop = V_drop
+      e.P_loss_edge = P_loss
+      const parent=nmap[e.from]
+      const upV = parent?.type==='Source'? (parent as any).Vout
+        : parent?.type==='Converter'? (parent as any).Vout
+        : parent?.type==='Bus'? (parent as any).V_bus
+        : parent?.type==='SubsystemInput'? (parent as any).Vout
+        : undefined
+      if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
     }
   }
   // Apply converter limit warnings using finalized values
