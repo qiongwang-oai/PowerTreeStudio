@@ -8,13 +8,19 @@ export type ComputeResult = { nodes: Record<string, ComputeNode>; edges: Record<
 export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
   const countRaw = (load as any).numParalleledDevices
   const count = Math.max(1, Math.round(Number.isFinite(countRaw) ? (countRaw as any as number) : 1))
-  if (scenario==='Max') return load.I_max * count
+  if (scenario==='Max'){
+    const utilPctRaw = (load as any).Utilization_max
+    const utilPct = Number.isFinite(utilPctRaw as any) ? clamp((utilPctRaw as any as number), 0, 100) : 100
+    return load.I_max * (utilPct/100) * count
+  }
   if (scenario==='Idle') {
     const idle = (load as any).I_idle
     const perDevice = Number.isFinite(idle) && (idle as number)>0 ? (idle as number) : load.I_typ*0.2
     return perDevice * count
   }
-  return load.I_typ * count
+  const utilPctRaw = (load as any).Utilization_typ
+  const utilPct = Number.isFinite(utilPctRaw as any) ? clamp((utilPctRaw as any as number), 0, 100) : 100
+  return load.I_typ * (utilPct/100) * count
 }
 export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
   if (model.type==='fixed') return model.value
