@@ -23,7 +23,7 @@ function CustomNode(props: NodeProps) {
       {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
-          <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
+          <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>{nodeType==='Load' ? `${Number(((data as any).Vreq ?? 0))} V` : 'input'}</div>
         </>
       )}
       {nodeType==='Subsystem' && (
@@ -134,15 +134,20 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                   })()}</div>
                 </div>
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                  <div className="text-left">
+                    <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                  </div>
+                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                  <div className="text-left" style={{minWidth:70}}>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                  </div>
                 </div>
                ) : n.type === 'Subsystem' ? (
                 <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>x.Vout).join(', ') || '—')}</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>x.Vout).join(', ') || '—'}</div>
                   <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
                 </div>
                ) : n.type === 'SubsystemInput' ? (
@@ -161,6 +166,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         </div>
       ),
       type: n.type,
+      ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
       ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
@@ -249,11 +255,16 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                         })()}</div>
                       </div>
            ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                      <div>
-                        <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                      <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                        <div className="text-left">
+                          <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                          <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                          <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                        </div>
+                        <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                        <div className="text-left" style={{minWidth:70}}>
+                          <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                        </div>
                       </div>
            ) : n.type === 'Subsystem' ? (
             <div>
@@ -276,6 +287,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
               </div>
             ),
             type: n.type,
+            ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
             ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
           },
           position,
@@ -317,12 +329,17 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
                 }
               })()}</div>
             </div>
-          ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vreq: {(n as any).Vreq}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-              <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+          ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
+            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+              <div className="text-left">
+                <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+              </div>
+              <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+              <div className="text-left" style={{minWidth:70}}>
+                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+              </div>
             </div>
           ) : n.type === 'Subsystem' ? (
             <div>

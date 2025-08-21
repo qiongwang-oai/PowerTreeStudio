@@ -118,8 +118,8 @@ export default function App(){
                     e.currentTarget.value = ''
                   }}
                 />
-                <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Import</Button>
-                <Button variant="outline" size="sm" onClick={onExport}>Export</Button>
+                <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Open</Button>
+                <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
                 <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
                 <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
                 <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={onReport}>Report</Button>
