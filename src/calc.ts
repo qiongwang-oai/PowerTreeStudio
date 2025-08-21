@@ -2,7 +2,7 @@ import { AnyNode, ConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scena
 import { clamp } from './utils'
 
 export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge?: number, R_total?: number }
-export type ComputeNode = AnyNode & { P_out?: number; P_in?: number; I_out?: number; I_in?: number; V_upstream?: number; loss?: number; warnings: string[] }
+export type ComputeNode = AnyNode & { P_out?: number; P_in?: number; P_in_single?: number; I_out?: number; I_in?: number; V_upstream?: number; loss?: number; warnings: string[] }
 export type ComputeResult = { nodes: Record<string, ComputeNode>; edges: Record<string, ComputeEdge>; totals: { loadPower: number, sourceInput: number, overallEta: number }; globalWarnings: string[]; order: string[] }
 
 export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
@@ -180,6 +180,7 @@ export function compute(project: Project): ComputeResult {
       const Pin = PinSingle * count
       const Pout = PoutSingle * count
       sub.P_in = Pin
+      ;(sub as any).P_in_single = PinSingle
       sub.P_out = Pout
       sub.loss = (Pin || 0) - (Pout || 0)
       // Approximate overall input current as sum over ports of (P_port / V_port)

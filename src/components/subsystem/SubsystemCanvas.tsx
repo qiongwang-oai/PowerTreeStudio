@@ -326,23 +326,44 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         </div>
       )
       const nodeRes = computeResult.nodes[n.id]
-      const pout = nodeRes?.P_out
-      const pin = nodeRes?.P_in
-      const showPout = (pout !== undefined) && (n.type !== 'Load')
-      const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Subsystem' || n.type === 'Bus')
-      const right = (showPout || showPin) ? (
-        <>
-          <div className="w-px bg-slate-300 mx-1" />
-          <div className="text-left min-w-[70px]">
-            {showPin && (
-              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
-            )}
-            {showPout && (
-              <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
-            )}
-          </div>
-        </>
-      ) : null
+      let right: React.ReactNode = null
+      if (n.type === 'Subsystem'){
+        const pinSingle = (nodeRes as any)?.P_in_single
+        const pinTotal = nodeRes?.P_in
+        if (pinSingle !== undefined || pinTotal !== undefined){
+          right = (
+            <>
+              <div className="w-px bg-slate-300 mx-1" />
+              <div className="text-left min-w-[70px]">
+                {pinSingle !== undefined && (
+                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(single): {pinSingle.toFixed(2)} W</div>
+                )}
+                {pinTotal !== undefined && (
+                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(total): {pinTotal.toFixed(2)} W</div>
+                )}
+              </div>
+            </>
+          )
+        }
+      } else {
+        const pout = nodeRes?.P_out
+        const pin = nodeRes?.P_in
+        const showPout = (pout !== undefined) && (n.type !== 'Load')
+        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Bus')
+        right = (showPout || showPin) ? (
+          <>
+            <div className="w-px bg-slate-300 mx-1" />
+            <div className="text-left min-w-[70px]">
+              {showPin && (
+                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
+              )}
+              {showPout && (
+                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
+              )}
+            </div>
+          </>
+        ) : null
+      }
       return {
         ...rn,
         data: {
