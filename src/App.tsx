@@ -3,7 +3,6 @@ import { useStore } from './state/store'
 import Palette from './components/Palette'
 import Canvas from './components/Canvas'
 import Inspector from './components/Inspector'
-import TotalsBar from './components/TotalsBar'
 import { Button } from './components/ui/button'
 import SubsystemEditor from './components/subsystem/SubsystemEditor'
 import { ReactFlowProvider } from 'reactflow'
@@ -100,7 +99,7 @@ export default function App(){
   }, [undo, redo, openSubsystemIds])
   return (
     <ErrorBoundary>
-      <div className="h-screen grid" style={{gridTemplateRows:'100px 1fr 48px', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
+      <div className="h-screen grid" style={{gridTemplateRows:'100px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
         <div className="col-span-3 px-3 py-1 border-b bg-white">
           <div className="flex items-start h-full" style={{height: '98px'}}>
             <div className="ml-8 flex flex-col justify-center">
@@ -143,7 +142,7 @@ export default function App(){
           />
           <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} onSelect={(id)=>setSelected(id)} />
         </aside>
-        <div className="col-span-3"><TotalsBar /></div>
+        {/* TotalsBar removed; metrics shown in Canvas banner */}
         {openSubsystemIds.map((id, idx)=>{
           let ctx = project
           for (let j=0; j<idx; j++){

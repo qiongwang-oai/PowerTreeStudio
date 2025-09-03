@@ -1,0 +1,719 @@
+{
+  "id": "p_zhu6ek",
+  "name": "Sample Server Tree",
+  "units": {
+    "voltage": "V",
+    "current": "A",
+    "power": "W",
+    "resistance": "mΩ"
+  },
+  "defaultMargins": {
+    "currentPct": 10,
+    "powerPct": 10,
+    "voltageDropPct": 5,
+    "voltageMarginPct": 3
+  },
+  "scenarios": [
+    "Typical",
+    "Max",
+    "Idle"
+  ],
+  "currentScenario": "Typical",
+  "nodes": [
+    {
+      "id": "n_8cfn3y",
+      "type": "Subsystem",
+      "name": "Subsystem_left",
+      "inputV_nom": 48,
+      "project": {
+        "id": "p_zhu6ek",
+        "name": "Sample Server Tree",
+        "units": {
+          "voltage": "V",
+          "current": "A",
+          "power": "W",
+          "resistance": "mΩ"
+        },
+        "defaultMargins": {
+          "currentPct": 10,
+          "powerPct": 10,
+          "voltageDropPct": 5,
+          "voltageMarginPct": 3
+        },
+        "scenarios": [
+          "Typical",
+          "Max",
+          "Idle"
+        ],
+        "currentScenario": "Typical",
+        "nodes": [
+          {
+            "id": "n_nqn5wo",
+            "type": "Converter",
+            "name": "IBC",
+            "Vin_min": 40,
+            "Vin_max": 60,
+            "Vout": 12,
+            "Pout_max": 1200,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.97
+            },
+            "x": 32.32234471426477,
+            "y": -28.970496513165244
+          },
+          {
+            "id": "n_kapxb9",
+            "type": "Converter",
+            "name": "CPU VRM",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "Pout_max": 250,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.92
+            },
+            "x": -182.33127930071552,
+            "y": 182.28903472299706
+          },
+          {
+            "id": "n_qah1iv",
+            "type": "Load",
+            "name": "CPU IO",
+            "Vreq": 0.9,
+            "I_typ": 10,
+            "I_max": 220,
+            "x": -314.2611946679065,
+            "y": 379.71871773281663,
+            "critical": true
+          },
+          {
+            "id": "n_r7vj3v",
+            "type": "Converter",
+            "name": "Buck 1st",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 6,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.9
+            },
+            "x": 217.01778629377947,
+            "y": 178.9655079398008
+          },
+          {
+            "id": "n_irh6nr",
+            "type": "Converter",
+            "name": "Buck 2nd",
+            "Vin_min": 5,
+            "Vin_max": 8,
+            "Vout": 0.8,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.95
+            },
+            "x": 144.57587918380221,
+            "y": 380.6803729649651
+          },
+          {
+            "id": "n_xf9os9",
+            "type": "Load",
+            "name": "CPU Core 2",
+            "Vreq": 0.8,
+            "I_typ": 800,
+            "I_max": 1000,
+            "x": 140.89178081762282,
+            "y": 531.5808846620964,
+            "critical": true
+          },
+          {
+            "id": "n_i8h37z",
+            "type": "Load",
+            "name": "CPU Core",
+            "Vreq": 0.9,
+            "I_typ": 80,
+            "I_max": 80,
+            "x": -77.62931494429876,
+            "y": 384.72878310456304
+          },
+          {
+            "id": "n_bursue",
+            "type": "Load",
+            "name": "Fan",
+            "Vreq": 12,
+            "I_typ": 10,
+            "I_max": 10,
+            "x": 37.86189536883552,
+            "y": 183.72627149646752,
+            "critical": false
+          },
+          {
+            "id": "n_blduji",
+            "type": "Load",
+            "name": "Load big",
+            "Vreq": 6,
+            "I_typ": 10,
+            "I_max": 20,
+            "x": 371.5240466527015,
+            "y": 380.1731239801384
+          },
+          {
+            "id": "n_o7wlfp",
+            "type": "Converter",
+            "name": "Buck",
+            "Vin_min": 1,
+            "Vin_max": 60,
+            "Vout": 12,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.95
+            },
+            "x": 415.725343961955,
+            "y": 177.1177175883225
+          },
+          {
+            "id": "n_cdg5gg",
+            "type": "Load",
+            "name": "Load",
+            "Vreq": 12,
+            "I_typ": 1,
+            "I_max": 2,
+            "x": 582.9160399154079,
+            "y": 379.35426358330346
+          },
+          {
+            "id": "n_dsocba",
+            "type": "SubsystemInput",
+            "name": "Subsystem Input",
+            "x": 60.782977663788756,
+            "y": -148.04199838970726,
+            "Vout": 48
+          }
+        ],
+        "edges": [
+          {
+            "id": "e_6460te",
+            "from": "n_nqn5wo",
+            "to": "n_kapxb9",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          },
+          {
+            "id": "n_kapxb9-n_qah1iv",
+            "from": "n_kapxb9",
+            "to": "n_qah1iv",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_r7vj3v",
+            "from": "n_nqn5wo",
+            "to": "n_r7vj3v",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          },
+          {
+            "id": "n_irh6nr-n_xf9os9",
+            "from": "n_irh6nr",
+            "to": "n_xf9os9",
+            "interconnect": {
+              "R_milliohm": 0.05
+            }
+          },
+          {
+            "id": "n_r7vj3v-n_irh6nr",
+            "from": "n_r7vj3v",
+            "to": "n_irh6nr",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_kapxb9-n_i8h37z",
+            "from": "n_kapxb9",
+            "to": "n_i8h37z",
+            "interconnect": {
+              "R_milliohm": 3
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_bursue",
+            "from": "n_nqn5wo",
+            "to": "n_bursue"
+          },
+          {
+            "id": "n_r7vj3v-n_blduji",
+            "from": "n_r7vj3v",
+            "to": "n_blduji",
+            "interconnect": {
+              "R_milliohm": 0.01
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_o7wlfp",
+            "from": "n_nqn5wo",
+            "to": "n_o7wlfp"
+          },
+          {
+            "id": "n_o7wlfp-n_cdg5gg",
+            "from": "n_o7wlfp",
+            "to": "n_cdg5gg"
+          },
+          {
+            "id": "n_dsocba-n_nqn5wo",
+            "from": "n_dsocba",
+            "to": "n_nqn5wo"
+          }
+        ]
+      },
+      "x": -19.843191939373185,
+      "y": 350.0957680467066,
+      "projectFileName": "Sample_subsystem.json"
+    },
+    {
+      "id": "n_pd0saq",
+      "type": "Subsystem",
+      "name": "Subsystem_right",
+      "inputV_nom": 48,
+      "project": {
+        "id": "p_zhu6ek",
+        "name": "Sample Server Tree",
+        "units": {
+          "voltage": "V",
+          "current": "A",
+          "power": "W",
+          "resistance": "mΩ"
+        },
+        "defaultMargins": {
+          "currentPct": 10,
+          "powerPct": 10,
+          "voltageDropPct": 5,
+          "voltageMarginPct": 3
+        },
+        "scenarios": [
+          "Typical",
+          "Max",
+          "Idle"
+        ],
+        "currentScenario": "Typical",
+        "nodes": [
+          {
+            "id": "n_nqn5wo",
+            "type": "Converter",
+            "name": "IBC",
+            "Vin_min": 40,
+            "Vin_max": 60,
+            "Vout": 12,
+            "Pout_max": 1200,
+            "efficiency": {
+              "type": "curve",
+              "value": 0.92,
+              "base": "Pout_max",
+              "points": [
+                {
+                  "loadPct": 10,
+                  "eta": 0.85
+                },
+                {
+                  "loadPct": 50,
+                  "eta": 0.92
+                },
+                {
+                  "loadPct": 100,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": 33.63252616396221,
+            "y": -29.742416626637578
+          },
+          {
+            "id": "n_kapxb9",
+            "type": "Converter",
+            "name": "CPU VRM",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 0.9,
+            "Pout_max": 250,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.92
+            },
+            "x": -182.33127930071552,
+            "y": 182.28903472299706
+          },
+          {
+            "id": "n_qah1iv",
+            "type": "Load",
+            "name": "CPU IO",
+            "Vreq": 0.9,
+            "I_typ": 10,
+            "I_max": 220,
+            "x": -314.2611946679065,
+            "y": 379.71871773281663,
+            "critical": true
+          },
+          {
+            "id": "n_r7vj3v",
+            "type": "Converter",
+            "name": "Buck 1st",
+            "Vin_min": 10,
+            "Vin_max": 13,
+            "Vout": 6,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.9
+            },
+            "x": 217.01778629377947,
+            "y": 178.9655079398008
+          },
+          {
+            "id": "n_irh6nr",
+            "type": "Converter",
+            "name": "Buck 2nd",
+            "Vin_min": 5,
+            "Vin_max": 8,
+            "Vout": 0.8,
+            "efficiency": {
+              "type": "fixed",
+              "value": 0.95
+            },
+            "x": 144.57587918380221,
+            "y": 380.6803729649651
+          },
+          {
+            "id": "n_xf9os9",
+            "type": "Load",
+            "name": "CPU Core 2",
+            "Vreq": 0.8,
+            "I_typ": 800,
+            "I_max": 1000,
+            "x": 174.09264913991944,
+            "y": 544.4005775968018,
+            "critical": true
+          },
+          {
+            "id": "n_i8h37z",
+            "type": "Load",
+            "name": "CPU Core",
+            "Vreq": 0.9,
+            "I_typ": 80,
+            "I_max": 80,
+            "x": -77.62931494429876,
+            "y": 384.72878310456304
+          },
+          {
+            "id": "n_bursue",
+            "type": "Load",
+            "name": "Fan",
+            "Vreq": 12,
+            "I_typ": 10,
+            "I_max": 10,
+            "x": 13.766538429202171,
+            "y": 181.4673317833769,
+            "critical": false
+          },
+          {
+            "id": "n_blduji",
+            "type": "Load",
+            "name": "Load big",
+            "Vreq": 6,
+            "I_typ": 10,
+            "I_max": 20,
+            "x": 371.5240466527015,
+            "y": 379.4077306407149
+          },
+          {
+            "id": "n_o7wlfp",
+            "type": "Converter",
+            "name": "Buck",
+            "Vin_min": 1,
+            "Vin_max": 15,
+            "Vout": 12,
+            "efficiency": {
+              "type": "curve",
+              "base": "Iout_max",
+              "points": [
+                {
+                  "current": 0,
+                  "eta": 0.85
+                },
+                {
+                  "current": 0.5,
+                  "eta": 0.92
+                },
+                {
+                  "current": 1,
+                  "eta": 0.9
+                }
+              ]
+            },
+            "x": 415.725343961955,
+            "y": 177.1177175883225
+          },
+          {
+            "id": "n_cdg5gg",
+            "type": "Load",
+            "name": "Load",
+            "Vreq": 12,
+            "I_typ": 1,
+            "I_max": 2,
+            "x": 582.9160399154079,
+            "y": 379.35426358330346
+          },
+          {
+            "id": "n_dsocba",
+            "type": "SubsystemInput",
+            "name": "Subsystem Input",
+            "x": 60.782977663788756,
+            "y": -148.04199838970726,
+            "Vout": 48
+          },
+          {
+            "id": "n_gbslg3",
+            "type": "Note",
+            "name": "Note",
+            "text": "...",
+            "x": 577.677004962515,
+            "y": 49.527437093038486
+          }
+        ],
+        "edges": [
+          {
+            "id": "e_6460te",
+            "from": "n_nqn5wo",
+            "to": "n_kapxb9",
+            "interconnect": {
+              "R_milliohm": 2
+            }
+          },
+          {
+            "id": "n_kapxb9-n_qah1iv",
+            "from": "n_kapxb9",
+            "to": "n_qah1iv",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_r7vj3v",
+            "from": "n_nqn5wo",
+            "to": "n_r7vj3v",
+            "interconnect": {
+              "R_milliohm": 10
+            }
+          },
+          {
+            "id": "n_irh6nr-n_xf9os9",
+            "from": "n_irh6nr",
+            "to": "n_xf9os9",
+            "interconnect": {
+              "R_milliohm": 0.05
+            }
+          },
+          {
+            "id": "n_r7vj3v-n_irh6nr",
+            "from": "n_r7vj3v",
+            "to": "n_irh6nr",
+            "interconnect": {
+              "R_milliohm": 1
+            }
+          },
+          {
+            "id": "n_kapxb9-n_i8h37z",
+            "from": "n_kapxb9",
+            "to": "n_i8h37z",
+            "interconnect": {
+              "R_milliohm": 3
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_bursue",
+            "from": "n_nqn5wo",
+            "to": "n_bursue"
+          },
+          {
+            "id": "n_r7vj3v-n_blduji",
+            "from": "n_r7vj3v",
+            "to": "n_blduji",
+            "interconnect": {
+              "R_milliohm": 0.01
+            }
+          },
+          {
+            "id": "n_nqn5wo-n_o7wlfp",
+            "from": "n_nqn5wo",
+            "to": "n_o7wlfp"
+          },
+          {
+            "id": "n_o7wlfp-n_cdg5gg",
+            "from": "n_o7wlfp",
+            "to": "n_cdg5gg"
+          },
+          {
+            "id": "n_dsocba-n_nqn5wo",
+            "from": "n_dsocba",
+            "to": "n_nqn5wo"
+          }
+        ]
+      },
+      "x": 230.23393070570967,
+      "y": 353.04539258559845,
+      "projectFileName": "Sample_subsystem.json"
+    },
+    {
+      "id": "n_b59qv8",
+      "type": "Load",
+      "name": "Compute Core",
+      "Vreq": 0.9,
+      "I_typ": 150,
+      "I_idle": 20,
+      "I_max": 200,
+      "x": 522.5418085263758,
+      "y": 493.0429472852213,
+      "critical": true
+    },
+    {
+      "id": "n_x8yaq6",
+      "type": "Converter",
+      "name": "IBC2",
+      "Vin_min": 40,
+      "Vin_max": 60,
+      "Vout": 12,
+      "efficiency": {
+        "type": "curve",
+        "base": "Iout_max",
+        "points": [
+          {
+            "current": 0,
+            "loadPct": 0,
+            "eta": 0.9
+          },
+          {
+            "current": 50,
+            "loadPct": 33,
+            "eta": 0.92
+          },
+          {
+            "current": 75,
+            "loadPct": 50,
+            "eta": 0.9383333333333335
+          },
+          {
+            "current": 100,
+            "loadPct": 67,
+            "eta": 0.95
+          },
+          {
+            "current": 150,
+            "loadPct": 100,
+            "eta": 0.9
+          }
+        ]
+      },
+      "x": 448.83126020072666,
+      "y": 194.16702249474568,
+      "Iout_max": 150,
+      "Pout_max": 2000
+    },
+    {
+      "id": "n_lyyy96",
+      "type": "Converter",
+      "name": "VRM 0.9V 92%",
+      "Vin_min": 10,
+      "Vin_max": 13,
+      "Vout": 0.9,
+      "efficiency": {
+        "type": "curve",
+        "base": "Iout_max",
+        "points": [
+          {
+            "current": 0,
+            "loadPct": 0,
+            "eta": 0.8
+          },
+          {
+            "current": 100,
+            "loadPct": 20,
+            "eta": 0.89
+          },
+          {
+            "current": 250,
+            "loadPct": 50,
+            "eta": 0.92
+          },
+          {
+            "current": 500,
+            "loadPct": 100,
+            "eta": 0.89
+          }
+        ]
+      },
+      "x": 472.91556203268374,
+      "y": 338.6951577264779,
+      "Iout_max": 500,
+      "Pout_max": 500
+    },
+    {
+      "id": "n_0gkxp0",
+      "type": "Converter",
+      "name": " IBC1",
+      "Vin_min": 40,
+      "Vin_max": 60,
+      "Vout": 48,
+      "efficiency": {
+        "type": "fixed",
+        "value": 0.95
+      },
+      "x": 19.815342751551327,
+      "y": 194.36132631061716
+    },
+    {
+      "id": "n_qb6tbb",
+      "type": "Source",
+      "name": "Source",
+      "Vout": 48,
+      "x": 232.5,
+      "y": 60
+    }
+  ],
+  "edges": [
+    {
+      "id": "n_x8yaq6-n_lyyy96",
+      "from": "n_x8yaq6",
+      "to": "n_lyyy96"
+    },
+    {
+      "id": "n_lyyy96-n_b59qv8",
+      "from": "n_lyyy96",
+      "to": "n_b59qv8",
+      "interconnect": {
+        "R_milliohm": 1
+      }
+    },
+    {
+      "id": "n_0gkxp0-n_8cfn3y",
+      "from": "n_0gkxp0",
+      "to": "n_8cfn3y"
+    },
+    {
+      "id": "n_qb6tbb-n_pd0saq",
+      "from": "n_qb6tbb",
+      "to": "n_pd0saq"
+    },
+    {
+      "id": "n_qb6tbb-n_x8yaq6",
+      "from": "n_qb6tbb",
+      "to": "n_x8yaq6"
+    },
+    {
+      "id": "n_qb6tbb-n_0gkxp0",
+      "from": "n_qb6tbb",
+      "to": "n_0gkxp0"
+    }
+  ]
+}

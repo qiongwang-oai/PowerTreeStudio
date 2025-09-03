@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
-import { compute, etaFromModel } from '../calc'
+import { compute, etaFromModel, computeDeepAggregates } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
@@ -102,6 +102,14 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     }
     return countWarningsDeep(project, project.currentScenario)
   }, [project])
+
+  // Detailed metrics for banner
+  const { criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss, overallEta } = useMemo(()=>{
+    const deep = computeDeepAggregates(project)
+    const sourceInput = computeResult.totals.sourceInput || 0
+    const eta = sourceInput > 0 ? (deep.criticalLoadPower / sourceInput) : 0
+    return { criticalLoadPower: deep.criticalLoadPower, nonCriticalLoadPower: deep.nonCriticalLoadPower, edgeLoss: deep.edgeLoss, converterLoss: deep.converterLoss, overallEta: eta }
+  }, [project, computeResult.totals.sourceInput])
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
     id: n.id,
@@ -585,9 +593,11 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
           </div>
         </div>
         <div className="flex items-center gap-6 text-sm">
-          <div>Σ Loads: <b>{computeResult.totals.loadPower.toFixed(2)} W</b></div>
-          <div>Σ Sources: <b>{computeResult.totals.sourceInput.toFixed(2)} W</b></div>
-          <div>Overall η: <b>{(computeResult.totals.overallEta*100).toFixed(2)}%</b></div>
+          <div>Critical: <b>{criticalLoadPower.toFixed(2)} W</b></div>
+          <div>Non-critical: <b>{nonCriticalLoadPower.toFixed(2)} W</b></div>
+          <div>Copper loss: <b>{edgeLoss.toFixed(2)} W</b></div>
+          <div>Converter loss: <b>{converterLoss.toFixed(2)} W</b></div>
+          <div>Efficiency: <b>{(overallEta*100).toFixed(2)}%</b></div>
           <div>Warnings: <b>{deepWarningCount}</b></div>
         </div>
       </div>

@@ -4,6 +4,13 @@ import { clamp } from './utils'
 export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge?: number, R_total?: number }
 export type ComputeNode = AnyNode & { P_out?: number; P_in?: number; P_in_single?: number; I_out?: number; I_in?: number; V_upstream?: number; loss?: number; warnings: string[] }
 export type ComputeResult = { nodes: Record<string, ComputeNode>; edges: Record<string, ComputeEdge>; totals: { loadPower: number, sourceInput: number, overallEta: number }; globalWarnings: string[]; order: string[] }
+export type DeepAggregates = {
+  criticalLoadPower: number
+  nonCriticalLoadPower: number
+  edgeLoss: number
+  converterLoss: number
+  totalLoadPower: number
+}
 
 export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
   const countRaw = (load as any).numParalleledDevices
@@ -527,4 +534,56 @@ export function compute(project: Project): ComputeResult {
     .reduce((a,n)=> a + (n.P_in || 0), 0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
   return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }
+}
+
+/**
+ * Compute deep aggregates across the entire project hierarchy, including all nested subsystems.
+ * Returns split critical/non-critical load power, total edge losses, converter losses, and total load power.
+ */
+export function computeDeepAggregates(project: Project): DeepAggregates {
+  const cloneProject = (p: Project): Project => JSON.parse(JSON.stringify(p))
+
+  const walk = (p: Project): DeepAggregates => {
+    // Ensure scenario alignment is preserved down the tree
+    const aligned: Project = { ...cloneProject(p), currentScenario: p.currentScenario }
+    const res = compute(aligned)
+
+    let criticalLoadPower = 0
+    let nonCriticalLoadPower = 0
+    let edgeLoss = 0
+    let converterLoss = 0
+
+    // Current level contributions
+    for (const node of Object.values(res.nodes)){
+      if (node.type === 'Load'){
+        const isNonCritical = (node as any).critical === false
+        const pout = node.P_out || 0
+        if (isNonCritical) nonCriticalLoadPower += pout
+        else criticalLoadPower += pout
+      } else if (node.type === 'Converter'){
+        converterLoss += (node.loss || 0)
+      }
+    }
+    for (const e of Object.values(res.edges)) edgeLoss += (e.P_loss_edge || 0)
+
+    // Recurse into subsystems present at this level to collect deep contributions
+    for (const n of p.nodes as AnyNode[]) {
+      if ((n as any).type === 'Subsystem' && (n as any).project) {
+        const sub = n as unknown as SubsystemNode
+        const inner: Project = cloneProject(sub.project)
+        inner.currentScenario = p.currentScenario
+        const innerAgg = walk(inner)
+        const systemCount = Math.max(1, Math.round(((sub as any).numParalleledSystems || 1) as number))
+        criticalLoadPower += innerAgg.criticalLoadPower * systemCount
+        nonCriticalLoadPower += innerAgg.nonCriticalLoadPower * systemCount
+        edgeLoss += innerAgg.edgeLoss * systemCount
+        converterLoss += innerAgg.converterLoss * systemCount
+      }
+    }
+
+    const totalLoadPower = criticalLoadPower + nonCriticalLoadPower
+    return { criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss, totalLoadPower }
+  }
+
+  return walk(project)
 }
