@@ -2,7 +2,7 @@ import { Project } from './models'
 const AUTOSAVE_KEY = 'powertree_autosave_v1'
 export function autosave(project: Project){ localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(project)) }
 export function loadAutosave(): Project | null { const s = localStorage.getItem(AUTOSAVE_KEY); return s? JSON.parse(s) : null }
-export function download(filename: string, content: string, mime='application/json'){
+export function download(filename: string, content: BlobPart, mime='application/json'){
   const fallback = () => {
     const blob = new Blob([content], { type: mime })
     const url = URL.createObjectURL(blob)

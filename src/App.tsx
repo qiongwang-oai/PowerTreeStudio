@@ -10,6 +10,7 @@ import { compute } from './calc'
 import { validate } from './rules'
 import { download, importJson } from './io'
 import { exportReport } from './report'
+import ReportDialog from './components/report/ReportDialog'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -46,6 +47,7 @@ export default function App(){
   const futureLen = useStore(s=>s.future.length)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
+  const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const openSubsystemIds = useStore(s => s.openSubsystemIds);
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const minRight = 220, maxRight = 640
@@ -70,7 +72,7 @@ export default function App(){
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const onExport = ()=> download(project.name.replace(/\s+/g,'_') + '.json', JSON.stringify(project, null, 2))
   const onImport = async (f:File)=>{ const data = await importJson(f); setProject(data); setImportedFileName(f.name) }
-  const onReport = ()=> exportReport(project, result)
+  const onReport = ()=> setReportOpen(true)
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
     const cleared = { ...project, nodes: [], edges: [] }
@@ -161,6 +163,9 @@ export default function App(){
             />
           )
         })}
+        {reportOpen && (
+          <ReportDialog project={project} result={result} onClose={()=>setReportOpen(false)} />
+        )}
       </div>
     </ErrorBoundary>
   )
