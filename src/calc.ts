@@ -417,22 +417,6 @@ export function compute(project: Project): ComputeResult {
       conv.I_in = I_in_sum
     }
   }
-  // Finalize converter output current strictly from directly connected output edges
-  for (const nodeId of order){
-    const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter' || node.type === 'Bus'){
-      const conv = node as any as ConverterNode & ComputeNode
-      let I_out_sum = 0
-      for (const e of Object.values(emap)){
-        if (e.from === conv.id){
-          const fromH = (e as any).fromHandle
-          if (fromH !== undefined && fromH !== 'output') continue
-          I_out_sum += (e.I_edge || 0)
-        }
-      }
-      conv.I_out = I_out_sum
-    }
-  }
   // Ensure edges into Bus carry the sum of outgoing currents of that Bus
   for (const e of Object.values(emap)){
     const child = nmap[e.to]
@@ -452,6 +436,22 @@ export function compute(project: Project): ComputeResult {
         : parent?.type==='SubsystemInput'? (parent as any).Vout
         : undefined
       if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
+    }
+  }
+  // Finalize converter output current strictly from directly connected output edges
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'Converter' || node.type === 'Bus'){
+      const conv = node as any as ConverterNode & ComputeNode
+      let I_out_sum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === conv.id){
+          const fromH = (e as any).fromHandle
+          if (fromH !== undefined && fromH !== 'output') continue
+          I_out_sum += (e.I_edge || 0)
+        }
+      }
+      conv.I_out = I_out_sum
     }
   }
   // Apply converter limit warnings using finalized values
