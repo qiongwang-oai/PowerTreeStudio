@@ -123,8 +123,8 @@ export default function App(){
                 <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
                 <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
                 <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
-                <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={onReport}>Report</Button>
-                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white" onClick={onClear}>Clear</Button>
+                <Button size="sm" variant="success" onClick={onReport}>Report</Button>
+                <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
               </div>
             </div>
           </div>
