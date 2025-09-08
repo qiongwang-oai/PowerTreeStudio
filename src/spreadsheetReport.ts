@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 import { Project, AnyNode } from './models'
 import { compute, computeDeepAggregates } from './calc'
 import { download } from './io'
@@ -8,12 +8,11 @@ function sanitizeSheetName(name: string): string {
   return cleaned
 }
 
-function fmt(n: number): string { return Number.isFinite(n) ? n.toFixed(2) : '0.00' }
-function fmtPct(frac: number): string { return Number.isFinite(frac) ? `${(frac*100).toFixed(2)}%` : '0.00%' }
+function pct(frac: number): number { return Number.isFinite(frac) ? frac : 0 }
 
 function buildTableForProject(project: Project): any[][] {
   const rows: any[][] = []
-  const header = ['Name','Paralleled','Critical load (W)','Non-critical load (W)','Copper loss (W)','Converter loss (W)','Efficiency (%)','Details']
+  const header = ['Name','Paralleled','Critical load (W)','Non-critical load (W)','Copper loss (W)','Converter loss (W)','Total subsystem power (W)','Efficiency (%)','Details']
   rows.push(header)
 
   // Subsystems first
@@ -29,11 +28,12 @@ function buildTableForProject(project: Project): any[][] {
       rows.push([
         sub.name || 'Subsystem',
         count,
-        fmt(agg.criticalLoadPower * count),
-        fmt(agg.nonCriticalLoadPower * count),
-        fmt(agg.edgeLoss * count),
-        fmt(agg.converterLoss * count),
-        fmtPct(eff),
+        agg.criticalLoadPower * count,
+        agg.nonCriticalLoadPower * count,
+        agg.edgeLoss * count,
+        agg.converterLoss * count,
+        (agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count,
+        pct(eff),
         ''
       ])
     }
@@ -56,11 +56,12 @@ function buildTableForProject(project: Project): any[][] {
       loadRows.push({ power: pout, row: [
         load.name || 'Load',
         Math.max(1, Math.round((load.numParalleledDevices ?? 1))),
-        fmt(criticalPower),
-        fmt(nonCriticalPower),
-        fmt(copperLoss),
-        fmt(converterLoss),
-        fmtPct(eta),
+        criticalPower,
+        nonCriticalPower,
+        copperLoss,
+        converterLoss,
+        (criticalPower + nonCriticalPower + copperLoss + converterLoss),
+        pct(eta),
         ''
       ] })
     }
@@ -79,13 +80,13 @@ function buildTableForProject(project: Project): any[][] {
     if ((rn as any).type === 'Converter') tlConvLoss += ((rn as any).loss || 0)
   }
   for (const e of Object.values(result.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
-  rows.push(['Copper traces and power converters','—', fmt(0), fmt(0), fmt(tlEdgeLoss), fmt(tlConvLoss), 'NA',''])
+  rows.push(['Copper traces and power converters','—', 0, 0, tlEdgeLoss, tlConvLoss, (tlEdgeLoss + tlConvLoss), 'NA',''])
 
   // Deep total summary
   const totalAgg = computeDeepAggregates(project)
   const totalIn = totalAgg.totalLoadPower + totalAgg.edgeLoss + totalAgg.converterLoss
   const effTotal = totalIn>0 ? (totalAgg.criticalLoadPower/totalIn) : 0
-  rows.push(['Total','—', fmt(totalAgg.criticalLoadPower), fmt(totalAgg.nonCriticalLoadPower), fmt(totalAgg.edgeLoss), fmt(totalAgg.converterLoss), fmtPct(effTotal), ''])
+  rows.push(['Total','—', totalAgg.criticalLoadPower, totalAgg.nonCriticalLoadPower, totalAgg.edgeLoss, totalAgg.converterLoss, (totalAgg.totalLoadPower + totalAgg.edgeLoss + totalAgg.converterLoss), pct(effTotal), ''])
 
   return rows
 }
@@ -105,27 +106,75 @@ function collectSubsystems(project: Project, path: string[] = []): Array<{ title
   return subs
 }
 
-export function exportSpreadsheetReport(project: Project){
-  const wb = XLSX.utils.book_new()
-  // Root sheet for current canvas
-  const rootRows = buildTableForProject(project)
-  const rootWs = XLSX.utils.aoa_to_sheet(rootRows)
-  XLSX.utils.book_append_sheet(wb, rootWs, sanitizeSheetName('Current Canvas'))
+export async function exportSpreadsheetReport(project: Project, imagesBySheet?: Record<string,string>){
+  const wb = new ExcelJS.Workbook()
+  wb.created = new Date()
+  wb.modified = new Date()
 
-  // One sheet per nested subsystem
-  const subs = collectSubsystems(project)
-  const usedNames = new Set<string>()
-  for (const { title, project: p } of subs){
-    const rows = buildTableForProject(p)
-    const ws = XLSX.utils.aoa_to_sheet(rows)
-    let name = sanitizeSheetName(title)
-    let suffix = 1
-    while (usedNames.has(name)) { name = sanitizeSheetName(`${title} ${++suffix}`) }
-    usedNames.add(name)
-    XLSX.utils.book_append_sheet(wb, ws, name)
+  const addSheetWithRows = (title: string, rows: any[][]) => {
+    const ws = wb.addWorksheet(sanitizeSheetName(title))
+    rows.forEach(r => ws.addRow(r))
+    // Bold header
+    const headerRow = ws.getRow(1)
+    headerRow.font = { bold: true }
+    // Auto width (approx)
+    const colCount = rows[0]?.length || 0
+    for (let c=1; c<=colCount; c++){
+      let max = 8
+      for (let r=1; r<=Math.min(rows.length, 200); r++){
+        const v = rows[r-1]?.[c-1]
+        const len = (v?.toString?.() || '').length
+        if (len > max) max = len
+      }
+      ws.getColumn(c).width = Math.min(40, Math.max(10, Math.ceil(max*0.9)))
+    }
+    return ws
   }
 
-  const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const rootRows = buildTableForProject(project)
+  const rootWs = addSheetWithRows('Current Canvas', rootRows)
+  // Apply number formats: cols 2..7 numeric with 2 decimals, col 8 percentage
+  const setFormats = (ws: ExcelJS.Worksheet)=>{
+    const lastRow = ws.rowCount
+    for (let r=2; r<=lastRow; r++){
+      for (let c=2; c<=7; c++){
+        const cell = ws.getRow(r).getCell(c)
+        if (typeof cell.value === 'number') cell.numFmt = '0.00'
+      }
+      const effCell = ws.getRow(r).getCell(8)
+      if (typeof effCell.value === 'number') effCell.numFmt = '0.00%'
+    }
+  }
+  setFormats(rootWs)
+
+  const subs = collectSubsystems(project)
+  const usedNames = new Set<string>()
+  const wsByName = new Map<string, ExcelJS.Worksheet>()
+  wsByName.set(rootWs.name, rootWs)
+  for (const { title, project: p } of subs){
+    let name = sanitizeSheetName(title)
+    let suffix = 1
+    while (usedNames.has(name) || wsByName.has(name)) { name = sanitizeSheetName(`${title} ${++suffix}`) }
+    usedNames.add(name)
+    const rows = buildTableForProject(p)
+    const ws = addSheetWithRows(name, rows)
+    wsByName.set(name, ws)
+    setFormats(ws)
+  }
+
+  if (imagesBySheet){
+    for (const [sheetName, dataUrl] of Object.entries(imagesBySheet)){
+      const ws = wsByName.get(sanitizeSheetName(sheetName))
+      if (!ws) continue
+      try {
+        const base64 = dataUrl.split(',')[1]
+        const imgId = wb.addImage({ base64, extension: 'png' })
+        ws.addImage(imgId, { tl: { col: 9, row: 1 }, ext: { width: 480, height: 320 } })
+      } catch {}
+    }
+  }
+
+  const out = await wb.xlsx.writeBuffer()
   download(`${project.name.replace(/\s+/g,'_')}_report.xlsx`, out, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 }
 
