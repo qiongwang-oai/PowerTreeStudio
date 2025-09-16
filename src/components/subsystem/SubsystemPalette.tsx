@@ -21,20 +21,28 @@ export default function SubsystemPalette({ subsystemId, project }:{ subsystemId:
     if (t==='Source') return // blocked in nested
     addNode(subsystemId, createPreset(t))
   }
+  const buttonBase = 'w-full text-slate-900 border border-slate-300'
+  const styleByType: Record<string, string> = {
+    Converter: '!bg-blue-50 hover:!bg-blue-100',
+    Load: '!bg-orange-50 hover:!bg-orange-100',
+    Bus: '!bg-white hover:!bg-slate-100',
+    Note: '!bg-white hover:!bg-slate-100',
+    Subsystem: '!bg-violet-50 hover:!bg-violet-100',
+    SubsystemInput: '!bg-slate-50 hover:!bg-slate-100',
+  }
   return (
     <div className="p-3 space-y-3">
       <h2 className="text-sm font-semibold text-slate-600">Embedded Palette</h2>
       <div className="grid grid-cols-1 gap-2">
-        <Button className="w-full" onClick={()=>onAdd('Converter')}>Converter</Button>
-        <Button className="w-full" onClick={()=>onAdd('Load')}>Load</Button>
-        <Button className="w-full" onClick={()=>onAdd('Bus')}>Bus/Net</Button>
-        <Button className="w-full" variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} onClick={()=>onAdd('Converter')}>Converter</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Load}`} onClick={()=>onAdd('Load')}>Load</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} onClick={()=>onAdd('Bus')}>Bus/Net</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Note}`} onClick={()=>onAdd('Note')}>Note</Button>
         <div className="h-px bg-slate-200 my-1" aria-hidden="true" />
-        <Button className="w-full" onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
-        <Button className="w-full" onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Subsystem}`} onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.SubsystemInput}`} onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
       </div>
       <div className="text-xs text-slate-500">Sources are not allowed inside embedded subsystems. Add one or more Subsystem Inputs as needed.</div>
     </div>
   )
 }
-

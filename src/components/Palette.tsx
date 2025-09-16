@@ -3,7 +3,6 @@ import { Button } from './ui/button'
 import { useStore } from '../state/store'
 import { genId } from '../utils'
 import { AnyNode } from '../models'
-import { Alert } from './ui/alert'
 function createPreset(type:'Source'|'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'): AnyNode {
   const id = genId('n_')
   if (type==='Source') return { id, type, name:'Source', Vout:48, x: 80, y: 80 } as any
@@ -18,26 +17,35 @@ function createPreset(type:'Source'|'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|
 export default function Palette(){
   const addNode = useStore(s=>s.addNode)
   const onAdd = (t:any)=> addNode(createPreset(t))
+  const buttonBase = 'w-full text-slate-900 border border-slate-300'
+  const styleByType: Record<string, string> = {
+    Source: '!bg-green-50 hover:!bg-green-100',
+    Converter: '!bg-blue-50 hover:!bg-blue-100',
+    Load: '!bg-orange-50 hover:!bg-orange-100',
+    Bus: '!bg-white hover:!bg-slate-100',
+    Note: '!bg-white hover:!bg-slate-100',
+    Subsystem: '!bg-violet-50 hover:!bg-violet-100',
+    SubsystemInput: '!bg-slate-50 hover:!bg-slate-100',
+  }
   return (
     <div className="p-3 space-y-3">
       <h2 className="text-lg font-semibold text-black">Palette</h2>
       <div className="grid grid-cols-1 gap-2">
-        <Button className="w-full" onClick={()=>onAdd('Source')}>Source</Button>
-        <Button className="w-full" onClick={()=>onAdd('Converter')}>Converter</Button>
-        <Button className="w-full" onClick={()=>onAdd('Load')}>Load</Button>
-        <Button className="w-full" onClick={()=>onAdd('Bus')}>Bus/Net</Button>
-        <Button className="w-full" variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Source}`} onClick={()=>onAdd('Source')}>Source</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} onClick={()=>onAdd('Converter')}>Converter</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Load}`} onClick={()=>onAdd('Load')}>Load</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} onClick={()=>onAdd('Bus')}>Bus/Net</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Note}`} onClick={()=>onAdd('Note')}>Note</Button>
         <div className="h-px bg-slate-200 my-1" aria-hidden="true" />
-        <Button className="w-full" onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
-        <Button className="w-full" onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Subsystem}`} onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.SubsystemInput}`} onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
       </div>
-      <Alert>Drag from node handle to connect. DAG enforced.</Alert>
       <div>
         <h3 className="text-lg mt-3 font-semibold">Quick presets</h3>
         <div className="flex flex-wrap gap-2 mt-2">
-          <Button variant="outline" onClick={()=>addNode(createPreset('Source'))}>48V Source</Button>
-          <Button variant="outline" onClick={()=>addNode(createPreset('Converter'))}>12V Buck 95%</Button>
-          <Button variant="outline" onClick={()=>addNode({id:genId('n_'), type:'Converter', name:'VRM 0.9V 92%', Vin_min:10, Vin_max:13, Vout:0.9, efficiency:{type:'fixed', value:0.92}, x: 640, y: 160 } as any)}>VRM 0.9V 92%</Button>
+          <Button variant="outline" className={`${buttonBase} ${styleByType.Source}`} onClick={()=>addNode(createPreset('Source'))}>48V Source</Button>
+          <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} onClick={()=>addNode(createPreset('Converter'))}>12V Buck 95%</Button>
+          <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} onClick={()=>addNode({id:genId('n_'), type:'Converter', name:'VRM 0.9V 92%', Vin_min:10, Vin_max:13, Vout:0.9, efficiency:{type:'fixed', value:0.92}, x: 640, y: 160 } as any)}>VRM 0.9V 92%</Button>
         </div>
       </div>
     </div>
