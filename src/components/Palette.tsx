@@ -21,15 +21,15 @@ export default function Palette(){
   return (
     <div className="p-3 space-y-3">
       <h2 className="text-lg font-semibold text-black">Palette</h2>
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={()=>onAdd('Source')}>Source</Button>
-        <Button onClick={()=>onAdd('Converter')}>Converter</Button>
-        <Button onClick={()=>onAdd('Load')}>Load</Button>
-        <Button onClick={()=>onAdd('Bus')}>Bus/Net</Button>
-        <Button variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
-        <div className="col-span-2 h-px bg-slate-200 my-1" aria-hidden="true" />
-        <Button onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
-        <Button onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
+      <div className="grid grid-cols-1 gap-2">
+        <Button className="w-full" onClick={()=>onAdd('Source')}>Source</Button>
+        <Button className="w-full" onClick={()=>onAdd('Converter')}>Converter</Button>
+        <Button className="w-full" onClick={()=>onAdd('Load')}>Load</Button>
+        <Button className="w-full" onClick={()=>onAdd('Bus')}>Bus/Net</Button>
+        <Button className="w-full" variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
+        <div className="h-px bg-slate-200 my-1" aria-hidden="true" />
+        <Button className="w-full" onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
+        <Button className="w-full" onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
       </div>
       <Alert>Drag from node handle to connect. DAG enforced.</Alert>
       <div>

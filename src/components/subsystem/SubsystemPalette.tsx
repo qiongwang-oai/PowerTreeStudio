@@ -24,18 +24,17 @@ export default function SubsystemPalette({ subsystemId, project }:{ subsystemId:
   return (
     <div className="p-3 space-y-3">
       <h2 className="text-sm font-semibold text-slate-600">Embedded Palette</h2>
-      <div className="grid grid-cols-2 gap-2">
-        <Button onClick={()=>onAdd('Converter')}>Converter</Button>
-        <Button onClick={()=>onAdd('Load')}>Load</Button>
-        <Button onClick={()=>onAdd('Bus')}>Bus/Net</Button>
-        <Button variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
-        <div className="col-span-2 h-px bg-slate-200 my-1" aria-hidden="true" />
-        <Button onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
-        <Button onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
+      <div className="grid grid-cols-1 gap-2">
+        <Button className="w-full" onClick={()=>onAdd('Converter')}>Converter</Button>
+        <Button className="w-full" onClick={()=>onAdd('Load')}>Load</Button>
+        <Button className="w-full" onClick={()=>onAdd('Bus')}>Bus/Net</Button>
+        <Button className="w-full" variant="outline" onClick={()=>onAdd('Note')}>Note</Button>
+        <div className="h-px bg-slate-200 my-1" aria-hidden="true" />
+        <Button className="w-full" onClick={()=>onAdd('Subsystem')}>Subsystem</Button>
+        <Button className="w-full" onClick={()=>onAdd('SubsystemInput')}>Subsystem Input Port</Button>
       </div>
       <div className="text-xs text-slate-500">Sources are not allowed inside embedded subsystems. Add one or more Subsystem Inputs as needed.</div>
     </div>
   )
 }
-
 

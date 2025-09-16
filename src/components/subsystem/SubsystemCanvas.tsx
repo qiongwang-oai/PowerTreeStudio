@@ -10,7 +10,9 @@ import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 
 function CustomNode(props: NodeProps) {
-  const { data } = props
+  const { data, selected } = props
+  const isSelected = !!selected
+  const accentColor = '#0284c7'
   const nodeType = (data as any).type
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
@@ -18,8 +20,17 @@ function CustomNode(props: NodeProps) {
     : nodeType === 'Subsystem' ? 'bg-violet-50'
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
     : 'bg-white'
+  const borderClass = isSelected ? 'border-sky-500 shadow-lg' : 'border-slate-300'
   return (
-    <div className={`rounded-lg border ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
+    <div className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
+      {isSelected && (
+        <div className="pointer-events-none absolute inset-0" style={{ zIndex: 1 }}>
+          <div style={{ position: 'absolute', top: -4, left: -4, width: 16, height: 16, borderTop: `4px solid ${accentColor}`, borderLeft: `4px solid ${accentColor}`, borderTopLeftRadius: 12 }} />
+          <div style={{ position: 'absolute', top: -4, right: -4, width: 16, height: 16, borderTop: `4px solid ${accentColor}`, borderRight: `4px solid ${accentColor}`, borderTopRightRadius: 12 }} />
+          <div style={{ position: 'absolute', bottom: -4, left: -4, width: 16, height: 16, borderBottom: `4px solid ${accentColor}`, borderLeft: `4px solid ${accentColor}`, borderBottomLeftRadius: 12 }} />
+          <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderBottom: `4px solid ${accentColor}`, borderRight: `4px solid ${accentColor}`, borderBottomRightRadius: 12 }} />
+        </div>
+      )}
       {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
@@ -89,7 +100,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     const clamped = Math.min(1, Math.max(0, nextOffset))
     updateEdgeNested(path, edgeId, { midpointOffset: clamped })
   }, [path, updateEdgeNested])
-  const computeResult = compute(project)
+  const computeResult = useMemo(()=> compute(project), [project])
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
     id: n.id,
@@ -158,7 +169,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
-    draggable: true
+    draggable: true,
+    selected: false,
   })), [project.nodes])
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
@@ -213,7 +225,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       data: edgeData,
       selected: false,
     })
-  }), [project.edges, computeResult, handleMidpointChange, screenToFlowPosition])
+  }), [project.edges, project.nodes, computeResult, handleMidpointChange, screenToFlowPosition])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
@@ -290,7 +302,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           },
           position,
           type: 'custom',
-          draggable: true
+          draggable: true,
+          selected: existing?.selected ?? false,
         }
       })
       return mapped
@@ -407,62 +420,81 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     }))
   }, [computeResult, project.nodes, setNodes])
 
-  useEffect(()=>{
-    const mapped: RFEdge[] = project.edges.map(e=>{
-      const I = computeResult.edges[e.id]?.I_edge ?? 0
-      const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
-      const parent = project.nodes.find(n=>n.id===e.from) as any
-      const child = project.nodes.find(n=>n.id===e.to) as any
-      const parentV = parent?.type==='Source'? parent?.Vout
-        : parent?.type==='Converter'? parent?.Vout
-        : parent?.type==='Bus'? parent?.V_bus
-        : parent?.type==='SubsystemInput'? parent?.Vout
-        : undefined
-      const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
-      const childDirectVin = child?.type==='Load'? child?.Vreq
-        : child?.type==='Subsystem'? (()=>{
-            const portId = (e as any).toHandle
-            if (portId){
-              const p = (child as any)?.project?.nodes?.find((x:any)=>x.id===portId)
-              return p?.Vout
-            }
-            const ports = (child as any)?.project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')
-            return ports?.length===1? ports[0]?.Vout : undefined
-          })()
-        : undefined
-      const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
-      const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
-      const mismatch = convRangeViolation || eqViolation
-      const midpointOffset = e.midpointOffset ?? 0.5
-      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
-      const currentLabel = I.toFixed(1)
-      const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
-      const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-      const edgeColor = voltageToEdgeColor(parentV)
-      const defaultColor = mismatch ? '#ef4444' : edgeColor
-      const edgeData = {
-        midpointOffset,
-        onMidpointChange: handleMidpointChange,
-        screenToFlow: screenToFlowPosition,
-        defaultColor,
-      }
-      return ({
-        id: e.id,
-        type: 'orthogonal',
-        source: e.from,
-        target: e.to,
-        sourceHandle: (e as any).fromHandle,
-        targetHandle: (e as any).toHandle,
-        animated: false,
-        label,
-        labelStyle: { fill: defaultColor },
-        style: { strokeWidth, stroke: defaultColor },
-        data: edgeData,
-        selected: selectedEdgeId === e.id,
+  useEffect(() => {
+    setNodes(prev => prev.map(rn => {
+      const shouldSelect = selectedNodeId === rn.id
+      if (rn.selected === shouldSelect) return rn
+      return { ...rn, selected: shouldSelect }
+    }))
+  }, [selectedNodeId, setNodes])
+
+  useEffect(() => {
+    setEdges(prev => {
+      const prevById = new Map(prev.map(p => [p.id, p]))
+      return project.edges.map(e => {
+        const I = computeResult.edges[e.id]?.I_edge ?? 0
+        const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+        const parent = project.nodes.find(n => n.id === e.from) as any
+        const child = project.nodes.find(n => n.id === e.to) as any
+        const parentV = parent?.type === 'Source' ? parent?.Vout
+          : parent?.type === 'Converter' ? parent?.Vout
+          : parent?.type === 'Bus' ? parent?.V_bus
+          : parent?.type === 'SubsystemInput' ? parent?.Vout
+          : undefined
+        const childRange = child?.type === 'Converter' ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+        const childDirectVin = child?.type === 'Load' ? child?.Vreq
+          : child?.type === 'Subsystem' ? (() => {
+              const portId = (e as any).toHandle
+              if (portId) {
+                const p = (child as any)?.project?.nodes?.find((x: any) => x.id === portId)
+                return p?.Vout
+              }
+              const ports = (child as any)?.project?.nodes?.filter((x: any) => x.type === 'SubsystemInput')
+              return ports?.length === 1 ? ports[0]?.Vout : undefined
+            })()
+          : undefined
+        const convRangeViolation = (parentV !== undefined && childRange !== undefined) ? !(parentV >= childRange.min && parentV <= childRange.max) : false
+        const eqViolation = (parentV !== undefined && childDirectVin !== undefined) ? (parentV !== childDirectVin) : false
+        const mismatch = convRangeViolation || eqViolation
+        const midpointOffset = e.midpointOffset ?? 0.5
+        const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+        const currentLabel = I.toFixed(1)
+        const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
+        const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+        const edgeColor = voltageToEdgeColor(parentV)
+        const defaultColor = mismatch ? '#ef4444' : edgeColor
+        const edgeData = {
+          midpointOffset,
+          onMidpointChange: handleMidpointChange,
+          screenToFlow: screenToFlowPosition,
+          defaultColor,
+        }
+        const existing = prevById.get(e.id)
+        return {
+          id: e.id,
+          type: 'orthogonal',
+          source: e.from,
+          target: e.to,
+          sourceHandle: (e as any).fromHandle,
+          targetHandle: (e as any).toHandle,
+          animated: false,
+          label,
+          labelStyle: { fill: defaultColor },
+          style: { strokeWidth, stroke: defaultColor },
+          data: edgeData,
+          selected: existing?.selected ?? false,
+        }
       })
     })
-    setEdges(mapped)
-  }, [project.edges, setEdges, computeResult, handleMidpointChange, screenToFlowPosition, selectedEdgeId])
+  }, [project.edges, project.nodes, setEdges, computeResult, handleMidpointChange, screenToFlowPosition])
+
+  useEffect(() => {
+    setEdges(prev => prev.map(edge => {
+      const shouldSelect = selectedEdgeId === edge.id
+      if (edge.selected === shouldSelect) return edge
+      return { ...edge, selected: shouldSelect }
+    }))
+  }, [selectedEdgeId, setEdges])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
