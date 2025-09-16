@@ -6,6 +6,8 @@ import { compute, etaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { useStore } from '../../state/store'
+import OrthogonalEdge from '../edges/OrthogonalEdge'
+import { voltageToEdgeColor } from '../../utils/color'
 
 function CustomNode(props: NodeProps) {
   const { data } = props
@@ -68,6 +70,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
   const removeNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
@@ -79,6 +82,13 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const path = (subsystemPath || [subsystemId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
+  const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
+  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number)=>{
+    if (!Number.isFinite(nextOffset)) return
+    if (!updateEdgeNested) return
+    const clamped = Math.min(1, Math.max(0, nextOffset))
+    updateEdgeNested(path, edgeId, { midpointOffset: clamped })
+  }, [path, updateEdgeNested])
   const computeResult = compute(project)
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
@@ -176,20 +186,34 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
     const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
     const mismatch = convRangeViolation || eqViolation
-    const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+    const midpointOffset = e.midpointOffset ?? 0.5
+    const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+    const currentLabel = I.toFixed(1)
+    const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
     const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+    const edgeColor = voltageToEdgeColor(parentV)
+    const defaultColor = mismatch ? '#ef4444' : edgeColor
+    const edgeData = {
+      midpointOffset,
+      onMidpointChange: handleMidpointChange,
+      screenToFlow: screenToFlowPosition,
+      defaultColor,
+    }
     return ({
       id: e.id,
+      type: 'orthogonal',
       source: e.from,
       target: e.to,
       sourceHandle: (e as any).fromHandle,
       targetHandle: (e as any).toHandle,
       animated: false,
       label,
-      ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
-      style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
+      labelStyle: { fill: defaultColor },
+      style: { strokeWidth, stroke: defaultColor },
+      data: edgeData,
+      selected: false,
     })
-  }), [project.edges, computeResult])
+  }), [project.edges, computeResult, handleMidpointChange, screenToFlowPosition])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
@@ -409,22 +433,36 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
       const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
       const mismatch = convRangeViolation || eqViolation
-      const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+      const midpointOffset = e.midpointOffset ?? 0.5
+      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+      const currentLabel = I.toFixed(1)
+      const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
       const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+      const edgeColor = voltageToEdgeColor(parentV)
+      const defaultColor = mismatch ? '#ef4444' : edgeColor
+      const edgeData = {
+        midpointOffset,
+        onMidpointChange: handleMidpointChange,
+        screenToFlow: screenToFlowPosition,
+        defaultColor,
+      }
       return ({
         id: e.id,
+        type: 'orthogonal',
         source: e.from,
         target: e.to,
         sourceHandle: (e as any).fromHandle,
         targetHandle: (e as any).toHandle,
         animated: false,
         label,
-        ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
-        style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
+        labelStyle: { fill: defaultColor },
+        style: { strokeWidth, stroke: defaultColor },
+        data: edgeData,
+        selected: selectedEdgeId === e.id,
       })
     })
     setEdges(mapped)
-  }, [project.edges, setEdges, computeResult])
+  }, [project.edges, setEdges, computeResult, handleMidpointChange, screenToFlowPosition, selectedEdgeId])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
@@ -446,9 +484,34 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       return false
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
-    setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}`, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle } as any, eds))
-    if (c.source && c.target) addEdgeStore(path, { id: `${c.source}-${c.target}`, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined })
-  }, [project.edges, path])
+    const edgeId = `${c.source}-${c.target}`
+    const baseOffset = 0.5
+    const parent = project.nodes.find(n=>n.id===c.source) as any
+    const parentV = parent?.type==='Source'? parent?.Vout
+      : parent?.type==='Converter'? parent?.Vout
+      : parent?.type==='Bus'? parent?.V_bus
+      : parent?.type==='SubsystemInput'? parent?.Vout
+      : undefined
+    const defaultColor = voltageToEdgeColor(parentV)
+    const edgeData = {
+      midpointOffset: baseOffset,
+      onMidpointChange: handleMidpointChange,
+      screenToFlow: screenToFlowPosition,
+      defaultColor,
+    }
+    setEdges(eds=>addEdge({
+      ...c,
+      id: edgeId,
+      type: 'orthogonal',
+      sourceHandle: c.sourceHandle,
+      targetHandle: c.targetHandle,
+      data: edgeData,
+      style: { strokeWidth: 2, stroke: defaultColor },
+      labelStyle: { fill: defaultColor },
+      selected: false,
+    } as any, eds))
+    if (c.source && c.target) addEdgeStore(path, { id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset })
+  }, [addEdgeStore, handleMidpointChange, path, project.edges, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     for (const n of deleted){ removeNode(path, n.id) }
@@ -543,8 +606,9 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
-        defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
+        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
         onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id); setSelectedEdgeId(null)}}
         onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
         onNodesChange={handleNodesChange}
@@ -574,5 +638,3 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     </div>
   )
 }
-
-

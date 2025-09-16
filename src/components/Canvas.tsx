@@ -8,6 +8,8 @@ import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { validate } from '../rules'
 import type { Project, Scenario } from '../models'
+import OrthogonalEdge from './edges/OrthogonalEdge'
+import { voltageToEdgeColor } from '../utils/color'
 
 function CustomNode(props: NodeProps) {
   const { data } = props;
@@ -71,6 +73,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const updatePos = useStore(s=>s.updateNodePos)
   const removeNode = useStore(s=>s.removeNode)
   const removeEdge = useStore(s=>s.removeEdge)
+  const updateEdgeStore = useStore(s=>s.updateEdge)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
   const { screenToFlowPosition } = useReactFlow()
@@ -81,6 +84,14 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
+  const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
+
+  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number)=>{
+    if (!updateEdgeStore) return
+    if (!Number.isFinite(nextOffset)) return
+    const clamped = Math.min(1, Math.max(0, nextOffset))
+    updateEdgeStore(edgeId, { midpointOffset: clamped })
+  }, [updateEdgeStore])
 
   // Compute analysis each render to reflect immediate edits
   const computeResult = compute(project)
@@ -207,20 +218,34 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
     const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
     const mismatch = convRangeViolation || eqViolation
-    const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+    const midpointOffset = e.midpointOffset ?? 0.5
+    const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+    const currentLabel = I.toFixed(1)
+    const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
     const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+    const edgeColor = voltageToEdgeColor(parentV)
+    const defaultColor = mismatch ? '#ef4444' : edgeColor
+    const edgeData = {
+      midpointOffset,
+      onMidpointChange: handleMidpointChange,
+      screenToFlow: screenToFlowPosition,
+      defaultColor,
+    }
     return ({
       id: e.id,
+      type: 'orthogonal',
       source: e.from,
       target: e.to,
       sourceHandle: (e as any).fromHandle,
       targetHandle: (e as any).toHandle,
       animated: false,
       label,
-      ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
-      style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
+      labelStyle: { fill: defaultColor },
+      style: { strokeWidth, stroke: defaultColor },
+      data: edgeData,
+      selected: false,
     })
-  }), [project.edges, computeResult])
+  }), [project.edges, computeResult, handleMidpointChange, screenToFlowPosition])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
@@ -450,22 +475,36 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
       const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
       const mismatch = convRangeViolation || eqViolation
-      const baseLabel = `${e.interconnect?.R_milliohm ?? 0} mΩ | ${(I).toFixed(3)} A`
+      const midpointOffset = e.midpointOffset ?? 0.5
+      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+      const currentLabel = I.toFixed(1)
+      const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
       const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+      const edgeColor = voltageToEdgeColor(parentV)
+      const defaultColor = mismatch ? '#ef4444' : edgeColor
+      const edgeData = {
+        midpointOffset,
+        onMidpointChange: handleMidpointChange,
+        screenToFlow: screenToFlowPosition,
+        defaultColor,
+      }
       return ({
         id: e.id,
+        type: 'orthogonal',
         source: e.from,
         target: e.to,
         sourceHandle: (e as any).fromHandle,
         targetHandle: (e as any).toHandle,
         animated: false,
         label,
-        ...(mismatch? { labelStyle: { fill: '#ef4444' } } : {}),
-        style: { strokeWidth, ...(mismatch? { stroke: '#ef4444' } : {}) }
+        labelStyle: { fill: defaultColor },
+        style: { strokeWidth, stroke: defaultColor },
+        data: edgeData,
+        selected: selectedEdgeId === e.id,
       })
     })
     setEdges(mapped)
-  }, [project.edges, setEdges, computeResult])
+  }, [project.edges, setEdges, computeResult, handleMidpointChange, screenToFlowPosition, selectedEdgeId])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
@@ -487,9 +526,34 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       return false
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
-    setEdges(eds=>addEdge({ ...c, id: `${c.source}-${c.target}`, sourceHandle: c.sourceHandle, targetHandle: c.targetHandle } as any, eds))
-    if (c.source && c.target) addEdgeStore({ id: `${c.source}-${c.target}`, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined })
-  }, [project.edges])
+    const edgeId = `${c.source}-${c.target}`
+    const baseOffset = 0.5
+    const parent = project.nodes.find(n=>n.id===c.source) as any
+    const parentV = parent?.type==='Source'? parent?.Vout
+      : parent?.type==='Converter'? parent?.Vout
+      : parent?.type==='Bus'? parent?.V_bus
+      : parent?.type==='SubsystemInput'? parent?.Vout
+      : undefined
+    const defaultColor = voltageToEdgeColor(parentV)
+    const edgeData = {
+      midpointOffset: baseOffset,
+      onMidpointChange: handleMidpointChange,
+      screenToFlow: screenToFlowPosition,
+      defaultColor,
+    }
+    setEdges(eds=>addEdge({
+      ...c,
+      id: edgeId,
+      type: 'orthogonal',
+      sourceHandle: c.sourceHandle,
+      targetHandle: c.targetHandle,
+      data: edgeData,
+      style: { strokeWidth: 2, stroke: defaultColor },
+      labelStyle: { fill: defaultColor },
+      selected: false,
+    } as any, eds))
+    if (c.source && c.target) addEdgeStore({ id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset })
+  }, [addEdgeStore, handleMidpointChange, project.edges, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     for (const n of deleted){ removeNode(n.id) }
@@ -605,8 +669,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
         fitView
-        defaultEdgeOptions={{ style: { strokeWidth: 2 } }}
+        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
         onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id); setSelectedEdgeId(null)}}
         onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
         onNodesChange={handleNodesChange}
