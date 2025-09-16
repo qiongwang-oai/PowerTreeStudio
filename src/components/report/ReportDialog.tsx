@@ -43,8 +43,8 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
 
   const renderSection = (proj: Project, res: ComputeResult, depth: number, path: string[], pathNames: string[] = [], collectedPies: React.ReactNode[] = extraPies): React.ReactNode[] => {
     const nodes = proj.nodes as any[]
-    const rows: React.ReactNode[] = []
-    // Subsystems first
+    const items: { crit: number, total: number, name: string, content: React.ReactNode[] }[] = []
+    // Subsystems and loads: collect then sort by Critical load (W)
     for (const n of nodes){
       if (n.type === 'Subsystem'){
         const sub = n
@@ -55,21 +55,23 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
         const totalIn = agg.totalLoadPower + agg.edgeLoss + agg.converterLoss
         const key = [...path, sub.id].join('>')
         const sheetTitle = sanitizeSheetName([...pathNames, sub.name || 'Subsystem'].join(' / '))
-        rows.push(
-          <tr key={`row-${key}`} className="border-b">
-            <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: depth? depth*12 : undefined}}>{sub.name || 'Subsystem'}</td>
-            <td className="px-2 py-2 text-right">{count}</td>
-            <td className="px-2 py-2 text-right">{formatNumber(agg.criticalLoadPower * count)}</td>
-            <td className="px-2 py-2 text-right">{formatNumber(agg.nonCriticalLoadPower * count)}</td>
-            <td className="px-2 py-2 text-right">{formatNumber(agg.edgeLoss * count)}</td>
-            <td className="px-2 py-2 text-right">{formatNumber(agg.converterLoss * count)}</td>
-            <td className="px-2 py-2 text-right">{formatNumber((agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count)}</td>
-            <td className="px-2 py-2 text-right">{formatPct(totalIn>0 ? (agg.criticalLoadPower/totalIn) : 0)}</td>
-            <td className="px-2 py-2 text-left whitespace-nowrap">
-              <Button size="sm" variant="outline" onClick={()=>toggle(key)}>{expanded.has(key)? 'Collapse':'Expand'}</Button>
-            </td>
-          </tr>
-        )
+        const content: React.ReactNode[] = [
+          (
+            <tr key={`row-${key}`} className="border-b">
+              <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: depth? depth*12 : undefined}}>{sub.name || 'Subsystem'}</td>
+              <td className="px-2 py-2 text-right">{count}</td>
+              <td className="px-2 py-2 text-right">{formatNumber(agg.criticalLoadPower * count)}</td>
+              <td className="px-2 py-2 text-right">{formatNumber(agg.nonCriticalLoadPower * count)}</td>
+              <td className="px-2 py-2 text-right">{formatNumber(agg.edgeLoss * count)}</td>
+              <td className="px-2 py-2 text-right">{formatNumber(agg.converterLoss * count)}</td>
+              <td className="px-2 py-2 text-right">{formatNumber((agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count)}</td>
+              <td className="px-2 py-2 text-right">{formatPct(totalIn>0 ? (agg.criticalLoadPower/totalIn) : 0)}</td>
+              <td className="px-2 py-2 text-left whitespace-nowrap">
+                <Button size="sm" variant="outline" onClick={()=>toggle(key)}>{expanded.has(key)? 'Collapse':'Expand'}</Button>
+              </td>
+            </tr>
+          )
+        ]
         if (expanded.has(key)){
           // Compute nesting visuals first so bgColor is available for rows defined below
           const nestingLevel = depth+1
@@ -119,7 +121,7 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
               <td className="px-2 py-2 text-left whitespace-nowrap">—</td>
             </tr>
           )
-          rows.push(
+          content.push(
             <tr key={`expanded-${key}`}>
               <td className="px-0 py-0" colSpan={9}>
                 <div className="relative" style={{paddingLeft: indentPx, paddingTop: 10, paddingBottom: 14, backgroundColor: bgColor, border: '1px solid #cbd5e1', borderRadius: 8, marginTop: 8, marginBottom: 8}}>
@@ -157,7 +159,7 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
             </div>
           )
           // Insert a header row to resume the outer table after the expanded block
-          rows.push(
+          content.push(
             <tr key={`resume-header-${key}`} className="border-b text-slate-700" style={depth===0? undefined : { backgroundColor: levelBg(depth) }}>
               <td className="text-left px-2 py-2 font-bold">Name</td>
               <td className="text-right px-2 py-2 font-bold">Paralleled</td>
@@ -171,10 +173,12 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
             </tr>
           )
         }
+        const criticalTotal = agg.criticalLoadPower * count
+        const totalPower = (agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count
+        items.push({ crit: criticalTotal, total: totalPower, name: (sub.name || 'Subsystem'), content })
       }
     }
-    // Loads next: descending power using this project's compute result
-    const loadRows: { power: number, row: React.ReactNode }[] = []
+    // Loads
     for (const n of Object.values(res.nodes)){
       if ((n as any).type === 'Load'){
         const load = n as any
@@ -186,27 +190,31 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
         const converterLoss = 0
         const denom = criticalPower + nonCriticalPower + copperLoss + converterLoss
         const eta = denom>0 ? (criticalPower/denom) : 0
-        loadRows.push({
-          power: pout,
-          row: (
-            <tr key={`row-load-${[...path, load.id].join('>')}`} className="border-b">
-              <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: depth? depth*12 : undefined}}>{load.name || 'Load'}</td>
-              <td className="px-2 py-2 text-right">{Math.max(1, Math.round((load.numParalleledDevices ?? 1)))}</td>
-              <td className="px-2 py-2 text-right">{formatNumber(criticalPower)}</td>
-              <td className="px-2 py-2 text-right">{formatNumber(nonCriticalPower)}</td>
-              <td className="px-2 py-2 text-right">{formatNumber(copperLoss)}</td>
-              <td className="px-2 py-2 text-right">{formatNumber(converterLoss)}</td>
-              <td className="px-2 py-2 text-right">{formatNumber(denom)}</td>
-              <td className="px-2 py-2 text-right">{formatPct(eta)}</td>
-              <td className="px-2 py-2 text-left whitespace-nowrap">—</td>
-            </tr>
-          )
+        items.push({
+          crit: criticalPower,
+          total: denom,
+          name: (load.name || 'Load'),
+          content: [
+            (
+              <tr key={`row-load-${[...path, load.id].join('>')}`} className="border-b">
+                <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: depth? depth*12 : undefined}}>{load.name || 'Load'}</td>
+                <td className="px-2 py-2 text-right">{Math.max(1, Math.round((load.numParalleledDevices ?? 1)))}</td>
+                <td className="px-2 py-2 text-right">{formatNumber(criticalPower)}</td>
+                <td className="px-2 py-2 text-right">{formatNumber(nonCriticalPower)}</td>
+                <td className="px-2 py-2 text-right">{formatNumber(copperLoss)}</td>
+                <td className="px-2 py-2 text-right">{formatNumber(converterLoss)}</td>
+                <td className="px-2 py-2 text-right">{formatNumber(denom)}</td>
+                <td className="px-2 py-2 text-right">{formatPct(eta)}</td>
+                <td className="px-2 py-2 text-left whitespace-nowrap">—</td>
+              </tr>
+            )
+          ]
         })
       }
     }
-    loadRows.sort((a,b)=> b.power - a.power)
-    rows.push(...loadRows.map(x=>x.row))
-
+    items.sort((a,b)=> (b.crit - a.crit) || (b.total - a.total) || b.name.localeCompare(a.name))
+    const rows: React.ReactNode[] = []
+    for (const it of items) rows.push(...it.content)
     return rows
   }
 
@@ -327,5 +335,3 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
     </div>
   )
 }
-
-

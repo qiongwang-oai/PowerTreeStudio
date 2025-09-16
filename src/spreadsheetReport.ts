@@ -15,7 +15,10 @@ function buildTableForProject(project: Project): any[][] {
   const header = ['Name','Paralleled','Critical load (W)','Non-critical load (W)','Copper loss (W)','Converter loss (W)','Total subsystem power (W)','Efficiency (%)','Details']
   rows.push(header)
 
-  // Subsystems first
+  // Collect data rows (subsystems + loads), sort by Critical load (W)
+  const dataRows: { crit:number, total:number, name:string, row:any[] }[] = []
+
+  // Subsystems
   for (const n of project.nodes as AnyNode[]){
     if ((n as any).type === 'Subsystem'){
       const sub = n as any
@@ -25,23 +28,28 @@ function buildTableForProject(project: Project): any[][] {
       const agg = computeDeepAggregates(innerProject)
       const totalIn = agg.totalLoadPower + agg.edgeLoss + agg.converterLoss
       const eff = totalIn>0 ? (agg.criticalLoadPower/totalIn) : 0
-      rows.push([
-        sub.name || 'Subsystem',
-        count,
-        agg.criticalLoadPower * count,
-        agg.nonCriticalLoadPower * count,
-        agg.edgeLoss * count,
-        agg.converterLoss * count,
-        (agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count,
-        pct(eff),
-        ''
-      ])
+      const crit = agg.criticalLoadPower * count
+      dataRows.push({
+        crit,
+        total: (agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count,
+        name: (sub.name || 'Subsystem'),
+        row: [
+          sub.name || 'Subsystem',
+          count,
+          crit,
+          agg.nonCriticalLoadPower * count,
+          agg.edgeLoss * count,
+          agg.converterLoss * count,
+          (agg.criticalLoadPower + agg.nonCriticalLoadPower + agg.edgeLoss + agg.converterLoss) * count,
+          pct(eff),
+          ''
+        ]
+      })
     }
   }
 
-  // Loads by descending power
+  // Loads
   const result = compute(project)
-  const loadRows: { power:number, row:any[] }[] = []
   for (const n of Object.values(result.nodes)){
     if ((n as any).type === 'Load'){
       const load = n as any
@@ -53,21 +61,27 @@ function buildTableForProject(project: Project): any[][] {
       const converterLoss = 0
       const denom = criticalPower + nonCriticalPower + copperLoss + converterLoss
       const eta = denom>0 ? (criticalPower/denom) : 0
-      loadRows.push({ power: pout, row: [
-        load.name || 'Load',
-        Math.max(1, Math.round((load.numParalleledDevices ?? 1))),
-        criticalPower,
-        nonCriticalPower,
-        copperLoss,
-        converterLoss,
-        (criticalPower + nonCriticalPower + copperLoss + converterLoss),
-        pct(eta),
-        ''
-      ] })
+      dataRows.push({
+        crit: criticalPower,
+        total: denom,
+        name: (load.name || 'Load'),
+        row: [
+          load.name || 'Load',
+          Math.max(1, Math.round((load.numParalleledDevices ?? 1))),
+          criticalPower,
+          nonCriticalPower,
+          copperLoss,
+          converterLoss,
+          (criticalPower + nonCriticalPower + copperLoss + converterLoss),
+          pct(eta),
+          ''
+        ]
+      })
     }
   }
-  loadRows.sort((a,b)=> b.power - a.power)
-  for (const r of loadRows) rows.push(r.row)
+
+  dataRows.sort((a,b)=> (b.crit - a.crit) || (b.total - a.total) || b.name.localeCompare(a.name))
+  for (const r of dataRows) rows.push(r.row)
 
   // Copper traces and power converters row (current canvas only sums)
   let tlCritical = 0, tlNonCritical = 0, tlConvLoss = 0, tlEdgeLoss = 0
@@ -177,5 +191,3 @@ export async function exportSpreadsheetReport(project: Project, imagesBySheet?: 
   const out = await wb.xlsx.writeBuffer()
   download(`${project.name.replace(/\s+/g,'_')}_report.xlsx`, out, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 }
-
-
