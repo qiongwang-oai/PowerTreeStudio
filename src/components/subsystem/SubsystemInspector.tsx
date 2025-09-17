@@ -1,32 +1,14 @@
 import React, { useMemo } from 'react'
 import { useStore } from '../../state/store'
-import { AnyNode, ConverterNode, Edge, Project } from '../../models'
+import { ConverterNode, Edge, Project } from '../../models'
 import { Card, CardContent, CardHeader } from '../ui/card'
 import { Tabs, TabsContent, TabsList } from '../ui/tabs'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceDot } from 'recharts'
 import { Button } from '../ui/button'
 import { compute, etaFromModel } from '../../calc'
-import { fmt, genId } from '../../utils'
-import { importProjectFile } from '../../io'
-
-function sanitizeImportedProject(pj: Project): Project {
-  let p: Project = JSON.parse(JSON.stringify(pj))
-  // Remove sources; replace with a note
-  const sources = p.nodes.filter(n=> (n as any).type==='Source')
-  if (sources.length>0){
-    const note: AnyNode = { id: genId('n_'), type:'Note' as any, name:'Import Notice', text:`${sources.length} Source node(s) removed during import. Use Subsystem Input as upstream.` } as any
-    p.nodes = [note, ...p.nodes.filter(n=> (n as any).type!=='Source')]
-    const removedIds = new Set(sources.map(s=>s.id))
-    p.edges = p.edges.filter(e=>!removedIds.has(e.from) && !removedIds.has(e.to))
-  }
-  // Ensure at least one SubsystemInput exists; allow multiple
-  const inputs = p.nodes.filter(n=> (n as any).type==='SubsystemInput')
-  if (inputs.length===0){
-    const inputNode: AnyNode = { id: genId('n_'), type:'SubsystemInput' as any, name:'Subsystem Input', Vout: 12, x:80, y:80 } as any
-    p.nodes = [inputNode, ...p.nodes]
-  }
-  return p
-}
+import { fmt } from '../../utils'
+import { download, importProjectFile, serializeProject } from '../../io'
+import { sanitizeEmbeddedProject } from '../../utils/embeddedProject'
 
 export default function SubsystemInspector({ subsystemId, subsystemPath, project, selected, onDeleted }:{ subsystemId:string, subsystemPath?: string[], project: Project, selected:string|null, onDeleted?:()=>void }){
   const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
@@ -241,9 +223,9 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
                 {node.type==='Subsystem' && <>
                   <Field label="Number of Paralleled Systems" value={(node as any).numParalleledSystems ?? 1} onChange={v=>onChange('numParalleledSystems', Math.max(1, Math.round(v)))} />
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <span>Embedded Project: <b>{(node as any).projectFileName || 'None'}</b></span>
-                    <>
+                    <div className="flex flex-col gap-2">
                       <input
                         ref={fileRef}
                         type="file"
@@ -253,13 +235,29 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                           const file = e.target.files?.[0]
                           if (!file) return
                           const pj = await importProjectFile(file)
-                          const sanitized = sanitizeImportedProject(pj)
+                          const sanitized = sanitizeEmbeddedProject(pj)
                           nestedUpdateNode((subsystemPath||[subsystemId]), node.id, { project: sanitized, projectFileName: file.name } as any)
                           e.currentTarget.value = ''
                         }}
                       />
-                      <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Choose File</Button>
-                    </>
+                      <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Import</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!(node as any).project}
+                        onClick={()=>{
+                          const embeddedProject = (node as any).project as Project | undefined
+                          if (!embeddedProject) return
+                          const fileName = (node as any).projectFileName || (node.name || 'Subsystem')
+                          const trimmed = String(fileName).trim()
+                          const base = trimmed ? trimmed.replace(/\s+/g, '_').replace(/\.[^./\\]+$/, '') : 'Subsystem'
+                          const downloadName = `${base || 'Subsystem'}.yaml`
+                          download(downloadName, serializeProject(embeddedProject))
+                        }}
+                      >
+                        Export
+                      </Button>
+                    </div>
                   </div>
                   <div className="border-t mt-4 pt-2">
                     <div className="text-base text-slate-600 font-medium mb-1">Computed (embedded)</div>
@@ -512,5 +510,3 @@ function Field({label, value, onChange}:{label:string, value:any, onChange:(v:nu
 function ReadOnlyRow({label, value}:{label:string, value:any}){
   return (<div className="flex items-center justify-between gap-2"><span>{label}</span><span>{value}</span></div>)
 }
-
-

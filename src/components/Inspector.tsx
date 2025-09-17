@@ -1,13 +1,14 @@
 import React, { useMemo } from 'react'
 import { useStore } from '../state/store'
-import { ConverterNode } from '../models'
+import { ConverterNode, Project } from '../models'
 import { Card, CardContent, CardHeader } from './ui/card'
 import { Tabs, TabsContent, TabsList } from './ui/tabs'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceDot } from 'recharts'
 import { Button } from './ui/button'
 import { compute, etaFromModel } from '../calc'
 import { fmt } from '../utils'
-import { importProjectFile } from '../io'
+import { download, importProjectFile, serializeProject } from '../io'
+import { sanitizeEmbeddedProject } from '../utils/embeddedProject'
 
 export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, onSelect}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(id:string)=>void}){
   const project = useStore(s=>s.project)
@@ -215,9 +216,9 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                 {node.type==='Note' && <label className="flex items-center justify-between gap-2"><span>Text</span><textarea className="input" value={(node as any).text || ''} onChange={e=>onChange('text', e.target.value)} /></label>}
                 {node.type==='Subsystem' && <>
                   <Field label="Number of Paralleled Systems" value={(node as any).numParalleledSystems ?? 1} onChange={v=>onChange('numParalleledSystems', Math.max(1, Math.round(v)))} />
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-start justify-between gap-3">
                     <span>Embedded Project: <b>{(node as any).projectFileName || 'None'}</b></span>
-                    <>
+                    <div className="flex flex-col gap-2">
                       <input
                         ref={fileRef}
                         type="file"
@@ -227,14 +228,30 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                           const file = e.target.files?.[0]
                           if (!file) return
                           const pj = await importProjectFile(file)
-                          const cloned = JSON.parse(JSON.stringify(pj))
-                          onChange('project', cloned)
+                          const sanitized = sanitizeEmbeddedProject(pj)
+                          onChange('project', sanitized as Project)
                           onChange('projectFileName', file.name)
                           e.currentTarget.value = ''
                         }}
                       />
-                      <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Choose File</Button>
-                    </>
+                      <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Import</Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!(node as any).project}
+                        onClick={()=>{
+                          const embeddedProject = (node as any).project as Project | undefined
+                          if (!embeddedProject) return
+                          const fileName = (node as any).projectFileName || (node.name || 'Subsystem')
+                          const trimmed = String(fileName).trim()
+                          const base = trimmed ? trimmed.replace(/\s+/g, '_').replace(/\.[^./\\]+$/, '') : 'Subsystem'
+                          const downloadName = `${base || 'Subsystem'}.yaml`
+                          download(downloadName, serializeProject(embeddedProject))
+                        }}
+                      >
+                        Export
+                      </Button>
+                    </div>
                   </div>
                   <div className="border-t mt-4 pt-2">
                     <div className="text-base text-slate-600 font-medium mb-1">Computed (embedded)</div>
