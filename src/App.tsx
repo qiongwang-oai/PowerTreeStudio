@@ -101,30 +101,40 @@ export default function App(){
   }, [undo, redo, openSubsystemIds])
   return (
     <ErrorBoundary>
-      <div className="h-screen grid" style={{gridTemplateRows:'100px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
+      <div className="h-screen grid" style={{gridTemplateRows:'76px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
         <div className="col-span-3 px-3 py-1 border-b bg-white">
-          <div className="flex items-start h-full" style={{height: '98px'}}>
-            <div className="ml-8 flex flex-col justify-center">
-              <div className="font-semibold text-3xl">PowerTree Studio</div>
-              <div className="mt-2 flex items-center gap-2">
-                <input
-                  ref={fileInputRef}
-                  aria-hidden="true"
-                  type="file"
-                  accept=".json,.yaml,.yml,application/json,text/yaml"
-                  className="hidden"
-                  onChange={e=>{
-                    const file = e.target.files?.[0]
-                    if (file) onImport(file)
-                    e.currentTarget.value = ''
-                  }}
-                />
-                <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Open</Button>
-                <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
-                <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
-                <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
-                <Button size="sm" variant="success" onClick={onReport}>Report</Button>
-                <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
+          <div className="flex items-center h-full" style={{height: '76px'}}>
+            <div className="ml-8 flex flex-1 items-end justify-between gap-4">
+              <div className="flex flex-row items-end gap-6">
+                <div className="flex flex-col justify-center">
+                  <div className="text-[28px] font-semibold tracking-tight text-slate-900">
+                    <span className="bg-gradient-to-r from-emerald-500 via-sky-500 to-violet-500 bg-clip-text text-transparent drop-shadow-sm">PowerTree Studio</span>
+                  </div>
+                  <div className="mt-0.5 h-px w-16 bg-gradient-to-r from-emerald-400 via-sky-400 to-transparent" />
+                </div>
+                <div className="flex flex-wrap items-center gap-2" style={{marginBottom: '3px'}}>
+                  <input
+                    ref={fileInputRef}
+                    aria-hidden="true"
+                    type="file"
+                    accept=".json,.yaml,.yml,application/json,text/yaml"
+                    className="hidden"
+                    onChange={e=>{
+                      const file = e.target.files?.[0]
+                      if (file) onImport(file)
+                      e.currentTarget.value = ''
+                    }}
+                  />
+                  <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Open</Button>
+                  <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
+                  <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
+                  <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
+                  <Button size="sm" variant="success" onClick={onReport}>Report</Button>
+                  <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 justify-end">
+                <div className="flex-1" />
               </div>
             </div>
           </div>
