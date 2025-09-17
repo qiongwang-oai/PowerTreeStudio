@@ -7,7 +7,7 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import { Button } from '../ui/button'
 import { compute, etaFromModel } from '../../calc'
 import { fmt, genId } from '../../utils'
-import { importJson } from '../../io'
+import { importProjectFile } from '../../io'
 
 function sanitizeImportedProject(pj: Project): Project {
   let p: Project = JSON.parse(JSON.stringify(pj))
@@ -247,12 +247,12 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                       <input
                         ref={fileRef}
                         type="file"
-                        accept="application/json"
+                        accept=".json,.yaml,.yml,application/json,text/yaml"
                         className="hidden"
                         onChange={async e=>{
                           const file = e.target.files?.[0]
                           if (!file) return
-                          const pj = await importJson(file)
+                          const pj = await importProjectFile(file)
                           const sanitized = sanitizeImportedProject(pj)
                           nestedUpdateNode((subsystemPath||[subsystemId]), node.id, { project: sanitized, projectFileName: file.name } as any)
                           e.currentTarget.value = ''

@@ -8,7 +8,7 @@ import SubsystemEditor from './components/subsystem/SubsystemEditor'
 import { ReactFlowProvider } from 'reactflow'
 import { compute } from './calc'
 import { validate } from './rules'
-import { download, importJson } from './io'
+import { download, importProjectFile, serializeProject } from './io'
 import { exportReport } from './report'
 import ReportDialog from './components/report/ReportDialog'
 
@@ -70,8 +70,8 @@ export default function App(){
   const result = compute(project)
   const warns = [...validate(project), ...result.globalWarnings]
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const onExport = ()=> download(project.name.replace(/\s+/g,'_') + '.json', JSON.stringify(project, null, 2))
-  const onImport = async (f:File)=>{ const data = await importJson(f); setProject(data); setImportedFileName(f.name) }
+  const onExport = ()=> download(project.name.replace(/\s+/g,'_'), serializeProject(project))
+  const onImport = async (f:File)=>{ const data = await importProjectFile(f); setProject(data); setImportedFileName(f.name) }
   const onReport = ()=> setReportOpen(true)
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
@@ -111,7 +111,7 @@ export default function App(){
                   ref={fileInputRef}
                   aria-hidden="true"
                   type="file"
-                  accept="application/json"
+                  accept=".json,.yaml,.yml,application/json,text/yaml"
                   className="hidden"
                   onChange={e=>{
                     const file = e.target.files?.[0]

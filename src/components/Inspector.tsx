@@ -7,7 +7,7 @@ import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tool
 import { Button } from './ui/button'
 import { compute, etaFromModel } from '../calc'
 import { fmt } from '../utils'
-import { importJson } from '../io'
+import { importProjectFile } from '../io'
 
 export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, onSelect}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(id:string)=>void}){
   const project = useStore(s=>s.project)
@@ -221,12 +221,12 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                       <input
                         ref={fileRef}
                         type="file"
-                        accept="application/json"
+                        accept=".json,.yaml,.yml,application/json,text/yaml"
                         className="hidden"
                         onChange={async e=>{
                           const file = e.target.files?.[0]
                           if (!file) return
-                          const pj = await importJson(file)
+                          const pj = await importProjectFile(file)
                           const cloned = JSON.parse(JSON.stringify(pj))
                           onChange('project', cloned)
                           onChange('projectFileName', file.name)
