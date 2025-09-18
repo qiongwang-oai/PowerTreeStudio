@@ -10,6 +10,7 @@ import { validate } from '../rules'
 import type { Project, Scenario } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
+import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props;
@@ -257,19 +258,14 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const { screenToFlowPosition } = useReactFlow()
   const [openSubsystemIds, setOpenSubsystemIds] = useStore(s => [s.openSubsystemIds, s.setOpenSubsystemIds]);
 
+  const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
+
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
-
-  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number)=>{
-    if (!updateEdgeStore) return
-    if (!Number.isFinite(nextOffset)) return
-    const clamped = Math.min(1, Math.max(0, nextOffset))
-    updateEdgeStore(edgeId, { midpointOffset: clamped })
-  }, [updateEdgeStore])
 
   const computeResult = useMemo(()=> compute(project), [project])
 
@@ -375,6 +371,87 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     })
   }), [project.nodes])
 
+  const [nodes, setNodes, ] = useNodesState(rfNodesInit)
+
+  const nodePositions = useMemo(() => {
+    const map = new Map<string, { x: number; y: number }>()
+    for (const node of nodes) {
+      map.set(node.id, { x: node.position.x, y: node.position.y })
+    }
+    return map
+  }, [nodes])
+
+  const getGroupOffset = useCallback((edge: { from: string; to?: string; fromHandle?: string | null }) => {
+    const info = groupMidpointInfo.get(edgeGroupKey(edge))
+    if (!info) return 0.5
+    const { midpointX, offset } = info
+    if (midpointX === undefined) return offset
+    const sourcePos = nodePositions.get(edge.from)
+    const targetPos = edge.to ? nodePositions.get(edge.to) : undefined
+    const startX = sourcePos?.x
+    const endX = targetPos?.x
+    if (typeof startX === 'number' && typeof endX === 'number' && Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
+      const ratio = (midpointX - startX) / (endX - startX)
+      if (Number.isFinite(ratio)) {
+        return Math.min(1, Math.max(0, ratio))
+      }
+    }
+    return offset
+  }, [groupMidpointInfo, nodePositions])
+
+  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => {
+    if (!updateEdgeStore) return
+    if (!Number.isFinite(nextOffset)) return
+    const clamped = Math.min(1, Math.max(0, nextOffset))
+    const sourceEdge = project.edges.find(e => e.id === edgeId)
+    if (!sourceEdge) return
+    const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
+    const sourcePos = nodePositions.get(sourceEdge.from)
+    const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+    let midpointX: number | undefined
+    if (typeof absoluteAxisCoord === 'number' && Number.isFinite(absoluteAxisCoord)) {
+      midpointX = absoluteAxisCoord
+    } else if (sourcePos && targetPos) {
+      const startX = sourcePos.x
+      const endX = targetPos.x
+      if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
+        midpointX = startX + (endX - startX) * clamped
+      }
+    }
+    for (const edge of project.edges) {
+      if (edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }) !== key) continue
+      if (midpointX !== undefined) {
+        updateEdgeStore(edge.id, { midpointOffset: clamped, midpointX })
+      } else {
+        updateEdgeStore(edge.id, { midpointOffset: clamped })
+      }
+    }
+  }, [nodePositions, project.edges, updateEdgeStore])
+
+  useEffect(() => {
+    if (!updateEdgeStore) return
+    const processed = new Set<string>()
+    for (const edge of project.edges) {
+      const key = edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle })
+      if (processed.has(key)) continue
+      processed.add(key)
+      const info = groupMidpointInfo.get(key)
+      if (!info || info.midpointX !== undefined) continue
+      const sourcePos = nodePositions.get(edge.from)
+      const targetPos = nodePositions.get(edge.to)
+      if (!sourcePos || !targetPos) continue
+      const startX = sourcePos.x
+      const endX = targetPos.x
+      if (!Number.isFinite(startX) || !Number.isFinite(endX) || Math.abs(endX - startX) <= 1e-3) continue
+      const midpointX = startX + (endX - startX) * info.offset
+      if (!Number.isFinite(midpointX)) continue
+      for (const groupEdge of project.edges) {
+        if (edgeGroupKey({ from: groupEdge.from, fromHandle: groupEdge.fromHandle }) !== key) continue
+        updateEdgeStore(groupEdge.id, { midpointX })
+      }
+    }
+  }, [groupMidpointInfo, nodePositions, project.edges, updateEdgeStore])
+
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
     const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
@@ -400,7 +477,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
     const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
     const mismatch = convRangeViolation || eqViolation
-    const midpointOffset = e.midpointOffset ?? 0.5
+    const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
+    const info = groupMidpointInfo.get(key)
+    const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
     const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
     const currentLabel = I.toFixed(1)
     const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
@@ -409,6 +488,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const defaultColor = mismatch ? '#ef4444' : edgeColor
     const edgeData = {
       midpointOffset,
+      midpointX: info?.midpointX,
       onMidpointChange: handleMidpointChange,
       screenToFlow: screenToFlowPosition,
       defaultColor,
@@ -427,9 +507,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       data: edgeData,
       selected: false,
     })
-  }), [project.edges, project.nodes, computeResult, handleMidpointChange, screenToFlowPosition])
+  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
 
-  const [nodes, setNodes, ] = useNodesState(rfNodesInit)
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
 
   // Sync when project nodes change (add/remove); preserve positions of existing nodes
@@ -671,7 +750,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         const convRangeViolation = (parentV !== undefined && childRange !== undefined) ? !(parentV >= childRange.min && parentV <= childRange.max) : false
         const eqViolation = (parentV !== undefined && childDirectVin !== undefined) ? (parentV !== childDirectVin) : false
         const mismatch = convRangeViolation || eqViolation
-        const midpointOffset = e.midpointOffset ?? 0.5
+        const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
+        const info = groupMidpointInfo.get(key)
+        const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
         const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
         const currentLabel = I.toFixed(1)
         const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
@@ -680,6 +761,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         const defaultColor = mismatch ? '#ef4444' : edgeColor
         const edgeData = {
           midpointOffset,
+          midpointX: info?.midpointX,
           onMidpointChange: handleMidpointChange,
           screenToFlow: screenToFlowPosition,
           defaultColor,
@@ -701,7 +783,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         }
       })
     })
-  }, [project.edges, project.nodes, setEdges, computeResult, handleMidpointChange, screenToFlowPosition])
+  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
 
   useEffect(() => {
     setEdges(prev => prev.map(edge => {
@@ -732,7 +814,13 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     }
     if (c.source && c.target && reaches(c.target, c.source)) return
     const edgeId = `${c.source}-${c.target}`
-    const baseOffset = 0.5
+    const baseOffset = (c.source && c.target)
+      ? getGroupOffset({ from: c.source, to: c.target, fromHandle: c.sourceHandle ?? undefined })
+      : 0.5
+    const groupInfo = (c.source)
+      ? groupMidpointInfo.get(edgeGroupKey({ from: c.source, fromHandle: c.sourceHandle ?? undefined }))
+      : undefined
+    const baseMidpointX = groupInfo?.midpointX
     const parent = project.nodes.find(n=>n.id===c.source) as any
     const parentV = parent?.type==='Source'? parent?.Vout
       : parent?.type==='Converter'? parent?.Vout
@@ -742,6 +830,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const defaultColor = voltageToEdgeColor(parentV)
     const edgeData = {
       midpointOffset: baseOffset,
+      ...(baseMidpointX !== undefined ? { midpointX: baseMidpointX } : {}),
       onMidpointChange: handleMidpointChange,
       screenToFlow: screenToFlowPosition,
       defaultColor,
@@ -757,16 +846,22 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
-    if (c.source && c.target) addEdgeStore({ id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset })
-  }, [addEdgeStore, handleMidpointChange, project.edges, screenToFlowPosition])
+    if (c.source && c.target) {
+      const payload: any = { id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset }
+      if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
+      addEdgeStore(payload)
+    }
+  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, project.edges, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
+    if (openSubsystemIds && openSubsystemIds.length > 0) return
     for (const n of deleted){ removeNode(n.id) }
-  }, [removeNode])
+  }, [openSubsystemIds, removeNode])
 
   const onEdgesDelete: OnEdgesDelete = useCallback((deleted)=>{
+    if (openSubsystemIds && openSubsystemIds.length > 0) return
     for (const e of deleted){ removeEdge(e.id) }
-  }, [removeEdge])
+  }, [openSubsystemIds, removeEdge])
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
     e.preventDefault()

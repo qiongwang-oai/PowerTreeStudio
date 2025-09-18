@@ -1,10 +1,11 @@
-import { useCallback, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { EdgeProps } from 'reactflow'
 import { BaseEdge, EdgeLabelRenderer, Position } from 'reactflow'
 
 type OrthogonalEdgeData = {
   midpointOffset?: number
-  onMidpointChange?: (edgeId: string, nextOffset: number) => void
+  midpointX?: number
+  onMidpointChange?: (edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => void
   screenToFlow?: (pos: { x: number; y: number }) => { x: number; y: number }
   defaultColor?: string
 }
@@ -34,6 +35,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
 
   const offsetRaw = data?.midpointOffset ?? 0.5
   const offset = clamp(offsetRaw, 0, 1)
+  const midpointXOverride = (typeof data?.midpointX === 'number' && Number.isFinite(data.midpointX)) ? data.midpointX : undefined
 
   const sourceAxis = (sourcePosition === Position.Left || sourcePosition === Position.Right) ? 'x' : 'y'
   const targetAxis = (targetPosition === Position.Left || targetPosition === Position.Right) ? 'x' : 'y'
@@ -42,9 +44,10 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
     const deltaPrimary = sourceAxis === 'y' ? targetY - sourceY : targetX - sourceX
     const safeDeltaPrimary = Math.abs(deltaPrimary) < 1e-6 ? (sourceAxis === 'y' ? (targetY >= sourceY ? 1 : -1) : (targetX >= sourceX ? 1 : -1)) * 80 : deltaPrimary
 
+    const desiredMidX = midpointXOverride
     const firstPoint = sourceAxis === 'y'
       ? { x: sourceX, y: sourceY + safeDeltaPrimary * offset }
-      : { x: sourceX + safeDeltaPrimary * offset, y: sourceY }
+      : { x: (desiredMidX !== undefined ? desiredMidX : (sourceX + safeDeltaPrimary * offset)), y: sourceY }
 
     const secondPoint = targetAxis === 'y'
       ? { x: targetX, y: firstPoint.y }
@@ -78,6 +81,16 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
 
   const pointerIdRef = useRef<number | null>(null)
 
+  useEffect(() => {
+    if (!data?.onMidpointChange) return
+    if (midpointXOverride !== undefined) return
+    if (sourceAxis !== 'x') return
+    if (!Number.isFinite(axisStart) || !Number.isFinite(axisEnd)) return
+    const axisMid = axisStart + (axisEnd - axisStart) * offset
+    if (!Number.isFinite(axisMid)) return
+    data.onMidpointChange(id, offset, axisMid)
+  }, [axisEnd, axisStart, data, id, midpointXOverride, offset, sourceAxis])
+
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
       if (!data?.onMidpointChange || !data?.screenToFlow) return
@@ -102,13 +115,10 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
       const delta = axisEnd - axisStart
       if (Math.abs(delta) < 1e-6) return
       const ratioRaw = (bounded - axisStart) / delta
-      const ratio = clamp(ratioRaw, 0, 1)
-      const magnitude = Math.abs(delta)
-      const gain = Math.max(1.2, Math.min(2.2, 180 / Math.max(magnitude, 1)))
-      const nextOffset = clamp(offset + (ratio - offset) * gain, 0, 1)
-      data.onMidpointChange(id, nextOffset)
+      const nextOffset = clamp(ratioRaw, 0, 1)
+      data.onMidpointChange(id, nextOffset, bounded)
     },
-    [axisEnd, axisStart, data, id, offset, sourceAxis]
+    [axisEnd, axisStart, data, id, sourceAxis]
   )
 
   const onPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {

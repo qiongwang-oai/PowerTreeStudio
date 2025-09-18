@@ -22,6 +22,8 @@ export type Edge = {
   interconnect?: { R_milliohm?: number, length_m?: number, awg?: string }
   /** Relative position (0-1) of the middle orthogonal segment between source/target */
   midpointOffset?: number;
+  /** Absolute horizontal coordinate (canvas units) for the middle segment */
+  midpointX?: number;
 }
 export type Scenario = 'Typical'|'Max'|'Idle'
 export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[] }
