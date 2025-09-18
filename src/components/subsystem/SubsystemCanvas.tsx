@@ -491,7 +491,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       const prevById = new Map(prev.map(p=>[p.id, p]))
       const mapped: RFNode[] = project.nodes.map(n=>{
         const existing = prevById.get(n.id)
-        const position = existing?.position ?? { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 }
+        const fallbackPosition = existing?.position ?? { x: (Math.random()*400)|0, y: (Math.random()*300)|0 }
+        const position = {
+          x: typeof n.x === 'number' ? n.x : fallbackPosition.x,
+          y: typeof n.y === 'number' ? n.y : fallbackPosition.y,
+        }
         const parallelCount = parallelCountForNode(n as any)
         return {
           id: n.id,

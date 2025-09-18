@@ -4,7 +4,9 @@ import SubsystemPalette from './SubsystemPalette'
 import SubsystemCanvas from './SubsystemCanvas'
 import SubsystemInspector from './SubsystemInspector'
 import { Button } from '../ui/button'
+import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
+import AutoAlignPrompt from '../AutoAlignPrompt'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
@@ -16,6 +18,17 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const containerRef = React.useRef<HTMLDivElement>(null)
   const embedded = subsystem?.project
   const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0
+  const undo = useStore(s=>s.undo)
+  const redo = useStore(s=>s.redo)
+  const pastLen = useStore(s=>s.past.length)
+  const futureLen = useStore(s=>s.future.length)
+  const autoAlignNested = useStore(s=>s.nestedSubsystemAutoAlign)
+  const clearNested = useStore(s=>s.nestedSubsystemClear)
+  const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
+  const [autoAlignInput, setAutoAlignInput] = React.useState<string>('340')
+  const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
+  const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
+  const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
 
   React.useEffect(()=>{
     const handleMove = (e: MouseEvent)=>{
@@ -51,6 +64,42 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   }
   if (!subsystem || !embedded) return null
 
+  const openAutoAlignPrompt = React.useCallback(() => {
+    setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
+    setAutoAlignInput(prev => (prev.trim().length > 0 ? prev : '340'))
+    setAutoAlignError(null)
+    setAutoAlignPromptOpen(true)
+  }, [])
+
+  const closeAutoAlignPrompt = React.useCallback(() => {
+    setAutoAlignPromptOpen(false)
+    setAutoAlignError(null)
+  }, [])
+
+  const applyAutoAlign = React.useCallback(() => {
+    const trimmed = autoAlignInput.trim()
+    if (trimmed === '') {
+      autoAlignNested(subsystemPath)
+      setAutoAlignInput('340')
+      closeAutoAlignPrompt()
+      return
+    }
+    const spacing = Number(trimmed)
+    if (!Number.isFinite(spacing) || spacing <= 0) {
+      setAutoAlignError('Please enter a positive number.')
+      return
+    }
+    autoAlignNested(subsystemPath, spacing)
+    setAutoAlignInput(String(spacing))
+    closeAutoAlignPrompt()
+  }, [autoAlignInput, autoAlignNested, subsystemPath, closeAutoAlignPrompt])
+
+  const handleClear = () => {
+    if (!window.confirm('Clear this subsystem canvas? This will remove all nodes except inputs.')) return
+    clearNested(subsystemPath)
+    setSelected(null)
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
@@ -61,7 +110,18 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             <div className={"text-xs px-2 py-0.5 rounded-full " + (inputCount===1? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{inputCount===1? '1 input ok' : `${inputCount} inputs`}</div>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={onClose}>Close</Button>
+            <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
+            <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
+            <Button
+              ref={autoAlignButtonRef}
+              variant="outline"
+              size="sm"
+              onClick={openAutoAlignPrompt}
+            >
+              Auto Alignment
+            </Button>
+            <Button size="sm" variant="danger" onClick={handleClear}>Clear</Button>
+            <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           </div>
         </div>
         <aside className="border-r bg-white overflow-auto"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
@@ -80,6 +140,16 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
           <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={selected} onDeleted={()=>setSelected(null)} />
         </aside>
       </div>
+      {autoAlignPromptOpen && (
+        <AutoAlignPrompt
+          anchorRect={autoAlignAnchor}
+          value={autoAlignInput}
+          onChange={setAutoAlignInput}
+          onConfirm={applyAutoAlign}
+          onCancel={closeAutoAlignPrompt}
+          error={autoAlignError}
+        />
+      )}
     </div>
   )
 }

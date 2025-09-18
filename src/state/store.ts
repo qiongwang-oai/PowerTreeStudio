@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { Project, AnyNode, Edge, Scenario } from '../models'
 import { sampleProject } from '../sampleData'
 import { autosave, loadAutosave } from '../io'
+import { autoLayoutProject } from '../utils/autoLayout'
 
 type State = {
   project: Project
@@ -22,6 +23,7 @@ type State = {
   setClipboardNode: (n: AnyNode | null) => void
   undo: () => void
   redo: () => void
+  autoAlign: (columnSpacing?: number) => void
   updateSubsystemProject: (subsystemId: string, updater: (p: Project) => Project) => void
   updateSubsystemProjectAtPath: (subsystemPath: string[], updater: (p: Project) => Project) => void
   subsystemAddNode: (subsystemId: string, node: AnyNode) => void
@@ -38,6 +40,8 @@ type State = {
   nestedSubsystemUpdateNodePos: (subsystemPath: string[], nodeId: string, x: number, y: number) => void
   nestedSubsystemRemoveNode: (subsystemPath: string[], nodeId: string) => void
   nestedSubsystemRemoveEdge: (subsystemPath: string[], edgeId: string) => void
+  nestedSubsystemAutoAlign: (subsystemPath: string[], columnSpacing?: number) => void
+  nestedSubsystemClear: (subsystemPath: string[]) => void
   openSubsystemIds: string[],
   setOpenSubsystemIds: (ids: string[]) => void
 }
@@ -63,6 +67,15 @@ export const useStore = create<State>((set,get)=>({
   ,setClipboardNode: (n) => { set({ clipboardNode: n }) }
   ,undo: () => { const { past, project, future } = get(); if (past.length===0) return; const prev = past[past.length-1]; set({ past: past.slice(0,-1), future: [...future, JSON.parse(JSON.stringify(project))], project: prev }); autosave(get().project) }
   ,redo: () => { const { past, project, future } = get(); if (future.length===0) return; const next = future[future.length-1]; set({ past: [...past, JSON.parse(JSON.stringify(project))], future: future.slice(0,-1), project: next }); autosave(get().project) }
+  ,autoAlign: (columnSpacing) => {
+    const project = get().project
+    const prev = JSON.parse(JSON.stringify(project)) as Project
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const { nodes, edges } = autoLayoutProject(project, { columnSpacing })
+    const next: Project = { ...project, nodes, edges }
+    set({ project: next })
+    autosave(next)
+  }
   ,updateSubsystemProject: (subsystemId, updater) => {
     const p=get().project
     const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] }));
@@ -149,6 +162,21 @@ export const useStore = create<State>((set,get)=>({
   }
   ,nestedSubsystemRemoveEdge: (subsystemPath, edgeId) => {
     const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.filter(e=>e.id!==edgeId) })
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemAutoAlign: (subsystemPath, columnSpacing) => {
+    const fn = (proj: Project): Project => {
+      const { nodes, edges } = autoLayoutProject(proj, { columnSpacing })
+      return { ...proj, nodes, edges }
+    }
+    get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemClear: (subsystemPath) => {
+    const fn = (proj: Project): Project => ({
+      ...proj,
+      nodes: proj.nodes.filter(n => n.type === 'SubsystemInput') as AnyNode[],
+      edges: [],
+    })
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
   ,openSubsystemIds: [] as string[],

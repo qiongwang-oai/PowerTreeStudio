@@ -11,6 +11,7 @@ import { validate } from './rules'
 import { download, importProjectFile, serializeProject } from './io'
 import { exportReport } from './report'
 import ReportDialog from './components/report/ReportDialog'
+import AutoAlignPrompt from './components/AutoAlignPrompt'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -43,14 +44,20 @@ export default function App(){
   const setImportedFileName = useStore(s=>s.setImportedFileName)
   const undo = useStore(s=>s.undo)
   const redo = useStore(s=>s.redo)
+  const autoAlign = useStore(s=>s.autoAlign)
   const pastLen = useStore(s=>s.past.length)
   const futureLen = useStore(s=>s.future.length)
   const [selected, setSelected] = React.useState<string|null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
+  const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
+  const [autoAlignInput, setAutoAlignInput] = React.useState<string>('340')
+  const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
+  const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const openSubsystemIds = useStore(s => s.openSubsystemIds);
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const minRight = 220, maxRight = 640
+  const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
   const onDragStart = (e: React.MouseEvent)=>{
     e.preventDefault()
     const startX = e.clientX
@@ -73,6 +80,33 @@ export default function App(){
   const onExport = ()=> download(project.name.replace(/\s+/g,'_'), serializeProject(project))
   const onImport = async (f:File)=>{ const data = await importProjectFile(f); setProject(data); setImportedFileName(f.name) }
   const onReport = ()=> setReportOpen(true)
+  const openAutoAlignPrompt = React.useCallback(() => {
+    setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
+    setAutoAlignInput(prev => (prev.trim().length > 0 ? prev : '340'))
+    setAutoAlignError(null)
+    setAutoAlignPromptOpen(true)
+  }, [])
+  const closeAutoAlignPrompt = React.useCallback(() => {
+    setAutoAlignPromptOpen(false)
+    setAutoAlignError(null)
+  }, [])
+  const applyAutoAlign = React.useCallback(() => {
+    const trimmed = autoAlignInput.trim()
+    if (trimmed === '') {
+      autoAlign()
+      setAutoAlignInput('340')
+      closeAutoAlignPrompt()
+      return
+    }
+    const spacing = Number(trimmed)
+    if (!Number.isFinite(spacing) || spacing <= 0) {
+      setAutoAlignError('Please enter a positive number.')
+      return
+    }
+    autoAlign(spacing)
+    setAutoAlignInput(String(spacing))
+    closeAutoAlignPrompt()
+  }, [autoAlign, autoAlignInput, closeAutoAlignPrompt])
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
     const cleared = { ...project, nodes: [], edges: [] }
@@ -129,6 +163,14 @@ export default function App(){
                   <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
                   <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
                   <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
+                  <Button
+                    ref={autoAlignButtonRef}
+                    variant="outline"
+                    size="sm"
+                    onClick={openAutoAlignPrompt}
+                  >
+                    Auto Alignment
+                  </Button>
                   <Button size="sm" variant="success" onClick={onReport}>Report</Button>
                   <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
                 </div>
@@ -175,6 +217,16 @@ export default function App(){
         })}
         {reportOpen && (
           <ReportDialog project={project} result={result} onClose={()=>setReportOpen(false)} />
+        )}
+        {autoAlignPromptOpen && (
+          <AutoAlignPrompt
+            anchorRect={autoAlignAnchor}
+            value={autoAlignInput}
+            onChange={setAutoAlignInput}
+            onConfirm={applyAutoAlign}
+            onCancel={closeAutoAlignPrompt}
+            error={autoAlignError}
+          />
         )}
       </div>
     </ErrorBoundary>
