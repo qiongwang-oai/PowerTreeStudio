@@ -83,13 +83,16 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
 
   useEffect(() => {
     if (!data?.onMidpointChange) return
-    if (midpointXOverride !== undefined) return
-    if (sourceAxis !== 'x') return
     if (!Number.isFinite(axisStart) || !Number.isFinite(axisEnd)) return
-    const axisMid = axisStart + (axisEnd - axisStart) * offset
+    const defaultRatio = 0.5
+    const axisMid = axisStart + (axisEnd - axisStart) * defaultRatio
     if (!Number.isFinite(axisMid)) return
-    data.onMidpointChange(id, offset, axisMid)
-  }, [axisEnd, axisStart, data, id, midpointXOverride, offset, sourceAxis])
+    const hasCustomOffset = Math.abs(offset - defaultRatio) > 1e-6
+    const midpointMismatch = midpointXOverride === undefined || Math.abs((midpointXOverride ?? axisMid) - axisMid) > 1
+    if (hasCustomOffset && midpointXOverride !== undefined) return
+    if (!midpointMismatch) return
+    data.onMidpointChange(id, defaultRatio, axisMid)
+  }, [axisEnd, axisStart, data, id, midpointXOverride, offset])
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
