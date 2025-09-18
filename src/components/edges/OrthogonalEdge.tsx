@@ -60,10 +60,13 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
     const axisStart = sourceAxis === 'y' ? sourceY : sourceX
     const axisEnd = sourceAxis === 'y' ? targetY : targetX
 
+    const labelOffsetX = targetX - 6
+    const labelOffsetY = targetY - 6
+
     return {
       path,
-      labelX: secondPoint.x,
-      labelY: targetY - 12,
+      labelX: labelOffsetX,
+      labelY: labelOffsetY,
       handleX: midX,
       handleY: midY,
       isVertical: midSegmentVertical,
@@ -151,7 +154,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
                 borderRadius: 9999,
                 border: `2px solid ${knobBorder}`,
                 background: knobBackground,
-                cursor: 'ns-resize',
+                cursor: sourceAxis === 'y' ? 'ns-resize' : 'ew-resize',
                 boxShadow: '0 1px 2px rgba(15,23,42,0.25)',
                 touchAction: 'none',
               }}
@@ -164,7 +167,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
           <div
             style={{
               position: 'absolute',
-              transform: `translate(-100%, -50%) translate(${labelX - 8}px, ${labelY}px)` ,
+              transform: `translate(${labelX}px, ${labelY}px) translate(-100%, -100%)`,
               pointerEvents: 'auto',
               fontSize: '10px',
               zIndex: 50,

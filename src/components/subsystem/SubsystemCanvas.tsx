@@ -84,10 +84,26 @@ function CustomNode(props: NodeProps) {
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
     : 'bg-white'
   const borderClass = isSelected ? 'border-sky-500 shadow-lg' : 'border-slate-300'
+  const subsystemPorts = nodeType === 'Subsystem' && Array.isArray((data as any).inputPorts)
+    ? (data as any).inputPorts
+    : []
+  const subsystemPortCount = subsystemPorts.length
+  const baseSubsystemHeight = 80
+  const perPortHeight = 28
+  const dynamicMinHeight = nodeType === 'Subsystem'
+    ? baseSubsystemHeight + (subsystemPortCount * perPortHeight)
+    : undefined
   return (
     <div
       className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
-      style={{ boxShadow: combinedShadow }}
+      style={{
+        boxShadow: combinedShadow,
+        minHeight: dynamicMinHeight,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
     >
       {isSelected && (
         <div className="pointer-events-none absolute inset-0" style={{ zIndex: 1 }}>
@@ -99,18 +115,46 @@ function CustomNode(props: NodeProps) {
       )}
       {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
-          <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
-          <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>{nodeType==='Load' ? `${Number(((data as any).Vreq ?? 0))} V` : 'input'}</div>
+          <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
+          <div
+            style={{
+              position: 'absolute',
+              left: -8,
+              top: 'calc(50% + 8px)',
+              transform: 'translate(-100%, 0)',
+              fontSize: '10px',
+              color: '#666',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              textAlign: 'right',
+            }}
+          >
+            {nodeType==='Load' ? `${Number(((data as any).Vreq ?? 0))} V` : 'input'}
+          </div>
         </>
       )}
       {nodeType==='Subsystem' && (
         (() => {
-          const ports = Array.isArray((data as any).inputPorts) ? (data as any).inputPorts : []
+          const ports = subsystemPorts
           const count = ports.length
           if (count === 0) return (
             <>
-              <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
-              <div style={{ fontSize: '10px', color: '#666', marginBottom: 4 }}>input</div>
+              <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
+              <div
+                style={{
+                  position: 'absolute',
+                  left: -8,
+                  top: 'calc(50% + 8px)',
+                  transform: 'translate(-100%, 0)',
+                  fontSize: '10px',
+                  color: '#666',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none',
+                  textAlign: 'right',
+                }}
+              >
+                input
+              </div>
             </>
           )
           return (
@@ -120,23 +164,66 @@ function CustomNode(props: NodeProps) {
                 const label = `${Number(p.Vout ?? 0)} V`
                 return (
                   <React.Fragment key={p.id}>
-                    <Handle type="target" position={Position.Top} id={p.id} style={{ background: '#555', left: `${pct}%`, transform: 'translate(-50%, -50%)' }} />
-                    <div style={{ position:'absolute', top: 4, left: `${pct}%`, transform: 'translateX(-50%)', fontSize: '10px', color: '#334155', whiteSpace: 'nowrap' }}>{label}</div>
+                    <Handle
+                      type="target"
+                      position={Position.Left}
+                      id={p.id}
+                      style={{ background: '#555', top: `${pct}%`, transform: 'translate(-50%, -50%)' }}
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        left: -8,
+                        top: `calc(${pct}% + 8px)`,
+                        transform: 'translate(-100%, 0)',
+                        fontSize: '10px',
+                        color: '#334155',
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                        textAlign: 'right',
+                      }}
+                    >
+                      {label}
+                    </div>
                   </React.Fragment>
                 )
               })}
-              <div style={{ height: 18 }} />
             </>
           )
         })()
       )}
-      {data.label}
+      <div
+        style={{
+          flex: '1 1 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          textAlign: 'center',
+        }}
+      >
+        <div style={{ width: '100%' }}>{data.label}</div>
+      </div>
       {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
       {bracketElement}
       {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
         <>
-          <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
-          <div style={{ fontSize: '10px', color: '#666', marginTop: 4 }}>output</div>
+          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
+          <div
+            style={{
+              position: 'absolute',
+              right: -8,
+              top: 'calc(50% + 8px)',
+              transform: 'translate(100%, 0)',
+              fontSize: '10px',
+              color: '#666',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              textAlign: 'left',
+            }}
+          >
+            output
+          </div>
         </>
       )}
     </div>
@@ -286,7 +373,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     const midpointOffset = e.midpointOffset ?? 0.5
     const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
     const currentLabel = I.toFixed(1)
-    const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
+    const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
     const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
     const edgeColor = voltageToEdgeColor(parentV)
     const defaultColor = mismatch ? '#ef4444' : edgeColor
@@ -548,7 +635,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         const midpointOffset = e.midpointOffset ?? 0.5
         const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
         const currentLabel = I.toFixed(1)
-        const baseLabel = `${resistanceLabel} mΩ\n${currentLabel} A`
+        const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
         const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
         const edgeColor = voltageToEdgeColor(parentV)
         const defaultColor = mismatch ? '#ef4444' : edgeColor
