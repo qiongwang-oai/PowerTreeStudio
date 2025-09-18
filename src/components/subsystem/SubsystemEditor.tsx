@@ -14,9 +14,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const startXRef = React.useRef<number>(0)
   const startWRef = React.useRef<number>(320)
   const containerRef = React.useRef<HTMLDivElement>(null)
-  if (!subsystem) return null
-  const embedded = subsystem.project
-  const inputCount = embedded.nodes.filter((n:any)=>n.type==='SubsystemInput').length
+  const embedded = subsystem?.project
+  const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0
 
   React.useEffect(()=>{
     const handleMove = (e: MouseEvent)=>{
@@ -50,6 +49,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     startWRef.current = inspectorWidth
     setIsResizing(true)
   }
+  if (!subsystem || !embedded) return null
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
@@ -63,7 +64,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             <Button variant="outline" onClick={onClose}>Close</Button>
           </div>
         </div>
-        <aside className="border-r bg-white overflow-auto"><SubsystemPalette subsystemId={subsystemId} project={embedded} /></aside>
+        <aside className="border-r bg-white overflow-auto"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
         <main className="overflow-hidden">
           <ReactFlowProvider>
             <SubsystemCanvas subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} onSelect={setSelected} onOpenNested={onOpenSubsystem} />
@@ -82,5 +83,3 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     </div>
   )
 }
-
-

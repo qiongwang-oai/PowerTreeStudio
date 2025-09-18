@@ -54,6 +54,20 @@ describe('Subsystem scenario sync and nested editing', () => {
     expect(ss2.project.nodes.some((n:any)=>n.id==='l')).toBe(true)
     expect(ss2.project.edges.some((e:any)=>e.id==='e_in_l')).toBe(true)
   })
-})
 
+  it('adds nodes to nested subsystem paths', () => {
+    const innerMost: AnyNode = { id:'ssInner', type:'Subsystem', name:'Inner', inputV_nom:5, project: makeProject([], [], 'Typical') } as any
+    const middle: AnyNode = { id:'ssMid', type:'Subsystem', name:'Middle', inputV_nom:12, project: makeProject([innerMost], [], 'Typical') } as any
+    const rootSubsystem: AnyNode = { id:'ssRoot', type:'Subsystem', name:'Root', inputV_nom:24, project: makeProject([middle], [], 'Typical') } as any
+    const root = makeProject([rootSubsystem], [], 'Typical')
+    const { setProject, nestedSubsystemAddNode } = useStore.getState()
+    setProject(root)
+    nestedSubsystemAddNode(['ssRoot','ssMid','ssInner'], { id:'load', type:'Load', name:'Nested Load', Vreq:3.3, I_typ:1, I_max:2 } as any)
+    const proj = useStore.getState().project
+    const ssRoot = proj.nodes.find(n=>n.id==='ssRoot') as any
+    const ssMid = ssRoot.project.nodes.find((n:any)=>n.id==='ssMid') as any
+    const ssInner = ssMid.project.nodes.find((n:any)=>n.id==='ssInner') as any
+    expect(ssInner.project.nodes.some((n:any)=>n.id==='load')).toBe(true)
+  })
+})
 

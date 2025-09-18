@@ -15,11 +15,12 @@ function createPreset(type:'Converter'|'Load'|'Bus'|'Note'|'Subsystem'|'Subsyste
   return { id, type, name:'Note', text:'...', x: 420, y: 300 } as any
 }
 
-export default function SubsystemPalette({ subsystemId, project }:{ subsystemId:string, project: Project }){
-  const addNode = useStore(s=>s.subsystemAddNode)
+export default function SubsystemPalette({ subsystemId, subsystemPath, project }:{ subsystemId:string, subsystemPath?: string[], project: Project }){
+  const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
+  const path = (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId]
   const onAdd = (t:any)=>{
     if (t==='Source') return // blocked in nested
-    addNode(subsystemId, createPreset(t))
+    addNodeNested(path, createPreset(t))
   }
   const buttonBase = 'w-full text-slate-900 border border-slate-300'
   const styleByType: Record<string, string> = {

@@ -85,12 +85,13 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
+  const openSubsystemIds = useStore(s=>s.openSubsystemIds)
   const { screenToFlowPosition } = useReactFlow()
 
+  const path = useMemo(()=> (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId], [subsystemPath, subsystemId])
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
-  const path = (subsystemPath || [subsystemId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -587,8 +588,15 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     setContextMenu(null)
   }, [contextMenu, clipboardNode, screenToFlowPosition, addNodeNested, path])
 
+  const isTopmostEditor = useMemo(()=>{
+    if (!openSubsystemIds || openSubsystemIds.length === 0) return true
+    if (path.length !== openSubsystemIds.length) return false
+    return path.every((id, idx)=>openSubsystemIds[idx] === id)
+  }, [openSubsystemIds, path])
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isTopmostEditor) return
       const active = document.activeElement;
       const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
       if (isInput) return;
@@ -630,7 +638,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect]);
+  }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect, isTopmostEditor]);
 
   return (
     <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)}>
