@@ -14,6 +14,69 @@ function CustomNode(props: NodeProps) {
   const isSelected = !!selected
   const accentColor = '#0284c7'
   const nodeType = (data as any).type
+  const rawParallel = typeof (data as any)?.parallelCount === 'number' ? (data as any).parallelCount : 1
+  const parallelCount = Number.isFinite(rawParallel) && rawParallel > 0 ? Math.floor(rawParallel) : 1
+  const isParallelStackType = nodeType === 'Load' || nodeType === 'Subsystem'
+  const showStack = isParallelStackType && parallelCount > 1
+  const maxVisibleStack = 5
+  const stackGap = 4
+  const behindCount = showStack ? Math.min(parallelCount - 1, maxVisibleStack - 1) : 0
+  const bracketDepth = stackGap * behindCount
+  const bracketLabel = `x${parallelCount}`
+  const baseBraceSize = 18
+  const bracketFontSize = Math.max(baseBraceSize, bracketDepth + 10)
+  const braceBottomAdjust = 6
+  const baseShadow = '0 1px 2px rgba(15, 23, 42, 0.06)'
+  const stackShadowParts = showStack
+    ? Array.from({ length: behindCount }).map((_, idx) => {
+        const depth = idx + 1
+        const offset = stackGap * depth
+        const fade = 0.38 - depth * 0.07
+        const alpha = Math.max(0.18, fade)
+        return `${offset}px ${offset}px 0 1px rgba(71, 85, 105, ${alpha.toFixed(2)})`
+      })
+    : []
+  const bracketElement = (showStack && bracketDepth > 0) ? (
+    <div
+      style={{
+        position: 'absolute',
+        top: bracketDepth - bracketFontSize + braceBottomAdjust,
+        left: '100%',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 8,
+        pointerEvents: 'none',
+      }}
+    >
+      <span
+        style={{
+          fontSize: bracketFontSize,
+          lineHeight: 1,
+          fontFamily: 'serif',
+          color: '#475569',
+          display: 'block',
+          transform: 'rotate(-39deg)',
+          transformOrigin: 'top right',
+        }}
+      >
+        {'}'}
+      </span>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: '#1e293b',
+          transform: `translateY(${-(bracketFontSize * 0.25)}px)`,
+        }}
+      >
+        {bracketLabel}
+      </span>
+    </div>
+  ) : null
+
+  const combinedShadow = stackShadowParts.length
+    ? `${stackShadowParts.join(', ')}, ${baseShadow}`
+    : baseShadow
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
     : nodeType === 'Load' ? 'bg-orange-50'
@@ -22,7 +85,10 @@ function CustomNode(props: NodeProps) {
     : 'bg-white'
   const borderClass = isSelected ? 'border-sky-500 shadow-lg' : 'border-slate-300'
   return (
-    <div className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
+    <div
+      className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
+      style={{ boxShadow: combinedShadow }}
+    >
       {isSelected && (
         <div className="pointer-events-none absolute inset-0" style={{ zIndex: 1 }}>
           <div style={{ position: 'absolute', top: -4, left: -4, width: 16, height: 16, borderTop: `4px solid ${accentColor}`, borderLeft: `4px solid ${accentColor}`, borderTopLeftRadius: 12 }} />
@@ -59,13 +125,14 @@ function CustomNode(props: NodeProps) {
                   </React.Fragment>
                 )
               })}
-              {/* Spacer to avoid label overlap */}
               <div style={{ height: 18 }} />
             </>
           )
         })()
       )}
       {data.label}
+      {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
+      {bracketElement}
       {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
         <>
           <Handle type="source" position={Position.Bottom} id="output" style={{ background: '#555' }} />
@@ -74,6 +141,19 @@ function CustomNode(props: NodeProps) {
       )}
     </div>
   )
+}
+
+const parallelCountForNode = (node: any): number => {
+  if (!node) return 1
+  if (node.type === 'Load') {
+    const value = Number(node.numParalleledDevices)
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1
+  }
+  if (node.type === 'Subsystem') {
+    const value = Number(node.numParalleledSystems)
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1
+  }
+  return 1
 }
 
 export default function SubsystemCanvas({ subsystemId, subsystemPath, project, onSelect, onOpenNested }:{ subsystemId:string, subsystemPath?: string[], project: Project, onSelect:(id:string|null)=>void, onOpenNested?:(id:string)=>void }){
@@ -103,7 +183,9 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   }, [path, updateEdgeNested])
   const computeResult = useMemo(()=> compute(project), [project])
 
-  const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
+  const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>{
+    const parallelCount = parallelCountForNode(n as any)
+    return {
     id: n.id,
     data: {
       label: (
@@ -165,6 +247,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         </div>
       ),
       type: (n as AnyNode).type,
+      parallelCount,
       ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
       ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
     },
@@ -172,7 +255,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     type: 'custom',
     draggable: true,
     selected: false,
-  })), [project.nodes])
+  }
+  }), [project.nodes])
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
@@ -237,6 +321,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       const mapped: RFNode[] = project.nodes.map(n=>{
         const existing = prevById.get(n.id)
         const position = existing?.position ?? { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 }
+        const parallelCount = parallelCountForNode(n as any)
         return {
           id: n.id,
           data: {
@@ -299,7 +384,9 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
               </div>
             ),
             type: (n as AnyNode).type,
-            ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {})
+            parallelCount,
+            ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
+            ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
           },
           position,
           type: 'custom',
@@ -406,6 +493,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         ...rn,
         data: {
           ...rn.data,
+          parallelCount: parallelCountForNode(n as any),
           label: (
             <div className="flex flex-col items-stretch gap-1">
               <div className="text-center font-semibold">{n.name}</div>

@@ -167,6 +167,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
               transform: `translate(-100%, -50%) translate(${labelX - 8}px, ${labelY}px)` ,
               pointerEvents: 'auto',
               fontSize: '10px',
+              zIndex: 50,
               ...(labelShowBg
                 ? {
                     background: 'white',

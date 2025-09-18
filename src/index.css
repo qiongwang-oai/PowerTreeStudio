@@ -5,3 +5,6 @@
 html, body, #root { height: 100%; }
 .rf-handle { width: 10px; height: 10px; }
 .input{border:1px solid #e2e8f0;border-radius:12px;padding:.4rem .6rem;min-width:6rem}
+.react-flow__edges { z-index: 18 !important; }
+.react-flow__edge-labels { z-index: 19 !important; }
+.react-flow__nodes { z-index: 10 !important; }

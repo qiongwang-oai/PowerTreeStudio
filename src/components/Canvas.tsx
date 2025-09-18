@@ -16,6 +16,69 @@ function CustomNode(props: NodeProps) {
   const isSelected = !!selected;
   const accentColor = '#0284c7';
   const nodeType = data.type;
+  const rawParallel = typeof (data as any)?.parallelCount === 'number' ? (data as any).parallelCount : 1;
+  const parallelCount = Number.isFinite(rawParallel) && rawParallel > 0 ? Math.floor(rawParallel) : 1;
+  const isParallelStackType = nodeType === 'Load' || nodeType === 'Subsystem';
+  const showStack = isParallelStackType && parallelCount > 1;
+  const maxVisibleStack = 5;
+  const stackGap = 4;
+  const behindCount = showStack ? Math.min(parallelCount - 1, maxVisibleStack - 1) : 0;
+  const bracketDepth = stackGap * behindCount;
+  const bracketLabel = `x${parallelCount}`;
+  const baseBraceSize = 18;
+  const bracketFontSize = Math.max(baseBraceSize, bracketDepth + 10);
+  const braceBottomAdjust = 6;
+  const baseShadow = '0 1px 2px rgba(15, 23, 42, 0.06)';
+  const stackShadowParts = showStack
+    ? Array.from({ length: behindCount }).map((_, idx) => {
+        const depth = idx + 1;
+        const offset = stackGap * depth;
+        const fade = 0.38 - depth * 0.07;
+        const alpha = Math.max(0.18, fade);
+        return `${offset}px ${offset}px 0 1px rgba(71, 85, 105, ${alpha.toFixed(2)})`;
+      })
+    : [];
+  const bracketElement = (showStack && bracketDepth > 0) ? (
+    <div
+      style={{
+        position: 'absolute',
+        top: bracketDepth - bracketFontSize + braceBottomAdjust,
+        left: '100%',
+        display: 'flex',
+        alignItems: 'flex-end',
+        gap: 8,
+        pointerEvents: 'none',
+      }}
+    >
+      <span
+        style={{
+          fontSize: bracketFontSize,
+          lineHeight: 1,
+          fontFamily: 'serif',
+          color: '#475569',
+          display: 'block',
+          transform: 'rotate(-39deg)',
+          transformOrigin: 'top right',
+        }}
+      >
+        {'}'}
+      </span>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: '#1e293b',
+          transform: `translateY(${-(bracketFontSize * 0.25)}px)`,
+        }}
+      >
+        {bracketLabel}
+      </span>
+    </div>
+  ) : null;
+
+  const combinedShadow = stackShadowParts.length
+    ? `${stackShadowParts.join(', ')}, ${baseShadow}`
+    : baseShadow;
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
     : nodeType === 'Load' ? 'bg-orange-50'
@@ -24,7 +87,12 @@ function CustomNode(props: NodeProps) {
     : 'bg-white'
   const borderClass = isSelected ? 'border-sky-500 shadow-lg' : 'border-slate-300'
   return (
-    <div className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 shadow text-xs text-center min-w-[140px] relative`}>
+    <div
+      className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
+      style={{
+        boxShadow: combinedShadow,
+      }}
+    >
       {isSelected && (
         <div className="pointer-events-none absolute inset-0" style={{ zIndex: 1 }}>
           <div style={{ position: 'absolute', top: -4, left: -4, width: 16, height: 16, borderTop: `4px solid ${accentColor}`, borderLeft: `4px solid ${accentColor}`, borderTopLeftRadius: 12 }} />
@@ -33,6 +101,8 @@ function CustomNode(props: NodeProps) {
           <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderBottom: `4px solid ${accentColor}`, borderRight: `4px solid ${accentColor}`, borderBottomRightRadius: 12 }} />
         </div>
       )}
+      {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
+      {bracketElement}
       {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Top} id="input" style={{ background: '#555' }} />
@@ -76,6 +146,19 @@ function CustomNode(props: NodeProps) {
       )}
     </div>
   );
+}
+
+const parallelCountForNode = (node: any): number => {
+  if (!node) return 1;
+  if (node.type === 'Load') {
+    const value = Number(node.numParalleledDevices);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+  }
+  if (node.type === 'Subsystem') {
+    const value = Number(node.numParalleledSystems);
+    return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+  }
+  return 1;
 }
 
 export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|null)=>void, onOpenSubsystem?:(id:string)=>void}){
@@ -132,77 +215,81 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     return { criticalLoadPower: deep.criticalLoadPower, nonCriticalLoadPower: deep.nonCriticalLoadPower, edgeLoss: deep.edgeLoss, converterLoss: deep.converterLoss, overallEta: eta }
   }, [project, computeResult])
 
-  const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>({
-    id: n.id,
-    data: {
-      label: (
-        <div className="flex flex-col items-stretch gap-1">
-          <div className="text-center font-semibold">{n.name}</div>
-          <div className="flex items-stretch justify-between gap-2">
-            <div className="text-left">
-              {n.type === 'Source' && 'Vout' in n ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                </div>
-              ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
-                    const nodeResult = computeResult.nodes[n.id];
-                    const eff = (n as any).efficiency;
-                    if (eff?.type === 'curve' && nodeResult) {
-                      const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
-                      return (eta * 100).toFixed(1) + '%';
-                    } else if (eff?.type === 'fixed') {
-                      return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                    } else if (eff?.points?.[0]?.eta) {
-                      return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
-                    } else {
-                      return '—';
-                    }
-                  })()}</div>
-                </div>
-               ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-                  <div className="text-left">
-                    <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+  const rfNodesInit: RFNode[] = useMemo(() => project.nodes.map(n => {
+    const parallelCount = parallelCountForNode(n as any);
+    return ({
+      id: n.id,
+      data: {
+        label: (
+          <div className="flex flex-col items-stretch gap-1">
+            <div className="text-center font-semibold">{n.name}</div>
+            <div className="flex items-stretch justify-between gap-2">
+              <div className="text-left">
+                {n.type === 'Source' && 'Vout' in n ? (
+                  <div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
                   </div>
-                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-                  <div className="text-left" style={{minWidth:70}}>
-                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
+                  <div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                      const nodeResult = computeResult.nodes[n.id];
+                      const eff = (n as any).efficiency;
+                      if (eff?.type === 'curve' && nodeResult) {
+                        const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
+                        return (eta * 100).toFixed(1) + '%';
+                      } else if (eff?.type === 'fixed') {
+                        return ((eff.value ?? 0) * 100).toFixed(1) + '%';
+                      } else if (eff?.points?.[0]?.eta) {
+                        return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                      } else {
+                        return '—';
+                      }
+                    })()}</div>
                   </div>
-                </div>
-               ) : n.type === 'Subsystem' ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
-                </div>
-               ) : n.type === 'SubsystemInput' ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
-                </div>
-               ) : n.type === 'Note' && 'text' in n ? (
-                <div>
-                  <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
-                </div>
-               ) : null}
+                 ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+                  <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                    <div className="text-left">
+                      <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                      <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                      <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                    </div>
+                    <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                    <div className="text-left" style={{minWidth:70}}>
+                      <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                    </div>
+                  </div>
+                 ) : n.type === 'Subsystem' ? (
+                  <div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
+                  </div>
+                 ) : n.type === 'SubsystemInput' ? (
+                  <div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
+                  </div>
+                 ) : n.type === 'Note' && 'text' in n ? (
+                  <div>
+                    <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
+                  </div>
+                 ) : null}
+              </div>
+              {/* Right power intentionally empty on init; will be filled by compute effect */}
             </div>
-            {/* Right power intentionally empty on init; will be filled by compute effect */}
           </div>
-        </div>
-      ),
-      type: n.type,
-      ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
-      ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
-    },
-    position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
-    type: 'custom',
-    draggable: true,
-    selected: false,
-  })), [project.nodes])
+        ),
+        type: n.type,
+        parallelCount,
+        ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
+        ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
+      },
+      position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
+      type: 'custom',
+      draggable: true,
+      selected: false,
+    })
+  }), [project.nodes])
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
@@ -268,6 +355,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       const mapped: RFNode[] = project.nodes.map(n=>{
         const existing = prevById.get(n.id)
         const position = existing?.position ?? { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 }
+        const parallelCount = parallelCountForNode(n as any)
         return {
           id: n.id,
           data: {
@@ -331,6 +419,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
               </div>
             ),
             type: n.type,
+            parallelCount,
             ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
             ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
           },
@@ -447,6 +536,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         ...rn,
         data: {
           ...rn.data,
+          parallelCount: parallelCountForNode(n as any),
           label: (
             <div className="flex flex-col items-stretch gap-1">
               <div className="text-center font-semibold">{n.name}</div>
