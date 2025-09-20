@@ -62,7 +62,10 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
     const path = `M ${sourceX} ${sourceY} L ${firstPoint.x} ${firstPoint.y} L ${secondPoint.x} ${secondPoint.y} L ${targetX} ${targetY}`
 
     const axisStart = sourceAxis === 'y' ? sourceY : sourceX
-    const axisEnd = sourceAxis === 'y' ? targetY : targetX
+    let axisEnd = sourceAxis === 'y' ? targetY : targetX
+    if (Math.abs(deltaPrimary) < 1e-6) {
+      axisEnd = axisStart + safeDeltaPrimary
+    }
 
     const labelOffsetX = targetX - 6
     const labelOffsetY = targetY - 6
