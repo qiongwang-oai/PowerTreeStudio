@@ -8,7 +8,14 @@ export type ConverterNode = BaseNode & { type: 'Converter'; topology?: 'buck'|'l
 export type LoadNode = BaseNode & { type: 'Load'; Vreq: number; I_typ: number; I_max: number; I_idle?: number; duty_cycle?: number; critical?: boolean; numParalleledDevices?: number; Utilization_typ?: number; Utilization_max?: number }
 export type BusNode = BaseNode & { type: 'Bus'; V_bus: number }
 export type NoteNode = BaseNode & { type: 'Note'; text: string }
-export type SubsystemNode = BaseNode & { type: 'Subsystem'; inputV_nom: number; project: Project; projectFileName?: string; numParalleledSystems?: number }
+export type SubsystemNode = BaseNode & {
+  type: 'Subsystem'
+  inputV_nom: number
+  project: Project
+  projectFileName?: string
+  numParalleledSystems?: number
+  embeddedViewColor?: string
+}
 export type SubsystemInputNode = BaseNode & { type: 'SubsystemInput'; Vout: number }
 export type AnyNode = SourceNode|ConverterNode|LoadNode|BusNode|NoteNode|SubsystemNode|SubsystemInputNode
 export type Edge = {

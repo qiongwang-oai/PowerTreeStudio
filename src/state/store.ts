@@ -44,6 +44,10 @@ type State = {
   nestedSubsystemClear: (subsystemPath: string[]) => void
   openSubsystemIds: string[],
   setOpenSubsystemIds: (ids: string[]) => void
+  expandedSubsystemViews: Record<string, { offset: { x: number, y: number } }>
+  expandSubsystemView: (id: string) => void
+  collapseSubsystemView: (id: string) => void
+  setSubsystemViewOffset: (id: string, offset: { x: number, y: number }) => void
 }
 
 const saved = loadAutosave()
@@ -180,5 +184,38 @@ export const useStore = create<State>((set,get)=>({
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
   ,openSubsystemIds: [] as string[],
-  setOpenSubsystemIds: (ids) => set({ openSubsystemIds: ids })
+  setOpenSubsystemIds: (ids) => set({ openSubsystemIds: ids }),
+  expandedSubsystemViews: {},
+  expandSubsystemView: (id) => {
+    set(state => {
+      if (state.expandedSubsystemViews[id]) return {}
+      return {
+        expandedSubsystemViews: {
+          ...state.expandedSubsystemViews,
+          [id]: { offset: { x: 0, y: 0 } },
+        },
+      }
+    })
+  },
+  collapseSubsystemView: (id) => {
+    set(state => {
+      if (!state.expandedSubsystemViews[id]) return {}
+      const next = { ...state.expandedSubsystemViews }
+      delete next[id]
+      return { expandedSubsystemViews: next }
+    })
+  },
+  setSubsystemViewOffset: (id, offset) => {
+    set(state => {
+      const current = state.expandedSubsystemViews[id]
+      if (!current) return {}
+      if (current.offset.x === offset.x && current.offset.y === offset.y) return {}
+      return {
+        expandedSubsystemViews: {
+          ...state.expandedSubsystemViews,
+          [id]: { offset },
+        },
+      }
+    })
+  }
 }))

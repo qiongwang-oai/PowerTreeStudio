@@ -16,6 +16,9 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
   const removeNode = useStore(s=>s.removeNode)
   const updateEdge = useStore(s=>s.updateEdge as any)
   const removeEdge = useStore(s=>s.removeEdge)
+  const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
+  const expandSubsystemView = useStore(s=>s.expandSubsystemView)
+  const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
   const fileRef = React.useRef<HTMLInputElement>(null)
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
   const analysis = compute(project)
@@ -490,13 +493,43 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
             )}
             {node?.type==='Subsystem' && (
               <TabsContent value={tab} when="embed">
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between">
-                    <div>Embedded project: <b>{(node as any).projectFileName || 'None'}</b></div>
-                    <Button size="sm" onClick={()=> onOpenSubsystemEditor && onOpenSubsystemEditor(node.id)}>Open Editor</Button>
-                  </div>
-                  <div className="text-xs text-slate-500">Double-click the Subsystem node on canvas to open as well.</div>
-                </div>
+                {(() => {
+                  const subsystem = node as any
+                  const color = subsystem.embeddedViewColor || '#e0f2fe'
+                  const isExpanded = !!expandedSubsystemViews[subsystem.id]
+                  return (
+                    <div className="space-y-3 text-sm">
+                      <div className="flex items-center justify-between">
+                        <div>Embedded project: <b>{subsystem.projectFileName || 'None'}</b></div>
+                        <Button size="sm" onClick={()=> onOpenSubsystemEditor && onOpenSubsystemEditor(node.id)}>Open Editor</Button>
+                      </div>
+                      <div className="grid grid-cols-[auto,1fr] items-center gap-x-3 gap-y-2">
+                        <label className="text-xs uppercase tracking-wide text-slate-500">Container Color</label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            aria-label="Embedded view color"
+                            type="color"
+                            className="h-8 w-12 cursor-pointer border border-slate-300 rounded"
+                            value={color}
+                            onChange={e=>onChange('embeddedViewColor', e.target.value)}
+                          />
+                          <span className="text-xs text-slate-500">Overlay uses ~20% opacity.</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <div className="text-xs text-slate-500">Drag the container to move all embedded nodes together.</div>
+                        </div>
+                        {isExpanded ? (
+                          <Button size="sm" variant="outline" onClick={()=>collapseSubsystemView(subsystem.id)}>Hide Embedded View</Button>
+                        ) : (
+                          <Button size="sm" onClick={()=>expandSubsystemView(subsystem.id)}>Expand Embedded View</Button>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">Double-click the Subsystem node on canvas to open in the editor.</div>
+                    </div>
+                  )
+                })()}
               </TabsContent>
             )}
           </Tabs>

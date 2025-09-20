@@ -8,6 +8,7 @@ type OrthogonalEdgeData = {
   onMidpointChange?: (edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => void
   screenToFlow?: (pos: { x: number; y: number }) => { x: number; y: number }
   defaultColor?: string
+  extendMidpointRange?: boolean
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -112,11 +113,15 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
       event.preventDefault()
       const { x, y } = data.screenToFlow({ x: event.clientX, y: event.clientY })
       const pointerCoord = sourceAxis === 'y' ? y : x
-      const min = Math.min(axisStart, axisEnd)
-      const max = Math.max(axisStart, axisEnd)
+      const extra = data?.extendMidpointRange ? Math.max(160, Math.abs(axisEnd - axisStart)) : 0
+      const min = Math.min(axisStart, axisEnd) - extra
+      const max = Math.max(axisStart, axisEnd) + extra
       const bounded = clamp(pointerCoord, min, max)
       const delta = axisEnd - axisStart
-      if (Math.abs(delta) < 1e-6) return
+      if (Math.abs(delta) < 1e-6) {
+        data.onMidpointChange(id, 0.5, bounded)
+        return
+      }
       const ratioRaw = (bounded - axisStart) / delta
       const nextOffset = clamp(ratioRaw, 0, 1)
       data.onMidpointChange(id, nextOffset, bounded)

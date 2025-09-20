@@ -134,6 +134,29 @@ function CustomNode(props: NodeProps) {
           </div>
         </>
       )}
+      {nodeType==='SubsystemInput' && (
+        <>
+          <Handle type="target" position={Position.Left} id={props.id} style={{ background: '#555' }} />
+          <div
+            style={{
+              position: 'absolute',
+              left: -8,
+              top: 'calc(50% + 8px)',
+              transform: 'translate(-100%, 0)',
+              fontSize: '10px',
+              color: '#666',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              textAlign: 'right',
+            }}
+          >
+            {(() => {
+              const raw = Number((data as any)?.Vout)
+              return Number.isFinite(raw) ? `${raw} V` : 'input'
+            })()}
+          </div>
+        </>
+      )}
       {nodeType==='Subsystem' && (
         (() => {
           const ports = subsystemPorts
@@ -782,16 +805,29 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       while(stack.length){ const u=stack.pop()!; if (u===goal) return true; for (const v of (adj[u]||[])) if (!seen.has(v)){ seen.add(v); stack.push(v) } }
       return false
     }
-    if (c.source && c.target && reaches(c.target, c.source)) return
-    const edgeId = `${c.source}-${c.target}`
-    const baseOffset = (c.source && c.target)
-      ? getGroupOffset({ from: c.source, to: c.target, fromHandle: c.sourceHandle ?? undefined })
+    const resolvedConnection = (() => {
+      if (!c.target) return c
+      const targetNode = project.nodes.find(n => n.id === c.target)
+      if (!targetNode || (targetNode as any).type !== 'SubsystemInput') return c
+      const portId = targetNode.id
+      const owningSubsystem = project.nodes.find(n => (n as any).type === 'Subsystem' && Array.isArray((n as any).project?.nodes) && (n as any).project.nodes.some((inner: any) => inner.id === portId))
+      if (!owningSubsystem) return c
+      return {
+        ...c,
+        target: owningSubsystem.id,
+        targetHandle: portId,
+      }
+    })()
+    if (resolvedConnection.source && resolvedConnection.target && reaches(resolvedConnection.target, resolvedConnection.source)) return
+    const edgeId = `${resolvedConnection.source}-${resolvedConnection.target}`
+    const baseOffset = (resolvedConnection.source && resolvedConnection.target)
+      ? getGroupOffset({ from: resolvedConnection.source, to: resolvedConnection.target, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : 0.5
-    const groupInfo = (c.source)
-      ? groupMidpointInfo.get(edgeGroupKey({ from: c.source, fromHandle: c.sourceHandle ?? undefined }))
+    const groupInfo = (resolvedConnection.source)
+      ? groupMidpointInfo.get(edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined }))
       : undefined
     const baseMidpointX = groupInfo?.midpointX
-    const parent = project.nodes.find(n=>n.id===c.source) as any
+    const parent = project.nodes.find(n=>n.id===resolvedConnection.source) as any
     const parentV = parent?.type==='Source'? parent?.Vout
       : parent?.type==='Converter'? parent?.Vout
       : parent?.type==='Bus'? parent?.V_bus
@@ -806,22 +842,31 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       defaultColor,
     }
     setEdges(eds=>addEdge({
-      ...c,
+      ...resolvedConnection,
       id: edgeId,
       type: 'orthogonal',
-      sourceHandle: c.sourceHandle,
-      targetHandle: c.targetHandle,
+      source: resolvedConnection.source as any,
+      target: resolvedConnection.target as any,
+      sourceHandle: resolvedConnection.sourceHandle,
+      targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
       style: { strokeWidth: 2, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
-    if (c.source && c.target) {
-      const payload: any = { id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset }
+    if (resolvedConnection.source && resolvedConnection.target) {
+      const payload: any = {
+        id: edgeId,
+        from: resolvedConnection.source,
+        to: resolvedConnection.target,
+        fromHandle: (resolvedConnection.sourceHandle as any) || undefined,
+        toHandle: (resolvedConnection.targetHandle as any) || undefined,
+        midpointOffset: baseOffset,
+      }
       if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
       addEdgeStore(path, payload)
     }
-  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, path, project.edges, screenToFlowPosition])
+  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, path, project.edges, project.nodes, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (!isTopmostEditor) return

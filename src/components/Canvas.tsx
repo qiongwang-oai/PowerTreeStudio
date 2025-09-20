@@ -7,7 +7,7 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { validate } from '../rules'
-import type { Project, Scenario } from '../models'
+import type { AnyNode, Project, Scenario } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
@@ -138,6 +138,29 @@ function CustomNode(props: NodeProps) {
           </div>
         </>
       )}
+      {nodeType==='SubsystemInput' && (
+        <>
+          <Handle type="target" position={Position.Left} id={props.id} style={{ background: '#555' }} />
+          <div
+            style={{
+              position: 'absolute',
+              left: -8,
+              top: 'calc(50% + 8px)',
+              transform: 'translate(-100%, 0)',
+              fontSize: '10px',
+              color: '#666',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              textAlign: 'right',
+            }}
+          >
+            {(() => {
+              const raw = Number((data as any)?.Vout)
+              return Number.isFinite(raw) ? `${raw} V` : 'input'
+            })()}
+          </div>
+        </>
+      )}
       {nodeType==='Subsystem' && (
         (() => {
           const ports = subsystemPorts
@@ -233,6 +256,211 @@ function CustomNode(props: NodeProps) {
   );
 }
 
+function hexToRgba(hex: string, alpha: number) {
+  const normalized = hex?.startsWith('#') ? hex.slice(1) : hex
+  if (normalized.length !== 6) return `rgba(14, 165, 233, ${alpha})`
+  const bigint = parseInt(normalized, 16)
+  const r = (bigint >> 16) & 255
+  const g = (bigint >> 8) & 255
+  const b = bigint & 255
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
+}
+
+function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined) {
+  const parallelCount = parallelCountForNode(node as any)
+  const label = (
+    <div className="flex flex-col items-stretch gap-1">
+      <div className="text-center font-semibold">{node.name}</div>
+      <div className="flex items-stretch justify-between gap-2">
+        <div className="text-left">
+          {node.type === 'Source' && 'Vout' in node ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout}V</div>
+            </div>
+          ) : node.type === 'Converter' && 'Vout' in node && 'efficiency' in node ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout}V</div>
+              <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                const nodeResult = computeNodes?.[node.id]
+                const eff = (node as any).efficiency
+                if (eff?.type === 'curve' && nodeResult) {
+                  const eta = etaFromModel(eff, nodeResult?.P_out ?? 0, nodeResult?.I_out ?? 0, node as any)
+                  return (eta * 100).toFixed(1) + '%'
+                } else if (eff?.type === 'fixed') {
+                  return ((eff.value ?? 0) * 100).toFixed(1) + '%'
+                } else if ((eff as any)?.points?.[0]?.eta) {
+                  return (((eff as any).points[0].eta ?? 0) * 100).toFixed(1) + '%'
+                }
+                return '—'
+              })()}</div>
+            </div>
+          ) : node.type === 'Load' && 'Vreq' in node && 'I_typ' in node && 'I_max' in node ? (
+            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+              <div className="text-left">
+                <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(node as any).I_typ}A</div>
+                <div style={{fontSize:'11px',color:'#555'}}>I_max: {(node as any).I_max}A</div>
+                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledDevices ?? 1)}</div>
+              </div>
+              <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+              <div className="text-left" style={{minWidth:70}}>
+                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => {
+                  const nodeResult = computeNodes?.[node.id]
+                  const pin = nodeResult?.P_in
+                  return pin !== undefined ? pin.toFixed(2) : '—'
+                })()} W</div>
+              </div>
+            </div>
+          ) : node.type === 'Subsystem' ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((node as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledSystems ?? 1)}</div>
+            </div>
+          ) : node.type === 'SubsystemInput' ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
+              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout ?? 0}V</div>
+            </div>
+          ) : node.type === 'Note' && 'text' in node ? (
+            <div>
+              <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(node as any).text}</div>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+  const data: any = {
+    label,
+    type: node.type,
+    parallelCount,
+  }
+  if (node.type === 'Load') data.Vreq = (node as any).Vreq
+  if (node.type === 'Subsystem') {
+    data.inputPorts = ((node as any).project?.nodes||[])
+      .filter((x:any)=>x.type==='SubsystemInput')
+      .map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name }))
+  }
+  if (node.type === 'SubsystemInput') data.Vout = (node as any).Vout
+  return data
+}
+
+function EmbeddedSubsystemContainerNode(props: NodeProps) {
+  const { data, selected } = props
+  const color: string = data.color || '#0ea5e9'
+  const name: string = data.name || 'Subsystem'
+  const parallel: number = Number(data.parallelCount) || 1
+  const width: number = data.width || 320
+  const height: number = data.height || 240
+  const overlay = hexToRgba(color, 0.2)
+  const borderColor = color
+  return (
+    <div
+      style={{
+        width,
+        height,
+        border: `2px dashed ${borderColor}`,
+        borderRadius: 16,
+        background: overlay,
+        boxShadow: selected ? '0 0 0 3px rgba(14, 165, 233, 0.35)' : 'none',
+        position: 'relative',
+        transition: 'box-shadow 0.2s ease'
+      }}
+    >
+      <Handle type="source" position={Position.Right} id="output" style={{ background: color }} />
+      <div style={{ position: 'absolute', top: 12, left: 16, padding: '2px 8px', background: 'rgba(15, 23, 42, 0.65)', color: 'white', borderRadius: 8, fontSize: 12 }}>{name}</div>
+      <div style={{ position: 'absolute', top: 12, right: 16, padding: '2px 8px', background: 'rgba(14, 165, 233, 0.85)', color: 'white', borderRadius: 8, fontSize: 12 }}>x{parallel}</div>
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
+    </div>
+  )
+}
+
+type ExpandedSubsystemLayout = {
+  subsystemId: string
+  containerId: string
+  containerPosition: { x: number; y: number }
+  width: number
+  height: number
+  embeddedProject: Project
+  childNodes: { node: AnyNode; rfId: string; position: { x: number; y: number } }[]
+  inputNodeMap: Map<string, string>
+  analysis: ReturnType<typeof compute>
+  edgeMeta: Map<string, { offset?: number; localMidpoint?: number }>
+}
+
+function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<string, { offset: { x: number; y: number } }>): Map<string, ExpandedSubsystemLayout> {
+  const layouts = new Map<string, ExpandedSubsystemLayout>()
+  for (const [subsystemId, view] of Object.entries(expandedViews)) {
+    const subsystem = project.nodes.find(n => n.id === subsystemId && (n as any).type === 'Subsystem') as any
+    if (!subsystem || !subsystem.project) continue
+    const embeddedProject = subsystem.project as Project
+    const nodes = embeddedProject.nodes as AnyNode[]
+    if (!Array.isArray(nodes)) continue
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    for (const child of nodes) {
+      const x = typeof child.x === 'number' ? child.x : 0
+      const y = typeof child.y === 'number' ? child.y : 0
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      minX = 0
+      minY = 0
+      maxX = 320
+      maxY = 200
+    }
+    const padding = 80
+    const innerWidth = Math.max(0, maxX - minX)
+    const innerHeight = Math.max(0, maxY - minY)
+    const width = Math.max(280, innerWidth + padding)
+    const height = Math.max(220, innerHeight + padding)
+    const containerId = `${subsystemId}::container`
+    const containerPosition = {
+      x: (typeof subsystem.x === 'number' ? subsystem.x : 0) + (view.offset?.x ?? 0),
+      y: (typeof subsystem.y === 'number' ? subsystem.y : 0) + (view.offset?.y ?? 0),
+    }
+    const inputNodeMap = new Map<string, string>()
+    const childNodes: { node: AnyNode; rfId: string; position: { x: number; y: number } }[] = []
+    for (const child of nodes) {
+      const rfId = `${subsystemId}::${child.id}`
+      const position = {
+        x: (typeof child.x === 'number' ? child.x : 0) - minX + padding / 2,
+        y: (typeof child.y === 'number' ? child.y : 0) - minY + padding / 2,
+      }
+      childNodes.push({ node: child, rfId, position })
+      if ((child as any).type === 'SubsystemInput') {
+        inputNodeMap.set(child.id, rfId)
+      }
+    }
+    const cloned: Project = JSON.parse(JSON.stringify(embeddedProject))
+    cloned.currentScenario = project.currentScenario
+    const analysis = compute(cloned)
+    const edgeGroups = computeEdgeGroupInfo(embeddedProject.edges)
+    const edgeMeta = new Map<string, { offset?: number; localMidpoint?: number }>()
+    for (const edge of embeddedProject.edges) {
+      const info = edgeGroups.get(edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }))
+      const offset = (typeof edge.midpointOffset === 'number') ? edge.midpointOffset : info?.offset
+      const baseMidpoint = (typeof edge.midpointX === 'number') ? edge.midpointX : info?.midpointX
+      const localMidpoint = (typeof baseMidpoint === 'number') ? ((baseMidpoint - minX) + padding / 2) : undefined
+      edgeMeta.set(edge.id, { offset, localMidpoint })
+    }
+    layouts.set(subsystemId, {
+      subsystemId,
+      containerId,
+      containerPosition,
+      width,
+      height,
+      embeddedProject,
+      childNodes,
+      inputNodeMap,
+      analysis,
+      edgeMeta,
+    })
+  }
+  return layouts
+}
+
 const parallelCountForNode = (node: any): number => {
   if (!node) return 1;
   if (node.type === 'Load') {
@@ -257,14 +485,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const setClipboardNode = useStore(s=>s.setClipboardNode)
   const { screenToFlowPosition } = useReactFlow()
   const [openSubsystemIds, setOpenSubsystemIds] = useStore(s => [s.openSubsystemIds, s.setOpenSubsystemIds]);
+  const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
+  const setSubsystemViewOffset = useStore(s=>s.setSubsystemViewOffset)
+  const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
 
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
+  const expandedLayouts = useMemo(() => buildExpandedSubsystemLayouts(project, expandedSubsystemViews), [project, expandedSubsystemViews])
 
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
 
-  const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
+  const nodeTypes = useMemo(() => ({ custom: CustomNode, embeddedSubsystemContainer: EmbeddedSubsystemContainerNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
 
   const computeResult = useMemo(()=> compute(project), [project])
@@ -295,99 +527,95 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     return { criticalLoadPower: deep.criticalLoadPower, nonCriticalLoadPower: deep.nonCriticalLoadPower, edgeLoss: deep.edgeLoss, converterLoss: deep.converterLoss, overallEta: eta }
   }, [project, computeResult])
 
-  const rfNodesInit: RFNode[] = useMemo(() => project.nodes.map(n => {
-    const parallelCount = parallelCountForNode(n as any);
-    return ({
-      id: n.id,
-      data: {
-        label: (
-          <div className="flex flex-col items-stretch gap-1">
-            <div className="text-center font-semibold">{n.name}</div>
-            <div className="flex items-stretch justify-between gap-2">
-              <div className="text-left">
-                {n.type === 'Source' && 'Vout' in n ? (
-                  <div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                  </div>
-                ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-                  <div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
-                      const nodeResult = computeResult.nodes[n.id];
-                      const eff = (n as any).efficiency;
-                      if (eff?.type === 'curve' && nodeResult) {
-                        const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
-                        return (eta * 100).toFixed(1) + '%';
-                      } else if (eff?.type === 'fixed') {
-                        return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                      } else if (eff?.points?.[0]?.eta) {
-                        return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
-                      } else {
-                        return '—';
-                      }
-                    })()}</div>
-                  </div>
-                 ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                  <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-                    <div className="text-left">
-                      <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                      <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                      <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
-                    </div>
-                    <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-                    <div className="text-left" style={{minWidth:70}}>
-                      <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
-                    </div>
-                  </div>
-                 ) : n.type === 'Subsystem' ? (
-                  <div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
-                  </div>
-                 ) : n.type === 'SubsystemInput' ? (
-                  <div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
-                  </div>
-                 ) : n.type === 'Note' && 'text' in n ? (
-                  <div>
-                    <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
-                  </div>
-                 ) : null}
-              </div>
-              {/* Right power intentionally empty on init; will be filled by compute effect */}
-            </div>
-          </div>
-        ),
-        type: n.type,
-        parallelCount,
-        ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
-        ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
-      },
-      position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
-      type: 'custom',
-      draggable: true,
-      selected: false,
-    })
-  }), [project.nodes])
+  const rfNodesInit: RFNode[] = useMemo(() => {
+    const nodes: RFNode[] = []
+    const expandedIds = new Set(expandedLayouts.keys())
+    for (const node of project.nodes as AnyNode[]) {
+      if (node.type === 'Subsystem' && expandedIds.has(node.id)) {
+        const layout = expandedLayouts.get(node.id)
+        if (!layout) continue
+        const color = (node as any).embeddedViewColor || '#0ea5e9'
+        nodes.push({
+          id: layout.containerId,
+          type: 'embeddedSubsystemContainer',
+          position: layout.containerPosition,
+          data: {
+            subsystemId: node.id,
+            name: node.name,
+            parallelCount: (node as any).numParalleledSystems ?? 1,
+            color,
+            width: layout.width,
+            height: layout.height,
+          },
+          draggable: true,
+          selectable: true,
+          style: { width: layout.width, height: layout.height },
+        })
+        for (const child of layout.childNodes) {
+          const childData = buildNodeDisplayData(child.node, layout.analysis.nodes)
+          nodes.push({
+            id: child.rfId,
+            type: 'custom',
+            position: child.position,
+            data: {
+              ...childData,
+              owningSubsystemId: node.id,
+              originalNodeId: child.node.id,
+            },
+            parentNode: layout.containerId,
+            extent: 'parent',
+            draggable: false,
+            selectable: false,
+          })
+        }
+      } else {
+        const data = buildNodeDisplayData(node, computeResult.nodes)
+        nodes.push({
+          id: node.id,
+          type: 'custom',
+          position: { x: node.x ?? (Math.random()*400)|0, y: node.y ?? (Math.random()*300)|0 },
+          data,
+          draggable: true,
+          selectable: true,
+        })
+      }
+    }
+    return nodes
+  }, [project.nodes, computeResult.nodes, expandedLayouts])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
   const nodePositions = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>()
     for (const node of nodes) {
-      map.set(node.id, { x: node.position.x, y: node.position.y })
+      const abs = (node as any).positionAbsolute
+      if (abs && typeof abs.x === 'number' && typeof abs.y === 'number') {
+        map.set(node.id, { x: abs.x, y: abs.y })
+      } else {
+        map.set(node.id, { x: node.position.x, y: node.position.y })
+      }
     }
     return map
   }, [nodes])
+
+  const resolveNodePosition = useCallback((id?: string) => {
+    if (!id) return undefined
+    const direct = nodePositions.get(id)
+    if (direct) return direct
+    if (expandedLayouts.has(id)) {
+      const layout = expandedLayouts.get(id)!
+      return nodePositions.get(layout.containerId) ?? layout.containerPosition
+    }
+    return undefined
+  }, [expandedLayouts, nodePositions])
 
   const getGroupOffset = useCallback((edge: { from: string; to?: string; fromHandle?: string | null }) => {
     const info = groupMidpointInfo.get(edgeGroupKey(edge))
     if (!info) return 0.5
     const { midpointX, offset } = info
     if (midpointX === undefined) return offset
-    const sourcePos = nodePositions.get(edge.from)
-    const targetPos = edge.to ? nodePositions.get(edge.to) : undefined
+    const sourcePos = resolveNodePosition(edge.from)
+    const targetPos = resolveNodePosition(edge.to)
     const startX = sourcePos?.x
     const endX = targetPos?.x
     if (typeof startX === 'number' && typeof endX === 'number' && Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
@@ -397,7 +625,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       }
     }
     return offset
-  }, [groupMidpointInfo, nodePositions])
+  }, [groupMidpointInfo, resolveNodePosition])
 
   const handleMidpointChange = useCallback((edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => {
     if (!updateEdgeStore) return
@@ -406,8 +634,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     const sourceEdge = project.edges.find(e => e.id === edgeId)
     if (!sourceEdge) return
     const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
-    const sourcePos = nodePositions.get(sourceEdge.from)
-    const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+    const sourcePos = resolveNodePosition(sourceEdge.from)
+    const targetPos = resolveNodePosition(sourceEdge.to)
     let midpointX: number | undefined
     if (typeof absoluteAxisCoord === 'number' && Number.isFinite(absoluteAxisCoord)) {
       midpointX = absoluteAxisCoord
@@ -426,7 +654,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         updateEdgeStore(edge.id, { midpointOffset: clamped })
       }
     }
-  }, [nodePositions, project.edges, updateEdgeStore])
+  }, [project.edges, resolveNodePosition, updateEdgeStore])
 
   useEffect(() => {
     if (!updateEdgeStore) return
@@ -437,8 +665,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       processed.add(key)
       const info = groupMidpointInfo.get(key)
       if (!info || info.midpointX !== undefined) continue
-      const sourcePos = nodePositions.get(edge.from)
-      const targetPos = nodePositions.get(edge.to)
+      const sourcePos = resolveNodePosition(edge.from)
+      const targetPos = resolveNodePosition(edge.to)
       if (!sourcePos || !targetPos) continue
       const startX = sourcePos.x
       const endX = targetPos.x
@@ -450,273 +678,144 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         updateEdgeStore(groupEdge.id, { midpointX })
       }
     }
-  }, [groupMidpointInfo, nodePositions, project.edges, updateEdgeStore])
+  }, [groupMidpointInfo, project.edges, resolveNodePosition, updateEdgeStore])
 
-  const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
-    const I = computeResult.edges[e.id]?.I_edge ?? 0
-    const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
-    const parent = project.nodes.find(n=>n.id===e.from) as any
-    const child = project.nodes.find(n=>n.id===e.to) as any
-    const parentV = parent?.type==='Source'? parent?.Vout
-      : parent?.type==='Converter'? parent?.Vout
-      : parent?.type==='Bus'? parent?.V_bus
-      : parent?.type==='SubsystemInput'? parent?.Vout
-      : undefined
-    const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
-    const childDirectVin = child?.type==='Load'? child?.Vreq
-      : child?.type==='Subsystem'? (()=>{
-          const portId = (e as any).toHandle
-          if (portId){
-            const p = (child as any)?.project?.nodes?.find((x:any)=>x.id===portId)
-            return p?.Vout
-          }
-          const ports = (child as any)?.project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')
-          return ports?.length===1? ports[0]?.Vout : undefined
-        })()
-      : undefined
-    const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
-    const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
-    const mismatch = convRangeViolation || eqViolation
-    const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
-    const info = groupMidpointInfo.get(key)
-    const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
-    const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
-    const currentLabel = I.toFixed(1)
-    const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
-    const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-    const edgeColor = voltageToEdgeColor(parentV)
-    const defaultColor = mismatch ? '#ef4444' : edgeColor
-    const edgeData = {
-      midpointOffset,
-      midpointX: info?.midpointX,
-      onMidpointChange: handleMidpointChange,
-      screenToFlow: screenToFlowPosition,
-      defaultColor,
+  const rfEdgesInit: RFEdge[] = useMemo(() => {
+    const edges: RFEdge[] = []
+    const expandedIds = new Set(expandedLayouts.keys())
+    for (const e of project.edges) {
+      const I = computeResult.edges[e.id]?.I_edge ?? 0
+      const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+      const parent = project.nodes.find(n=>n.id===e.from) as any
+      const child = project.nodes.find(n=>n.id===e.to) as any
+      const parentV = parent?.type==='Source'? parent?.Vout
+        : parent?.type==='Converter'? parent?.Vout
+        : parent?.type==='Bus'? parent?.V_bus
+        : parent?.type==='SubsystemInput'? parent?.Vout
+        : undefined
+      const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+      const childDirectVin = child?.type==='Load'? child?.Vreq
+        : child?.type==='Subsystem'? (()=>{
+            const portId = (e as any).toHandle
+            if (portId){
+              const p = (child as any)?.project?.nodes?.find((x:any)=>x.id===portId)
+              return p?.Vout
+            }
+            const ports = (child as any)?.project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')
+            return ports?.length===1? ports[0]?.Vout : undefined
+          })()
+        : undefined
+      const convRangeViolation = (parentV!==undefined && childRange!==undefined) ? !(parentV>=childRange.min && parentV<=childRange.max) : false
+      const eqViolation = (parentV!==undefined && childDirectVin!==undefined) ? (parentV !== childDirectVin) : false
+      const mismatch = convRangeViolation || eqViolation
+      const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
+      const info = groupMidpointInfo.get(key)
+      const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
+      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+      const currentLabel = I.toFixed(1)
+      const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
+      const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
+      const edgeColor = voltageToEdgeColor(parentV)
+      const defaultColor = mismatch ? '#ef4444' : edgeColor
+      const edgeData = {
+        midpointOffset,
+        midpointX: info?.midpointX,
+        onMidpointChange: handleMidpointChange,
+        screenToFlow: screenToFlowPosition,
+        defaultColor,
+        extendMidpointRange: expandedIds.has(e.from) || expandedIds.has(e.to),
+      }
+      let sourceId = e.from
+      let targetId = e.to
+      let sourceHandle = (e as any).fromHandle
+      let targetHandle = (e as any).toHandle
+      if (expandedIds.has(e.from)) {
+        const layout = expandedLayouts.get(e.from)!
+        sourceId = layout.containerId
+        sourceHandle = 'output'
+      }
+      if (expandedIds.has(e.to)) {
+        const layout = expandedLayouts.get(e.to)!
+        const mapped = targetHandle ? layout.inputNodeMap.get(targetHandle) : undefined
+        if (mapped) {
+          targetId = mapped
+          targetHandle = mapped
+        } else if (layout.inputNodeMap.size === 1) {
+          const only = Array.from(layout.inputNodeMap.values())[0]
+          targetId = only
+          targetHandle = only
+        } else {
+          targetId = layout.containerId
+          targetHandle = undefined
+        }
+      }
+      edges.push({
+        id: e.id,
+        type: 'orthogonal',
+        source: sourceId,
+        target: targetId,
+        sourceHandle,
+        targetHandle,
+        animated: false,
+        label,
+        labelStyle: { fill: defaultColor },
+        style: { strokeWidth, stroke: defaultColor },
+        data: edgeData,
+        selected: false,
+      })
     }
-    return ({
-      id: e.id,
-      type: 'orthogonal',
-      source: e.from,
-      target: e.to,
-      sourceHandle: (e as any).fromHandle,
-      targetHandle: (e as any).toHandle,
-      animated: false,
-      label,
-      labelStyle: { fill: defaultColor },
-      style: { strokeWidth, stroke: defaultColor },
-      data: edgeData,
-      selected: false,
-    })
-  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+    for (const layout of expandedLayouts.values()) {
+      const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+      const embeddedEdges = layout.embeddedProject.edges
+      for (const e of embeddedEdges) {
+        const localEdgeResult = layout.analysis.edges[e.id] || {}
+        const I = localEdgeResult.I_edge ?? 0
+        const strokeWidth = Math.max(1.5, 1.5 + 2 * Math.log10(I + 1e-3))
+        const parent = layout.embeddedProject.nodes.find(n=>n.id===e.from) as any
+        const parentV = parent?.type==='Source'? parent?.Vout
+          : parent?.type==='Converter'? parent?.Vout
+          : parent?.type==='Bus'? parent?.V_bus
+          : parent?.type==='SubsystemInput'? parent?.Vout
+          : undefined
+        const baseLabel = `${(e.interconnect?.R_milliohm ?? 0).toFixed(1)} mΩ | ${I.toFixed(1)} A`
+        const edgeColor = voltageToEdgeColor(parentV)
+        const meta = layout.edgeMeta.get(e.id) || {}
+        const midpointOffset = meta.offset ?? (typeof e.midpointOffset === 'number' ? e.midpointOffset : 0.5)
+        const midpointX = typeof meta.localMidpoint === 'number'
+          ? containerPos.x + meta.localMidpoint
+          : undefined
+        edges.push({
+          id: `${layout.subsystemId}::edge::${e.id}`,
+          type: 'orthogonal',
+          source: `${layout.subsystemId}::${e.from}`,
+          target: `${layout.subsystemId}::${e.to}`,
+          sourceHandle: (e as any).fromHandle,
+          targetHandle: (e as any).toHandle,
+          animated: false,
+          label: baseLabel,
+          labelStyle: { fill: edgeColor },
+          style: { strokeWidth, stroke: edgeColor },
+          data: {
+            midpointOffset,
+            ...(typeof midpointX === 'number' ? { midpointX } : {}),
+            defaultColor: edgeColor,
+          },
+          selectable: false,
+        })
+      }
+    }
+    return edges
+  }, [project.edges, project.nodes, computeResult.edges, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, screenToFlowPosition])
 
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
 
-  // Sync when project nodes change (add/remove); preserve positions of existing nodes
-  useEffect(()=>{
-    setNodes(prev => {
-      const prevById = new Map(prev.map(p=>[p.id, p]))
-      const mapped: RFNode[] = project.nodes.map(n=>{
-        const existing = prevById.get(n.id)
-        const fallbackPosition = existing?.position ?? { x: (Math.random()*400)|0, y: (Math.random()*300)|0 }
-        const position = {
-          x: typeof n.x === 'number' ? n.x : fallbackPosition.x,
-          y: typeof n.y === 'number' ? n.y : fallbackPosition.y,
-        }
-        const parallelCount = parallelCountForNode(n as any)
-        return {
-          id: n.id,
-          data: {
-            label: (
-              <div className="flex flex-col items-stretch gap-1">
-                <div className="text-center font-semibold">{n.name}</div>
-                <div className="flex items-stretch justify-between gap-2">
-                  <div className="text-left">
-                    {n.type === 'Source' && 'Vout' in n ? (
-                      <div>
-                        <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                      </div>
-                    ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-                      <div>
-                        <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-                        <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
-                          const nodeResult = computeResult.nodes[n.id];
-                          const eff = (n as any).efficiency;
-                          if (eff?.type === 'curve' && nodeResult) {
-                            const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
-                            return (eta * 100).toFixed(1) + '%';
-                          } else if (eff?.type === 'fixed') {
-                            return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                          } else if (eff?.points?.[0]?.eta) {
-                            return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
-                          } else {
-                            return '—';
-                          }
-                        })()}</div>
-                      </div>
-           ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                      <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-                        <div className="text-left">
-                          <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                          <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                          <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
-                        </div>
-                        <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-                        <div className="text-left" style={{minWidth:70}}>
-                          <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
-                        </div>
-                      </div>
-           ) : n.type === 'Subsystem' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
-            </div>
-           ) : n.type === 'SubsystemInput' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
-            </div>
-           ) : n.type === 'Note' && 'text' in n ? (
-             <div>
-               <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
-             </div>
-           ) : null}
-                  </div>
-                  {/* Right power intentionally empty here; compute effect will populate */}
-                </div>
-              </div>
-            ),
-            type: n.type,
-            parallelCount,
-            ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
-            ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
-          },
-          position,
-          type: 'custom',
-          draggable: true,
-          selected: existing?.selected ?? false,
-        }
-      })
-      return mapped
-    })
-  }, [project.nodes, setNodes])
+  useEffect(() => {
+    setNodes(rfNodesInit)
+  }, [rfNodesInit, setNodes])
 
-  // Update power info in labels when computeResult changes without resetting positions
-  useEffect(()=>{
-    setNodes(prev => prev.map(rn => {
-      const n = project.nodes.find(x=>x.id===rn.id)
-      if (!n) return rn
-      // Left details without name
-      const left = (
-        <div className="text-left">
-          {n.type === 'Source' && 'Vout' in n ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-            </div>
-          ) : n.type === 'Converter' && 'Vout' in n && 'efficiency' in n ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
-                const nodeResult = computeResult.nodes[n.id];
-                const eff = (n as any).efficiency;
-                if (eff?.type === 'curve' && nodeResult) {
-                  const eta = etaFromModel(eff, nodeResult.P_out ?? 0, nodeResult.I_out ?? 0, n as any);
-                  return (eta * 100).toFixed(1) + '%';
-                } else if (eff?.type === 'fixed') {
-                  return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                } else if (eff?.points?.[0]?.eta) {
-                  return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
-                } else {
-                  return '—';
-                }
-              })()}</div>
-            </div>
-          ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
-            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-              <div className="text-left">
-                <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
-              </div>
-              <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-              <div className="text-left" style={{minWidth:70}}>
-                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
-              </div>
-            </div>
-          ) : n.type === 'Subsystem' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Inputs: {(((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>`${x.Vout}V`).join(', ')) || '—'}</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
-            </div>
-          ) : n.type === 'SubsystemInput' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(n as any).Vout ?? 0}V</div>
-            </div>
-          ) : n.type === 'Note' && 'text' in n ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(n as any).text}</div>
-            </div>
-          ) : null}
-        </div>
-      )
-      // Right power info: special-case Subsystem to show P_in(single) and P_in(total)
-      const nodeRes = computeResult.nodes[n.id]
-      let right: React.ReactNode = null
-      if (n.type === 'Subsystem'){
-        const pinSingle = (nodeRes as any)?.P_in_single
-        const pinTotal = nodeRes?.P_in
-        if (pinSingle !== undefined || pinTotal !== undefined){
-          right = (
-            <>
-              <div className="w-px bg-slate-300 mx-1" />
-              <div className="text-left min-w-[70px]">
-                {pinSingle !== undefined && (
-                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(single): {pinSingle.toFixed(2)} W</div>
-                )}
-                {pinTotal !== undefined && (
-                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(total): {pinTotal.toFixed(2)} W</div>
-                )}
-              </div>
-            </>
-          )
-        }
-      } else {
-        const pout = nodeRes?.P_out
-        const pin = nodeRes?.P_in
-        const showPout = (pout !== undefined) && (n.type !== 'Load')
-        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Bus')
-        right = (showPout || showPin) ? (
-          <>
-            <div className="w-px bg-slate-300 mx-1" />
-            <div className="text-left min-w-[70px]">
-              {showPin && (
-                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
-              )}
-              {showPout && (
-                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
-              )}
-            </div>
-          </>
-        ) : null
-      }
-
-      return {
-        ...rn,
-        data: {
-          ...rn.data,
-          parallelCount: parallelCountForNode(n as any),
-          label: (
-            <div className="flex flex-col items-stretch gap-1">
-              <div className="text-center font-semibold">{n.name}</div>
-              <div className="flex items-stretch justify-between gap-2">
-                {left}
-                {right}
-              </div>
-            </div>
-          )
-        }
-      }
-    }))
-  }, [computeResult, project.nodes, setNodes])
+  useEffect(() => {
+    setEdges(rfEdgesInit)
+  }, [rfEdgesInit, setEdges])
 
   useEffect(() => {
     setNodes(prev => prev.map(rn => {
@@ -727,67 +826,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   }, [selectedNodeId, setNodes])
 
   useEffect(() => {
-    setEdges(prev => {
-      const prevById = new Map(prev.map(p => [p.id, p]))
-      return project.edges.map(e => {
-        const I = computeResult.edges[e.id]?.I_edge ?? 0
-        const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
-        const parent = project.nodes.find(n => n.id === e.from) as any
-        const child = project.nodes.find(n => n.id === e.to) as any
-        const parentV = parent?.type === 'Source' ? parent?.Vout
-          : parent?.type === 'Converter' ? parent?.Vout
-          : parent?.type === 'Bus' ? parent?.V_bus
-          : parent?.type === 'SubsystemInput' ? parent?.Vout
-          : undefined
-        const childRange = child?.type === 'Converter' ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
-        const childDirectVin = child?.type === 'Load' ? child?.Vreq
-          : child?.type === 'Subsystem' ? (() => {
-              const portId = (e as any).toHandle
-              if (portId) {
-                const p = (child as any)?.project?.nodes?.find((x: any) => x.id === portId)
-                return p?.Vout
-              }
-              const ports = (child as any)?.project?.nodes?.filter((x: any) => x.type === 'SubsystemInput')
-              return ports?.length === 1 ? ports[0]?.Vout : undefined
-            })()
-          : undefined
-        const convRangeViolation = (parentV !== undefined && childRange !== undefined) ? !(parentV >= childRange.min && parentV <= childRange.max) : false
-        const eqViolation = (parentV !== undefined && childDirectVin !== undefined) ? (parentV !== childDirectVin) : false
-        const mismatch = convRangeViolation || eqViolation
-        const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
-        const info = groupMidpointInfo.get(key)
-        const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
-        const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
-        const currentLabel = I.toFixed(1)
-        const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
-        const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-        const edgeColor = voltageToEdgeColor(parentV)
-        const defaultColor = mismatch ? '#ef4444' : edgeColor
-        const edgeData = {
-          midpointOffset,
-          midpointX: info?.midpointX,
-          onMidpointChange: handleMidpointChange,
-          screenToFlow: screenToFlowPosition,
-          defaultColor,
-        }
-        const existing = prevById.get(e.id)
-        return {
-          id: e.id,
-          type: 'orthogonal',
-          source: e.from,
-          target: e.to,
-          sourceHandle: (e as any).fromHandle,
-          targetHandle: (e as any).toHandle,
-          animated: false,
-          label,
-          labelStyle: { fill: defaultColor },
-          style: { strokeWidth, stroke: defaultColor },
-          data: edgeData,
-          selected: existing?.selected ?? false,
-        }
-      })
-    })
-  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+    if (!selectedNodeId) return
+    if (selectedNodeId.endsWith('::container')) {
+      const subsystemId = selectedNodeId.split('::')[0]
+      if (!expandedSubsystemViews[subsystemId]) {
+        setSelectedNodeId(subsystemId)
+      }
+    } else if (expandedLayouts.has(selectedNodeId)) {
+      const containerId = `${selectedNodeId}::container`
+      setSelectedNodeId(containerId)
+    }
+  }, [selectedNodeId, expandedLayouts, expandedSubsystemViews])
+
 
   useEffect(() => {
     setEdges(prev => prev.map(edge => {
@@ -801,12 +851,25 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     setNodes(nds=>applyNodeChanges(changes, nds))
     for (const ch of changes){
       if (ch.type === 'position' && ch.dragging === false){
+        if (ch.id.includes('::')) {
+          if (ch.id.endsWith('::container')) {
+            const subsystemId = ch.id.split('::')[0]
+            const subsystem = project.nodes.find(n=>n.id===subsystemId)
+            const pos = ch.position || nodes.find(x=>x.id===ch.id)?.position
+            if (subsystem && pos) {
+              const baseX = typeof subsystem.x === 'number' ? subsystem.x : 0
+              const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
+              setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
+            }
+          }
+          continue
+        }
         const n = nodes.find(x=>x.id===ch.id)
         const pos = n?.position || ch.position
         if (pos) updatePos(ch.id, pos.x, pos.y)
       }
     }
-  }, [nodes])
+  }, [nodes, project.nodes, setSubsystemViewOffset, updatePos])
 
   const onConnect = useCallback((c: Connection)=>{
     const reaches = (start:string, goal:string)=>{
@@ -816,16 +879,46 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       while(stack.length){ const u=stack.pop()!; if (u===goal) return true; for (const v of (adj[u]||[])) if (!seen.has(v)){ seen.add(v); stack.push(v) } }
       return false
     }
-    if (c.source && c.target && reaches(c.target, c.source)) return
-    const edgeId = `${c.source}-${c.target}`
-    const baseOffset = (c.source && c.target)
-      ? getGroupOffset({ from: c.source, to: c.target, fromHandle: c.sourceHandle ?? undefined })
+    const resolvedConnection = (() => {
+      if (!c.target) return c
+      if (c.target.includes('::')) {
+        const [subsystemId, innerId] = c.target.split('::')
+        if (innerId === 'container') {
+          return { ...c, target: subsystemId }
+        }
+        const layout = expandedLayouts.get(subsystemId)
+        if (layout && layout.inputNodeMap.has(innerId)) {
+          return { ...c, target: subsystemId, targetHandle: innerId }
+        }
+      }
+      const targetNode = project.nodes.find(n => n.id === c.target)
+      if (!targetNode || (targetNode as any).type !== 'SubsystemInput') return c
+      const portId = targetNode.id
+      const owningSubsystem = project.nodes.find(n => (n as any).type === 'Subsystem' && Array.isArray((n as any).project?.nodes) && (n as any).project.nodes.some((inner: any) => inner.id === portId))
+      if (!owningSubsystem) return c
+      return {
+        ...c,
+        target: owningSubsystem.id,
+        targetHandle: portId,
+      }
+    })()
+    if (resolvedConnection.source && resolvedConnection.target && reaches(resolvedConnection.target, resolvedConnection.source)) return
+    const edgeId = `${resolvedConnection.source}-${resolvedConnection.target}`
+    const baseOffset = (resolvedConnection.source && resolvedConnection.target)
+      ? getGroupOffset({ from: resolvedConnection.source, to: resolvedConnection.target, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : 0.5
-    const groupInfo = (c.source)
-      ? groupMidpointInfo.get(edgeGroupKey({ from: c.source, fromHandle: c.sourceHandle ?? undefined }))
-      : undefined
-    const baseMidpointX = groupInfo?.midpointX
-    const parent = project.nodes.find(n=>n.id===c.source) as any
+    const baseMidpointX = (() => {
+      if (!resolvedConnection.source) return undefined
+      const info = groupMidpointInfo.get(edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined }))
+      if (info?.midpointX !== undefined) return info.midpointX
+      const srcPos = resolveNodePosition(resolvedConnection.source)
+      const tgtPos = resolveNodePosition(resolvedConnection.target)
+      if (srcPos && tgtPos && Number.isFinite(srcPos.x) && Number.isFinite(tgtPos.x) && Math.abs(tgtPos.x - srcPos.x) > 1e-3) {
+        return srcPos.x + (tgtPos.x - srcPos.x) * baseOffset
+      }
+      return undefined
+    })()
+    const parent = project.nodes.find(n=>n.id===resolvedConnection.source) as any
     const parentV = parent?.type==='Source'? parent?.Vout
       : parent?.type==='Converter'? parent?.Vout
       : parent?.type==='Bus'? parent?.V_bus
@@ -840,22 +933,31 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       defaultColor,
     }
     setEdges(eds=>addEdge({
-      ...c,
+      ...resolvedConnection,
       id: edgeId,
       type: 'orthogonal',
-      sourceHandle: c.sourceHandle,
-      targetHandle: c.targetHandle,
+      source: resolvedConnection.source as any,
+      target: resolvedConnection.target as any,
+      sourceHandle: resolvedConnection.sourceHandle,
+      targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
       style: { strokeWidth: 2, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
-    if (c.source && c.target) {
-      const payload: any = { id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset }
+    if (resolvedConnection.source && resolvedConnection.target) {
+      const payload: any = {
+        id: edgeId,
+        from: resolvedConnection.source,
+        to: resolvedConnection.target,
+        fromHandle: (resolvedConnection.sourceHandle as any) || undefined,
+        toHandle: (resolvedConnection.targetHandle as any) || undefined,
+        midpointOffset: baseOffset,
+      }
       if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
       addEdgeStore(payload)
     }
-  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, project.edges, screenToFlowPosition])
+  }, [addEdgeStore, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, project.edges, project.nodes, resolveNodePosition, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (openSubsystemIds && openSubsystemIds.length > 0) return
@@ -976,7 +1078,14 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         edgeTypes={edgeTypes}
         fitView
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
-        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id); setSelectedEdgeId(null)}}
+        onNodeClick={(_,n)=>{
+          const nodeId = n.id
+          const isContainer = nodeId.endsWith('::container')
+          const inspectorId = isContainer ? nodeId.split('::')[0] : nodeId
+          onSelect(inspectorId)
+          setSelectedNodeId(nodeId)
+          setSelectedEdgeId(null)
+        }}
         onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
@@ -984,7 +1093,16 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         onEdgesDelete={onEdgesDelete}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(n.id) }}
+        onNodeDoubleClick={(_,n)=>{
+          const nodeId = n.id
+          if (nodeId.endsWith('::container')) {
+            const subsystemId = nodeId.split('::')[0]
+            if (onOpenSubsystem) onOpenSubsystem(subsystemId)
+            return
+          }
+          const t=(n as any).data?.type
+          if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(nodeId)
+        }}
       >
         <MiniMap /><Controls /><Background gap={16} />
       </ReactFlow>
