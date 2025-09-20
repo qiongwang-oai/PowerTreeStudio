@@ -18,10 +18,10 @@ const EMBEDDED_CONTAINER_MIN_WIDTH = 320
 const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
 const EMBEDDED_NODE_MARGIN_X = 48
 const EMBEDDED_NODE_MARGIN_TOP = 32
-const EMBEDDED_NODE_MARGIN_BOTTOM = 0
+const EMBEDDED_NODE_MARGIN_BOTTOM = 16
 const EMBEDDED_EDGE_MARGIN_X = 48
 const EMBEDDED_EDGE_MARGIN_TOP = 16
-const EMBEDDED_EDGE_MARGIN_BOTTOM = 0
+const EMBEDDED_EDGE_MARGIN_BOTTOM = 12
 const DEFAULT_EMBEDDED_NODE_WIDTH = 200
 const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
 
@@ -460,22 +460,23 @@ function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: numbe
     case 'Load':
       return {
         width: hasWidth ? rawWidth : 236,
-        height: hasHeight ? rawHeight : 132,
+        // Align closer to the rendered card height so container padding stays tight.
+        height: hasHeight ? rawHeight : 108,
       }
     case 'Converter':
       return {
         width: hasWidth ? rawWidth : 210,
-        height: hasHeight ? rawHeight : 118,
+        height: hasHeight ? rawHeight : 102,
       }
     case 'Source':
       return {
         width: hasWidth ? rawWidth : 190,
-        height: hasHeight ? rawHeight : 102,
+        height: hasHeight ? rawHeight : 94,
       }
     case 'SubsystemInput':
       return {
         width: hasWidth ? rawWidth : 200,
-        height: hasHeight ? rawHeight : 108,
+        height: hasHeight ? rawHeight : 100,
       }
     case 'Subsystem': {
       const ports = Array.isArray((node as any).project?.nodes)
@@ -490,7 +491,7 @@ function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: numbe
     case 'Bus':
       return {
         width: hasWidth ? rawWidth : 200,
-        height: hasHeight ? rawHeight : 110,
+        height: hasHeight ? rawHeight : 102,
       }
     case 'Note': {
       const text = String((node as any).text ?? '')
@@ -997,7 +998,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       if (rn.selected === shouldSelect) return rn
       return { ...rn, selected: shouldSelect }
     }))
-  }, [selectedNodeId, setNodes])
+  }, [selectedNodeId, rfNodesInit, setNodes])
 
   useEffect(() => {
     if (!selectedNodeId) return
@@ -1019,7 +1020,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       if (edge.selected === shouldSelect) return edge
       return { ...edge, selected: shouldSelect }
     }))
-  }, [selectedEdgeId, setEdges])
+  }, [selectedEdgeId, rfEdgesInit, setEdges])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
@@ -1259,6 +1260,14 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         fitView
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
         onNodeClick={(_,n)=>{
+          const nodeId = n.id
+          const isContainer = nodeId.endsWith('::container')
+          const inspectorId = isContainer ? nodeId.split('::')[0] : nodeId
+          onSelect(inspectorId)
+          setSelectedNodeId(nodeId)
+          setSelectedEdgeId(null)
+        }}
+        onNodeDragStart={(_,n)=>{
           const nodeId = n.id
           const isContainer = nodeId.endsWith('::container')
           const inspectorId = isContainer ? nodeId.split('::')[0] : nodeId
