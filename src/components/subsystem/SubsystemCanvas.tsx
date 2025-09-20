@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Project, AnyNode } from '../../models'
+import { Project, AnyNode, Edge } from '../../models'
 import { compute, etaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
@@ -281,6 +281,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const path = useMemo(()=> (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId], [subsystemPath, subsystemId])
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
+  const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
+  const setEdgesRef = useRef<React.Dispatch<React.SetStateAction<RFEdge[]>> | null>(null)
+  useEffect(() => {
+    liveMidpointDraft.current.clear()
+  }, [project.edges])
   const isTopmostEditor = useMemo(()=>{
     if (!openSubsystemIds || openSubsystemIds.length === 0) return true
     if (path.length !== openSubsystemIds.length) return false
@@ -397,32 +402,70 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     return offset
   }, [groupMidpointInfo, nodePositions])
 
-  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => {
-    if (!Number.isFinite(nextOffset)) return
-    if (!updateEdgeNested) return
-    const clamped = Math.min(1, Math.max(0, nextOffset))
+  const handleMidpointChange = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    const setter = setEdgesRef.current
+    if (!setter) return
+    if (!Number.isFinite(payload.offset)) return
     const sourceEdge = project.edges.find(e => e.id === edgeId)
     if (!sourceEdge) return
     const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
-    const sourcePos = nodePositions.get(sourceEdge.from)
-    const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
-    let midpointX: number | undefined
-    if (typeof absoluteAxisCoord === 'number' && Number.isFinite(absoluteAxisCoord)) {
-      midpointX = absoluteAxisCoord
-    } else if (sourcePos && targetPos) {
-      const startX = sourcePos.x
-      const endX = targetPos.x
-      if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
-        midpointX = startX + (endX - startX) * clamped
+    const clamped = Math.min(1, Math.max(0, payload.offset))
+    let usableAbsolute = payload.absoluteAxisCoord
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = nodePositions.get(sourceEdge.from)
+      const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+      if (sourcePos && targetPos) {
+        const start = payload.axis === 'y' ? sourcePos.y : sourcePos.x
+        const end = payload.axis === 'y' ? targetPos.y : targetPos.x
+        if (Number.isFinite(start) && Number.isFinite(end) && Math.abs(end - start) > 1e-3) {
+          usableAbsolute = start + (end - start) * clamped
+        }
+      }
+    }
+    liveMidpointDraft.current.set(key, { ...payload, offset: clamped, absoluteAxisCoord: usableAbsolute })
+    setter(prev => prev.map(edge => {
+      const data: any = edge.data
+      if (!data || data.groupKey !== key) return edge
+      const nextData: any = { ...data, midpointOffset: clamped }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        nextData.midpointX = usableAbsolute
+      }
+      return { ...edge, data: nextData }
+    }))
+  }, [nodePositions, project.edges])
+
+  const handleMidpointCommit = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    if (!updateEdgeNested) return
+    if (!Number.isFinite(payload.offset)) return
+    const sourceEdge = project.edges.find(e => e.id === edgeId)
+    if (!sourceEdge) return
+    const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
+    const draft = liveMidpointDraft.current.get(key)
+    liveMidpointDraft.current.delete(key)
+    const clamped = Math.min(1, Math.max(0, payload.offset))
+    let usableAbsolute = payload.absoluteAxisCoord
+    if ((typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) && draft && typeof draft.absoluteAxisCoord === 'number' && Number.isFinite(draft.absoluteAxisCoord)) {
+      usableAbsolute = draft.absoluteAxisCoord
+    }
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = nodePositions.get(sourceEdge.from)
+      const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+      if (sourcePos && targetPos) {
+        const axis = draft?.axis ?? payload.axis ?? 'x'
+        const start = axis === 'y' ? sourcePos.y : sourcePos.x
+        const end = axis === 'y' ? targetPos.y : targetPos.x
+        if (Number.isFinite(start) && Number.isFinite(end) && Math.abs(end - start) > 1e-3) {
+          usableAbsolute = start + (end - start) * clamped
+        }
       }
     }
     for (const edge of project.edges) {
       if (edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }) !== key) continue
-      if (midpointX !== undefined) {
-        updateEdgeNested(path, edge.id, { midpointOffset: clamped, midpointX })
-      } else {
-        updateEdgeNested(path, edge.id, { midpointOffset: clamped })
+      const patch: Partial<Edge> = { midpointOffset: clamped }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        patch.midpointX = usableAbsolute
       }
+      updateEdgeNested(path, edge.id, patch)
     }
   }, [nodePositions, path, project.edges, updateEdgeNested])
 
@@ -488,8 +531,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       midpointOffset,
       midpointX: info?.midpointX,
       onMidpointChange: handleMidpointChange,
+      onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
       defaultColor,
+      extendMidpointRange: true,
+      groupKey: key,
     }
     return ({
       id: e.id,
@@ -505,9 +551,12 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       data: edgeData,
       selected: false,
     })
-  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, handleMidpointCommit, screenToFlowPosition])
 
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
+  useEffect(() => {
+    setEdgesRef.current = setEdges
+  }, [setEdges])
 
   useEffect(()=>{
     setNodes(prev => {
@@ -756,8 +805,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           midpointOffset,
           midpointX: info?.midpointX,
           onMidpointChange: handleMidpointChange,
+          onMidpointCommit: handleMidpointCommit,
           screenToFlow: screenToFlowPosition,
           defaultColor,
+          extendMidpointRange: true,
+          groupKey: key,
         }
         const existing = prevById.get(e.id)
         return {
@@ -776,7 +828,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         }
       })
     })
-  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, handleMidpointCommit, screenToFlowPosition])
 
   useEffect(() => {
     setEdges(prev => prev.map(edge => {
@@ -823,9 +875,10 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     const baseOffset = (resolvedConnection.source && resolvedConnection.target)
       ? getGroupOffset({ from: resolvedConnection.source, to: resolvedConnection.target, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : 0.5
-    const groupInfo = (resolvedConnection.source)
-      ? groupMidpointInfo.get(edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined }))
+    const groupKey = resolvedConnection.source
+      ? edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : undefined
+    const groupInfo = groupKey ? groupMidpointInfo.get(groupKey) : undefined
     const baseMidpointX = groupInfo?.midpointX
     const parent = project.nodes.find(n=>n.id===resolvedConnection.source) as any
     const parentV = parent?.type==='Source'? parent?.Vout
@@ -838,8 +891,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       midpointOffset: baseOffset,
       ...(baseMidpointX !== undefined ? { midpointX: baseMidpointX } : {}),
       onMidpointChange: handleMidpointChange,
+      onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
       defaultColor,
+      extendMidpointRange: true,
+      groupKey,
     }
     setEdges(eds=>addEdge({
       ...resolvedConnection,
@@ -866,7 +922,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
       addEdgeStore(path, payload)
     }
-  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, path, project.edges, project.nodes, screenToFlowPosition])
+  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, handleMidpointCommit, nodePositions, path, project.edges, project.nodes, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (!isTopmostEditor) return

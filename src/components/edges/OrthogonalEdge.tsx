@@ -5,10 +5,18 @@ import { BaseEdge, EdgeLabelRenderer, Position } from 'reactflow'
 type OrthogonalEdgeData = {
   midpointOffset?: number
   midpointX?: number
-  onMidpointChange?: (edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => void
+  onMidpointChange?: (
+    edgeId: string,
+    payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }
+  ) => void
+  onMidpointCommit?: (
+    edgeId: string,
+    payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }
+  ) => void
   screenToFlow?: (pos: { x: number; y: number }) => { x: number; y: number }
   defaultColor?: string
   extendMidpointRange?: boolean
+  groupKey?: string
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -84,6 +92,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   }, [offset, sourceAxis, targetAxis, sourceX, sourceY, targetX, targetY])
 
   const pointerIdRef = useRef<number | null>(null)
+  const lastDragRef = useRef<{ offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' } | null>(null)
 
   useEffect(() => {
     if (!data?.onMidpointChange) return
@@ -95,8 +104,10 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
     const midpointMismatch = midpointXOverride === undefined || Math.abs((midpointXOverride ?? axisMid) - axisMid) > 1
     if (hasCustomOffset && midpointXOverride !== undefined) return
     if (!midpointMismatch) return
-    data.onMidpointChange(id, defaultRatio, axisMid)
-  }, [axisEnd, axisStart, data, id, midpointXOverride, offset])
+    const axis = sourceAxis === 'y' ? 'y' : 'x'
+    data.onMidpointChange(id, { offset: defaultRatio, absoluteAxisCoord: axisMid, axis })
+    data.onMidpointCommit?.(id, { offset: defaultRatio, absoluteAxisCoord: axisMid, axis })
+  }, [axisEnd, axisStart, data, id, midpointXOverride, offset, sourceAxis])
 
   const onPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -105,6 +116,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
       event.stopPropagation()
       pointerIdRef.current = event.pointerId
       event.currentTarget.setPointerCapture?.(event.pointerId)
+      lastDragRef.current = null
     },
     [data]
   )
@@ -121,13 +133,18 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
       const max = Math.max(axisStart, axisEnd) + extra
       const bounded = clamp(pointerCoord, min, max)
       const delta = axisEnd - axisStart
+      const axis = sourceAxis === 'y' ? 'y' : 'x'
       if (Math.abs(delta) < 1e-6) {
-        data.onMidpointChange(id, 0.5, bounded)
+        const payload = { offset: 0.5, absoluteAxisCoord: bounded, axis }
+        data.onMidpointChange(id, payload)
+        lastDragRef.current = payload
         return
       }
       const ratioRaw = (bounded - axisStart) / delta
       const nextOffset = clamp(ratioRaw, 0, 1)
-      data.onMidpointChange(id, nextOffset, bounded)
+      const payload = { offset: nextOffset, absoluteAxisCoord: bounded, axis }
+      data.onMidpointChange(id, payload)
+      lastDragRef.current = payload
     },
     [axisEnd, axisStart, data, id, sourceAxis]
   )
@@ -137,7 +154,11 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
       pointerIdRef.current = null
       event.currentTarget.releasePointerCapture?.(event.pointerId)
     }
-  }, [])
+    if (data?.onMidpointCommit && lastDragRef.current) {
+      data.onMidpointCommit(id, lastDragRef.current)
+      lastDragRef.current = null
+    }
+  }, [data, id])
 
   const defaultColor = (data as any)?.defaultColor
   const isActive = selected || pointerIdRef.current !== null
@@ -149,7 +170,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   const showHandle = Boolean(
     data?.onMidpointChange &&
     data?.screenToFlow &&
-    (length > 8 || Math.abs(axisEnd - axisStart) > 8)
+    (data?.extendMidpointRange || length > 8 || Math.abs(axisEnd - axisStart) > 8)
   )
 
   return (

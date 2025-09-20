@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
@@ -7,7 +7,7 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { validate } from '../rules'
-import type { AnyNode, Project, Scenario } from '../models'
+import type { AnyNode, Edge, Project, Scenario } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
@@ -490,6 +490,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
 
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
+  const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
+  const setEdgesRef = useRef<React.Dispatch<React.SetStateAction<RFEdge[]>> | null>(null)
+
+  useEffect(() => {
+    liveMidpointDraft.current.clear()
+  }, [project.edges])
   const expandedLayouts = useMemo(() => buildExpandedSubsystemLayouts(project, expandedSubsystemViews), [project, expandedSubsystemViews])
 
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
@@ -627,32 +633,68 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     return offset
   }, [groupMidpointInfo, resolveNodePosition])
 
-  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => {
-    if (!updateEdgeStore) return
-    if (!Number.isFinite(nextOffset)) return
-    const clamped = Math.min(1, Math.max(0, nextOffset))
+  const handleMidpointChange = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    const setter = setEdgesRef.current
+    if (!setter) return
+    if (!Number.isFinite(payload.offset)) return
     const sourceEdge = project.edges.find(e => e.id === edgeId)
     if (!sourceEdge) return
     const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
-    const sourcePos = resolveNodePosition(sourceEdge.from)
-    const targetPos = resolveNodePosition(sourceEdge.to)
-    let midpointX: number | undefined
-    if (typeof absoluteAxisCoord === 'number' && Number.isFinite(absoluteAxisCoord)) {
-      midpointX = absoluteAxisCoord
-    } else if (sourcePos && targetPos) {
-      const startX = sourcePos.x
-      const endX = targetPos.x
-      if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
-        midpointX = startX + (endX - startX) * clamped
+    let usableAbsolute = payload.absoluteAxisCoord
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = resolveNodePosition(sourceEdge.from)
+      const targetPos = resolveNodePosition(sourceEdge.to)
+      if (sourcePos && targetPos) {
+        const startX = sourcePos.x
+        const endX = targetPos.x
+        if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
+          usableAbsolute = startX + (endX - startX) * Math.min(1, Math.max(0, payload.offset))
+        }
+      }
+    }
+    liveMidpointDraft.current.set(key, { ...payload, absoluteAxisCoord: usableAbsolute })
+    setter(prev => prev.map(edge => {
+      const data: any = edge.data
+      if (!data || data.groupKey !== key) return edge
+      const nextData: any = { ...data, midpointOffset: payload.offset }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        nextData.midpointX = usableAbsolute
+      }
+      return { ...edge, data: nextData }
+    }))
+  }, [project.edges, resolveNodePosition])
+
+  const handleMidpointCommit = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    if (!updateEdgeStore) return
+    if (!Number.isFinite(payload.offset)) return
+    const sourceEdge = project.edges.find(e => e.id === edgeId)
+    if (!sourceEdge) return
+    const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
+    const draft = liveMidpointDraft.current.get(key)
+    liveMidpointDraft.current.delete(key)
+    const clamped = Math.min(1, Math.max(0, payload.offset))
+    let usableAbsolute = payload.absoluteAxisCoord
+    if ((typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) && draft && typeof draft.absoluteAxisCoord === 'number' && Number.isFinite(draft.absoluteAxisCoord)) {
+      usableAbsolute = draft.absoluteAxisCoord
+    }
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = resolveNodePosition(sourceEdge.from)
+      const targetPos = resolveNodePosition(sourceEdge.to)
+      if (sourcePos && targetPos) {
+        const startX = sourcePos.x
+        const endX = targetPos.x
+        if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
+          usableAbsolute = startX + (endX - startX) * clamped
+        }
       }
     }
     for (const edge of project.edges) {
       if (edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }) !== key) continue
-      if (midpointX !== undefined) {
-        updateEdgeStore(edge.id, { midpointOffset: clamped, midpointX })
-      } else {
-        updateEdgeStore(edge.id, { midpointOffset: clamped })
+      const patch: Partial<Edge> = { midpointOffset: clamped }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        patch.midpointX = usableAbsolute
       }
+      updateEdgeStore(edge.id, patch)
     }
   }, [project.edges, resolveNodePosition, updateEdgeStore])
 
@@ -721,9 +763,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         midpointOffset,
         midpointX: info?.midpointX,
         onMidpointChange: handleMidpointChange,
+        onMidpointCommit: handleMidpointCommit,
         screenToFlow: screenToFlowPosition,
         defaultColor,
-        extendMidpointRange: expandedIds.has(e.from) || expandedIds.has(e.to),
+        // Always allow extra travel so the midpoint remains draggable
+        extendMidpointRange: true,
+        groupKey: key,
       }
       let sourceId = e.from
       let targetId = e.to
@@ -805,9 +850,10 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       }
     }
     return edges
-  }, [project.edges, project.nodes, computeResult.edges, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, screenToFlowPosition])
+  }, [project.edges, project.nodes, computeResult.edges, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, handleMidpointCommit, nodePositions, screenToFlowPosition])
 
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
+  setEdgesRef.current = setEdges
 
   useEffect(() => {
     setNodes(rfNodesInit)
@@ -925,12 +971,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       : parent?.type==='SubsystemInput'? parent?.Vout
       : undefined
     const defaultColor = voltageToEdgeColor(parentV)
+    const groupKeyForNewEdge = resolvedConnection.source
+      ? edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined })
+      : undefined
     const edgeData = {
       midpointOffset: baseOffset,
       ...(baseMidpointX !== undefined ? { midpointX: baseMidpointX } : {}),
       onMidpointChange: handleMidpointChange,
+      onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
       defaultColor,
+      extendMidpointRange: true,
+      groupKey: groupKeyForNewEdge,
     }
     setEdges(eds=>addEdge({
       ...resolvedConnection,
@@ -957,7 +1009,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
       if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
       addEdgeStore(payload)
     }
-  }, [addEdgeStore, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, project.edges, project.nodes, resolveNodePosition, screenToFlowPosition])
+  }, [addEdgeStore, expandedLayouts, getGroupOffset, groupMidpointInfo, handleMidpointChange, handleMidpointCommit, project.edges, project.nodes, resolveNodePosition, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (openSubsystemIds && openSubsystemIds.length > 0) return
