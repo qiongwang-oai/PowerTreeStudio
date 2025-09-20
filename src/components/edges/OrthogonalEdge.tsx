@@ -146,7 +146,11 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   const textColor = isActive ? '#374151' : labelBaseColor
   const knobBorder = isActive ? '#374151' : '#64748b'
   const knobBackground = isActive ? '#e2e8f0' : '#f8fafc'
-  const showHandle = Boolean(data?.onMidpointChange && data?.screenToFlow && length > 8)
+  const showHandle = Boolean(
+    data?.onMidpointChange &&
+    data?.screenToFlow &&
+    (length > 8 || Math.abs(axisEnd - axisStart) > 8)
+  )
 
   return (
     <>
