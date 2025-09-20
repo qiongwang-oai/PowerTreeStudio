@@ -12,6 +12,19 @@ import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
 
+const SUBSYSTEM_BASE_HEIGHT = 80
+const SUBSYSTEM_PORT_HEIGHT = 28
+const EMBEDDED_CONTAINER_MIN_WIDTH = 320
+const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
+const EMBEDDED_NODE_MARGIN_X = 48
+const EMBEDDED_NODE_MARGIN_TOP = 32
+const EMBEDDED_NODE_MARGIN_BOTTOM = 0
+const EMBEDDED_EDGE_MARGIN_X = 48
+const EMBEDDED_EDGE_MARGIN_TOP = 16
+const EMBEDDED_EDGE_MARGIN_BOTTOM = 0
+const DEFAULT_EMBEDDED_NODE_WIDTH = 200
+const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
+
 function CustomNode(props: NodeProps) {
   const { data, selected } = props;
   const isSelected = !!selected;
@@ -91,10 +104,8 @@ function CustomNode(props: NodeProps) {
     ? (data as any).inputPorts
     : []
   const subsystemPortCount = subsystemPorts.length
-  const baseSubsystemHeight = 80
-  const perPortHeight = 28
   const dynamicMinHeight = nodeType === 'Subsystem'
-    ? baseSubsystemHeight + (subsystemPortCount * perPortHeight)
+    ? SUBSYSTEM_BASE_HEIGHT + (subsystemPortCount * SUBSYSTEM_PORT_HEIGHT)
     : undefined
   return (
     <div
@@ -268,6 +279,37 @@ function hexToRgba(hex: string, alpha: number) {
 
 function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined) {
   const parallelCount = parallelCountForNode(node as any)
+  const nodeResult = computeNodes?.[node.id]
+  const pinValue = nodeResult?.P_in
+  const poutValue = nodeResult?.P_out
+  const pinSingleValue = (nodeResult as any)?.P_in_single ?? (node as any)?.P_in_single
+  const formatPowerValue = (value: unknown) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return `${value.toFixed(2)} W`
+    }
+    return '—'
+  }
+  type PowerEntry = { label: string; value: string }
+  const renderPowerBlock = (entries: PowerEntry[]) => (
+    <div className="text-left" style={{ minWidth: 110 }}>
+      {entries.map(entry => (
+        <div key={entry.label} style={{ fontSize: '11px', color: '#1e293b' }}>
+          {entry.label}: {entry.value}
+        </div>
+      ))}
+    </div>
+  )
+  const withPower = (content: React.ReactNode, entries: PowerEntry[]) => (
+    <div style={{ display: 'flex', alignItems: 'stretch', gap: 8 }}>
+      <div className="text-left">{content}</div>
+      {entries.length > 0 && (
+        <>
+          <span style={{ display: 'inline-block', alignSelf: 'stretch', width: 1, background: '#cbd5e1' }} />
+          {renderPowerBlock(entries)}
+        </>
+      )}
+    </div>
+  )
   const label = (
     <div className="flex flex-col items-stretch gap-1">
       <div className="text-center font-semibold">{node.name}</div>
@@ -278,48 +320,59 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
               <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout}V</div>
             </div>
           ) : node.type === 'Converter' && 'Vout' in node && 'efficiency' in node ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout}V</div>
-              <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
-                const nodeResult = computeNodes?.[node.id]
-                const eff = (node as any).efficiency
-                if (eff?.type === 'curve' && nodeResult) {
-                  const eta = etaFromModel(eff, nodeResult?.P_out ?? 0, nodeResult?.I_out ?? 0, node as any)
-                  return (eta * 100).toFixed(1) + '%'
-                } else if (eff?.type === 'fixed') {
-                  return ((eff.value ?? 0) * 100).toFixed(1) + '%'
-                } else if ((eff as any)?.points?.[0]?.eta) {
-                  return (((eff as any).points[0].eta ?? 0) * 100).toFixed(1) + '%'
-                }
-                return '—'
-              })()}</div>
-            </div>
+            withPower(
+              <div>
+                <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout}V</div>
+                <div style={{fontSize:'11px',color:'#555'}}>η: {(() => {
+                  const eff = (node as any).efficiency
+                  if (eff?.type === 'curve' && nodeResult) {
+                    const eta = etaFromModel(eff, nodeResult?.P_out ?? 0, nodeResult?.I_out ?? 0, node as any)
+                    return (eta * 100).toFixed(1) + '%'
+                  } else if (eff?.type === 'fixed') {
+                    return ((eff.value ?? 0) * 100).toFixed(1) + '%'
+                  } else if ((eff as any)?.points?.[0]?.eta) {
+                    return (((eff as any).points[0].eta ?? 0) * 100).toFixed(1) + '%'
+                  }
+                  return '—'
+                })()}</div>
+              </div>,
+              [
+                { label: 'P_in', value: formatPowerValue(pinValue) },
+                { label: 'P_out', value: formatPowerValue(poutValue) },
+              ]
+            )
           ) : node.type === 'Load' && 'Vreq' in node && 'I_typ' in node && 'I_max' in node ? (
-            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-              <div className="text-left">
+            withPower(
+              <div>
                 <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(node as any).I_typ}A</div>
                 <div style={{fontSize:'11px',color:'#555'}}>I_max: {(node as any).I_max}A</div>
                 <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledDevices ?? 1)}</div>
-              </div>
-              <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-              <div className="text-left" style={{minWidth:70}}>
-                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => {
-                  const nodeResult = computeNodes?.[node.id]
-                  const pin = nodeResult?.P_in
-                  return pin !== undefined ? pin.toFixed(2) : '—'
-                })()} W</div>
-              </div>
-            </div>
+              </div>,
+              [
+                { label: 'P_in', value: formatPowerValue(pinValue) },
+              ]
+            )
           ) : node.type === 'Subsystem' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((node as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledSystems ?? 1)}</div>
-            </div>
+            withPower(
+              <div>
+                <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((node as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
+                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledSystems ?? 1)}</div>
+              </div>,
+              [
+                { label: 'P_in total', value: formatPowerValue(pinValue) },
+                { label: 'P_in single', value: formatPowerValue(pinSingleValue) },
+              ]
+            )
           ) : node.type === 'SubsystemInput' ? (
-            <div>
-              <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
-              <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout ?? 0}V</div>
-            </div>
+            withPower(
+              <div>
+                <div style={{fontSize:'11px',color:'#555'}}>Subsystem Input</div>
+                <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout ?? 0}V</div>
+              </div>,
+              [
+                { label: 'P_in', value: formatPowerValue(pinValue) },
+              ]
+            )
           ) : node.type === 'Note' && 'text' in node ? (
             <div>
               <div style={{fontSize:'11px',color:'#555', whiteSpace:'pre-wrap'}}>{(node as any).text}</div>
@@ -367,8 +420,19 @@ function EmbeddedSubsystemContainerNode(props: NodeProps) {
       }}
     >
       <Handle type="source" position={Position.Right} id="output" style={{ background: color }} />
-      <div style={{ position: 'absolute', top: 12, left: 16, padding: '2px 8px', background: 'rgba(15, 23, 42, 0.65)', color: 'white', borderRadius: 8, fontSize: 12 }}>{name}</div>
-      <div style={{ position: 'absolute', top: 12, right: 16, padding: '2px 8px', background: 'rgba(14, 165, 233, 0.85)', color: 'white', borderRadius: 8, fontSize: 12 }}>x{parallel}</div>
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <div style={{ padding: '2px 8px', background: 'rgba(15, 23, 42, 0.65)', color: 'white', borderRadius: 8, fontSize: 12 }}>{name}</div>
+        <div style={{ padding: '2px 8px', background: 'rgba(14, 165, 233, 0.85)', color: 'white', borderRadius: 8, fontSize: 12 }}>x{parallel}</div>
+      </div>
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }} />
     </div>
   )
@@ -387,6 +451,63 @@ type ExpandedSubsystemLayout = {
   edgeMeta: Map<string, { offset?: number; localMidpoint?: number }>
 }
 
+function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: number } {
+  const rawWidth = Number((node as any).width)
+  const rawHeight = Number((node as any).height)
+  const hasWidth = Number.isFinite(rawWidth) && rawWidth > 0
+  const hasHeight = Number.isFinite(rawHeight) && rawHeight > 0
+  switch (node.type) {
+    case 'Load':
+      return {
+        width: hasWidth ? rawWidth : 236,
+        height: hasHeight ? rawHeight : 132,
+      }
+    case 'Converter':
+      return {
+        width: hasWidth ? rawWidth : 210,
+        height: hasHeight ? rawHeight : 118,
+      }
+    case 'Source':
+      return {
+        width: hasWidth ? rawWidth : 190,
+        height: hasHeight ? rawHeight : 102,
+      }
+    case 'SubsystemInput':
+      return {
+        width: hasWidth ? rawWidth : 200,
+        height: hasHeight ? rawHeight : 108,
+      }
+    case 'Subsystem': {
+      const ports = Array.isArray((node as any).project?.nodes)
+        ? (node as any).project.nodes.filter((n: any) => n.type === 'SubsystemInput')
+        : []
+      const estimatedHeight = SUBSYSTEM_BASE_HEIGHT + (ports.length * SUBSYSTEM_PORT_HEIGHT)
+      return {
+        width: hasWidth ? rawWidth : 240,
+        height: hasHeight ? rawHeight : Math.max(estimatedHeight, DEFAULT_EMBEDDED_NODE_HEIGHT),
+      }
+    }
+    case 'Bus':
+      return {
+        width: hasWidth ? rawWidth : 200,
+        height: hasHeight ? rawHeight : 110,
+      }
+    case 'Note': {
+      const text = String((node as any).text ?? '')
+      const lines = text.length ? Math.min(text.split(/\r?\n/g).length, 6) : 1
+      return {
+        width: hasWidth ? rawWidth : 240,
+        height: hasHeight ? rawHeight : 96 + lines * 18,
+      }
+    }
+    default:
+      return {
+        width: hasWidth ? rawWidth : DEFAULT_EMBEDDED_NODE_WIDTH,
+        height: hasHeight ? rawHeight : DEFAULT_EMBEDDED_NODE_HEIGHT,
+      }
+  }
+}
+
 function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<string, { offset: { x: number; y: number } }>): Map<string, ExpandedSubsystemLayout> {
   const layouts = new Map<string, ExpandedSubsystemLayout>()
   for (const [subsystemId, view] of Object.entries(expandedViews)) {
@@ -399,22 +520,29 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
     for (const child of nodes) {
       const x = typeof child.x === 'number' ? child.x : 0
       const y = typeof child.y === 'number' ? child.y : 0
-      minX = Math.min(minX, x)
-      minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x)
-      maxY = Math.max(maxY, y)
+      const { width: approxWidth, height: approxHeight } = estimateEmbeddedNodeSize(child)
+      minX = Math.min(minX, x - EMBEDDED_NODE_MARGIN_X)
+      minY = Math.min(minY, y - EMBEDDED_NODE_MARGIN_TOP)
+      maxX = Math.max(maxX, x + approxWidth + EMBEDDED_NODE_MARGIN_X)
+      maxY = Math.max(maxY, y + approxHeight + EMBEDDED_NODE_MARGIN_BOTTOM)
+    }
+    for (const edge of embeddedProject.edges) {
+      const midpointX = Number((edge as any).midpointX)
+      if (Number.isFinite(midpointX)) {
+        minX = Math.min(minX, midpointX - EMBEDDED_EDGE_MARGIN_X)
+        maxX = Math.max(maxX, midpointX + EMBEDDED_EDGE_MARGIN_X)
+      }
     }
     if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
       minX = 0
       minY = 0
-      maxX = 320
-      maxY = 200
+      maxX = EMBEDDED_CONTAINER_MIN_WIDTH
+      maxY = EMBEDDED_CONTAINER_MIN_HEIGHT
     }
-    const padding = 80
-    const innerWidth = Math.max(0, maxX - minX)
-    const innerHeight = Math.max(0, maxY - minY)
-    const width = Math.max(280, innerWidth + padding)
-    const height = Math.max(220, innerHeight + padding)
+    minY -= EMBEDDED_EDGE_MARGIN_TOP
+    maxY += EMBEDDED_EDGE_MARGIN_BOTTOM
+    const width = Math.max(EMBEDDED_CONTAINER_MIN_WIDTH, maxX - minX)
+    const height = Math.max(EMBEDDED_CONTAINER_MIN_HEIGHT, maxY - minY)
     const containerId = `${subsystemId}::container`
     const containerPosition = {
       x: (typeof subsystem.x === 'number' ? subsystem.x : 0) + (view.offset?.x ?? 0),
@@ -425,8 +553,8 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
     for (const child of nodes) {
       const rfId = `${subsystemId}::${child.id}`
       const position = {
-        x: (typeof child.x === 'number' ? child.x : 0) - minX + padding / 2,
-        y: (typeof child.y === 'number' ? child.y : 0) - minY + padding / 2,
+        x: (typeof child.x === 'number' ? child.x : 0) - minX,
+        y: (typeof child.y === 'number' ? child.y : 0) - minY,
       }
       childNodes.push({ node: child, rfId, position })
       if ((child as any).type === 'SubsystemInput') {
@@ -442,7 +570,7 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
       const info = edgeGroups.get(edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }))
       const offset = (typeof edge.midpointOffset === 'number') ? edge.midpointOffset : info?.offset
       const baseMidpoint = (typeof edge.midpointX === 'number') ? edge.midpointX : info?.midpointX
-      const localMidpoint = (typeof baseMidpoint === 'number') ? ((baseMidpoint - minX) + padding / 2) : undefined
+      const localMidpoint = (typeof baseMidpoint === 'number') ? (baseMidpoint - minX) : undefined
       edgeMeta.set(edge.id, { offset, localMidpoint })
     }
     layouts.set(subsystemId, {
