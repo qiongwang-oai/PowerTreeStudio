@@ -9,6 +9,7 @@ import { useStore } from '../../state/store'
 import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
+import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
@@ -1014,8 +1015,31 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect, isTopmostEditor]);
 
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    e.preventDefault()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isTopmostEditor) return
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    const raw = e.dataTransfer?.getData(NODE_PRESET_MIME) ?? null
+    const descriptor = deserializePresetDescriptor(raw)
+    if (!descriptor || descriptor.type === 'Source') return
+    e.preventDefault()
+    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
+    setContextMenu(null)
+    const baseNode = createNodePreset(descriptor)
+    const placed = withPosition(baseNode, { x: flowPos.x, y: flowPos.y })
+    addNodeNested(path, placed)
+  }, [addNodeNested, isTopmostEditor, path, screenToFlowPosition, setContextMenu])
+
   return (
-    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)}>
+    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)} onDragOver={handleDragOver} onDrop={handleDrop}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

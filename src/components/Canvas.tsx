@@ -13,6 +13,7 @@ import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
 import type { InspectorSelection } from '../types/selection'
 import { findSubsystemPath } from '../utils/subsystemPath'
+import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../utils/nodePresets'
 
 const SUBSYSTEM_BASE_HEIGHT = 80
 const SUBSYSTEM_PORT_HEIGHT = 28
@@ -637,6 +638,7 @@ const parseNestedEdgeId = (id: string) => {
 export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection: InspectorSelection | null)=>void, onOpenSubsystem?:(id:string)=>void}){
   const project = useStore(s=>s.project)
   const addEdgeStore = useStore(s=>s.addEdge)
+  const addNodeStore = useStore(s=>s.addNode)
   const updatePos = useStore(s=>s.updateNodePos)
   const removeNode = useStore(s=>s.removeNode)
   const removeEdge = useStore(s=>s.removeEdge)
@@ -820,6 +822,52 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
     }
     return undefined
   }, [expandedLayouts, nodePositions])
+
+  const findLayoutAtPoint = useCallback((point: { x: number; y: number }) => {
+    for (const layout of expandedLayouts.values()) {
+      const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+      const withinX = point.x >= containerPos.x && point.x <= containerPos.x + layout.width
+      const withinY = point.y >= containerPos.y && point.y <= containerPos.y + layout.height
+      if (withinX && withinY) {
+        return { layout, containerPos }
+      }
+    }
+    return null
+  }, [expandedLayouts, nodePositions])
+
+  const handleCanvasDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    e.preventDefault()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }, [])
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    const raw = e.dataTransfer?.getData(NODE_PRESET_MIME) ?? null
+    const descriptor = deserializePresetDescriptor(raw)
+    if (!descriptor) return
+    e.preventDefault()
+    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
+    setContextMenu(null)
+    const baseNode = createNodePreset(descriptor)
+    const match = findLayoutAtPoint(flowPos)
+    if (match) {
+      if (descriptor.type === 'Source') return
+      const { layout, containerPos } = match
+      const localX = flowPos.x - containerPos.x
+      const localY = flowPos.y - containerPos.y
+      const actualX = localX + layout.contentOffset.x
+      const actualY = localY + layout.contentOffset.y
+      const placed = withPosition(baseNode, { x: actualX, y: actualY })
+      nestedAddNode(layout.subsystemPath, placed)
+      return
+    }
+    const placed = withPosition(baseNode, { x: flowPos.x, y: flowPos.y })
+    addNodeStore(placed)
+  }, [addNodeStore, findLayoutAtPoint, nestedAddNode, screenToFlowPosition, setContextMenu])
 
   const getGroupOffset = useCallback((edge: { from: string; to?: string; fromHandle?: string | null }) => {
     const info = groupMidpointInfo.get(edgeGroupKey(edge))
@@ -1426,7 +1474,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
   }, [openSubsystemIds, selectedNodeId, selectedEdgeId, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode])
 
   return (
-    <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)}>
+    <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)} onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}>
       {/* Floating Banner */}
       <div className="absolute top-3 left-3 z-40 bg-white/90 border border-slate-300 rounded-lg shadow-md px-4 py-2 flex flex-col gap-2 min-w-[340px]">
         <div className="flex items-center gap-2">
