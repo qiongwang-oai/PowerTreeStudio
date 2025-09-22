@@ -9,8 +9,11 @@ import { compute, etaFromModel } from '../calc'
 import { fmt } from '../utils'
 import { download, importProjectFile, serializeProject } from '../io'
 import { sanitizeEmbeddedProject } from '../utils/embeddedProject'
+import type { InspectorSelection } from '../types/selection'
+import { resolveProjectAtPath } from '../utils/subsystemPath'
+import SubsystemInspector from './subsystem/SubsystemInspector'
 
-export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, onSelect}:{selected:string|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(id:string)=>void}){
+export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, onSelect}:{selection:InspectorSelection|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(selection:InspectorSelection)=>void}){
   const project = useStore(s=>s.project)
   const update = useStore(s=>s.updateNode)
   const removeNode = useStore(s=>s.removeNode)
@@ -20,10 +23,28 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
   const expandSubsystemView = useStore(s=>s.expandSubsystemView)
   const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
   const fileRef = React.useRef<HTMLInputElement>(null)
-  const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
+  const edge = useMemo(()=> (selection && selection.kind==='edge') ? (project.edges.find(e=>e.id===selection.id) || null) : null, [project.edges, selection])
   const analysis = compute(project)
-  const node = useMemo(()=> project.nodes.find(n=>n.id===selected) || null, [project.nodes, selected])
+  const node = useMemo(()=> (selection && selection.kind==='node') ? (project.nodes.find(n=>n.id===selection.id) || null) : null, [project.nodes, selection])
   const [tab, setTab] = React.useState('props')
+  if (!selection) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
+  if (selection.kind === 'nested-node' || selection.kind === 'nested-edge') {
+    const nestedProject = resolveProjectAtPath(project, selection.subsystemPath)
+    if (!nestedProject) {
+      return <div className="p-3 text-sm text-slate-500">Embedded subsystem not found.</div>
+    }
+    const subsystemId = selection.subsystemPath[selection.subsystemPath.length - 1]
+    const nestedId = selection.kind === 'nested-node' ? selection.nodeId : selection.edgeId
+    return (
+      <SubsystemInspector
+        subsystemId={subsystemId}
+        subsystemPath={selection.subsystemPath}
+        project={nestedProject}
+        selected={nestedId}
+        onDeleted={onDeleted}
+      />
+    )
+  }
   if (edge) {
     return (
       <div className="h-full flex flex-col">
@@ -398,7 +419,7 @@ export default function Inspector({selected, onDeleted, onOpenSubsystemEditor, o
                             <div className="text-sm">
                               <b>{displayName}</b> — {Rm} mΩ | I {I.toFixed(3)} A | ΔV {Vd.toFixed(4)} V | P_loss {Pl.toFixed(4)} W
                             </div>
-                            {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect(edgeId)}>Select</Button>}
+                            {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect({ kind: 'edge', id: edgeId })}>Select</Button>}
                           </div>
                         )
                       }

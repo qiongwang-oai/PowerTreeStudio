@@ -11,6 +11,8 @@ import type { AnyNode, Edge, Project, Scenario } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
+import type { InspectorSelection } from '../types/selection'
+import { findSubsystemPath } from '../utils/subsystemPath'
 
 const SUBSYSTEM_BASE_HEIGHT = 80
 const SUBSYSTEM_PORT_HEIGHT = 28
@@ -440,6 +442,7 @@ function EmbeddedSubsystemContainerNode(props: NodeProps) {
 
 type ExpandedSubsystemLayout = {
   subsystemId: string
+  subsystemPath: string[]
   containerId: string
   containerPosition: { x: number; y: number }
   width: number
@@ -449,6 +452,7 @@ type ExpandedSubsystemLayout = {
   inputNodeMap: Map<string, string>
   analysis: ReturnType<typeof compute>
   edgeMeta: Map<string, { offset?: number; localMidpoint?: number }>
+  contentOffset: { x: number; y: number }
 }
 
 function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: number } {
@@ -515,6 +519,7 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
     const subsystem = project.nodes.find(n => n.id === subsystemId && (n as any).type === 'Subsystem') as any
     if (!subsystem || !subsystem.project) continue
     const embeddedProject = subsystem.project as Project
+    const subsystemPath = findSubsystemPath(project, subsystemId) ?? [subsystemId]
     const nodes = embeddedProject.nodes as AnyNode[]
     if (!Array.isArray(nodes)) continue
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -576,6 +581,7 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
     }
     layouts.set(subsystemId, {
       subsystemId,
+      subsystemPath,
       containerId,
       containerPosition,
       width,
@@ -585,6 +591,7 @@ function buildExpandedSubsystemLayouts(project: Project, expandedViews: Record<s
       inputNodeMap,
       analysis,
       edgeMeta,
+      contentOffset: { x: minX, y: minY },
     })
   }
   return layouts
@@ -603,17 +610,42 @@ const parallelCountForNode = (node: any): number => {
   return 1;
 }
 
-export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|null)=>void, onOpenSubsystem?:(id:string)=>void}){
+const parseNestedNodeId = (id: string) => {
+  if (!id.includes('::')) return null
+  if (id.endsWith('::container')) return null
+  const idx = id.indexOf('::')
+  if (idx === -1) return null
+  const subsystemId = id.slice(0, idx)
+  const nodeId = id.slice(idx + 2)
+  if (!subsystemId || !nodeId) return null
+  return { subsystemId, nodeId }
+}
+
+const parseNestedEdgeId = (id: string) => {
+  const marker = '::edge::'
+  const idx = id.indexOf(marker)
+  if (idx === -1) return null
+  const subsystemId = id.slice(0, idx)
+  const edgeId = id.slice(idx + marker.length)
+  if (!subsystemId || !edgeId) return null
+  return { subsystemId, edgeId }
+}
+
+export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection: InspectorSelection | null)=>void, onOpenSubsystem?:(id:string)=>void}){
   const project = useStore(s=>s.project)
   const addEdgeStore = useStore(s=>s.addEdge)
   const updatePos = useStore(s=>s.updateNodePos)
   const removeNode = useStore(s=>s.removeNode)
   const removeEdge = useStore(s=>s.removeEdge)
   const updateEdgeStore = useStore(s=>s.updateEdge)
+  const nestedAddNode = useStore(s=>s.nestedSubsystemAddNode)
+  const nestedUpdateNodePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
+  const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
+  const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
   const { screenToFlowPosition } = useReactFlow()
-  const [openSubsystemIds, setOpenSubsystemIds] = useStore(s => [s.openSubsystemIds, s.setOpenSubsystemIds]);
+  const openSubsystemIds = useStore(s => s.openSubsystemIds)
   const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
   const setSubsystemViewOffset = useStore(s=>s.setSubsystemViewOffset)
   const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
@@ -626,10 +658,49 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
     liveMidpointDraft.current.clear()
   }, [project.edges])
   const expandedLayouts = useMemo(() => buildExpandedSubsystemLayouts(project, expandedSubsystemViews), [project, expandedSubsystemViews])
-
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
+
+  const emitSelectionForNode = useCallback((nodeId: string) => {
+    const nested = parseNestedNodeId(nodeId)
+    if (nested) {
+      const layout = expandedLayouts.get(nested.subsystemId)
+      if (layout) {
+        onSelect({ kind: 'nested-node', subsystemPath: layout.subsystemPath, nodeId: nested.nodeId })
+        return
+      }
+    }
+    if (nodeId.endsWith('::container')) {
+      const subsystemId = nodeId.split('::')[0]
+      onSelect({ kind: 'node', id: subsystemId })
+      return
+    }
+    onSelect({ kind: 'node', id: nodeId })
+  }, [expandedLayouts, onSelect])
+
+  const emitSelectionForEdge = useCallback((edgeId: string) => {
+    const nested = parseNestedEdgeId(edgeId)
+    if (nested) {
+      const layout = expandedLayouts.get(nested.subsystemId)
+      if (layout) {
+        onSelect({ kind: 'nested-edge', subsystemPath: layout.subsystemPath, edgeId: nested.edgeId })
+        return
+      }
+    }
+    onSelect({ kind: 'edge', id: edgeId })
+  }, [expandedLayouts, onSelect])
+
+  const determineActiveLayout = useCallback((): ExpandedSubsystemLayout | null => {
+    if (!selectedNodeId) return null
+    if (selectedNodeId.endsWith('::container')) {
+      const subsystemId = selectedNodeId.split('::')[0]
+      return expandedLayouts.get(subsystemId) ?? null
+    }
+    const nested = parseNestedNodeId(selectedNodeId)
+    if (!nested) return null
+    return expandedLayouts.get(nested.subsystemId) ?? null
+  }, [expandedLayouts, selectedNodeId])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode, embeddedSubsystemContainer: EmbeddedSubsystemContainerNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -699,8 +770,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
             },
             parentNode: layout.containerId,
             extent: 'parent',
-            draggable: false,
-            selectable: false,
+            draggable: true,
+            selectable: true,
           })
         }
       } else {
@@ -974,7 +1045,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
             ...(typeof midpointX === 'number' ? { midpointX } : {}),
             defaultColor: edgeColor,
           },
-          selectable: false,
+          selectable: true,
         })
       }
     }
@@ -1025,26 +1096,35 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
     for (const ch of changes){
-      if (ch.type === 'position' && ch.dragging === false){
-        if (ch.id.includes('::')) {
-          if (ch.id.endsWith('::container')) {
-            const subsystemId = ch.id.split('::')[0]
-            const subsystem = project.nodes.find(n=>n.id===subsystemId)
-            const pos = ch.position || nodes.find(x=>x.id===ch.id)?.position
-            if (subsystem && pos) {
-              const baseX = typeof subsystem.x === 'number' ? subsystem.x : 0
-              const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
-              setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
-            }
-          }
-          continue
-        }
-        const n = nodes.find(x=>x.id===ch.id)
-        const pos = n?.position || ch.position
-        if (pos) updatePos(ch.id, pos.x, pos.y)
+      if (ch.type !== 'position' || ch.dragging !== false) continue
+      const nested = parseNestedNodeId(ch.id)
+      if (nested) {
+        const layout = expandedLayouts.get(nested.subsystemId)
+        if (!layout) continue
+        const stateNode = nodes.find(x=>x.id === ch.id)
+        const pos = ch.position || stateNode?.position
+        if (!pos) continue
+        const actualX = pos.x + layout.contentOffset.x
+        const actualY = pos.y + layout.contentOffset.y
+        nestedUpdateNodePos(layout.subsystemPath, nested.nodeId, actualX, actualY)
+        continue
       }
+      if (ch.id.endsWith('::container')) {
+        const subsystemId = ch.id.split('::')[0]
+        const subsystem = project.nodes.find(n=>n.id===subsystemId)
+        const pos = ch.position || nodes.find(x=>x.id===ch.id)?.position
+        if (subsystem && pos) {
+          const baseX = typeof subsystem.x === 'number' ? subsystem.x : 0
+          const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
+          setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
+        }
+        continue
+      }
+      const n = nodes.find(x=>x.id===ch.id)
+      const pos = n?.position || ch.position
+      if (pos) updatePos(ch.id, pos.x, pos.y)
     }
-  }, [nodes, project.nodes, setSubsystemViewOffset, updatePos])
+  }, [expandedLayouts, nestedUpdateNodePos, nodes, project.nodes, setSubsystemViewOffset, updatePos])
 
   const onConnect = useCallback((c: Connection)=>{
     const reaches = (start:string, goal:string)=>{
@@ -1142,13 +1222,34 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (openSubsystemIds && openSubsystemIds.length > 0) return
-    for (const n of deleted){ removeNode(n.id) }
-  }, [openSubsystemIds, removeNode])
+    for (const n of deleted){
+      const nested = parseNestedNodeId(n.id)
+      if (nested) {
+        const layout = expandedLayouts.get(nested.subsystemId)
+        if (layout) {
+          nestedRemoveNode(layout.subsystemPath, nested.nodeId)
+        }
+        continue
+      }
+      if (n.id.endsWith('::container')) continue
+      removeNode(n.id)
+    }
+  }, [expandedLayouts, nestedRemoveNode, openSubsystemIds, removeNode])
 
   const onEdgesDelete: OnEdgesDelete = useCallback((deleted)=>{
     if (openSubsystemIds && openSubsystemIds.length > 0) return
-    for (const e of deleted){ removeEdge(e.id) }
-  }, [openSubsystemIds, removeEdge])
+    for (const e of deleted){
+      const nested = parseNestedEdgeId(e.id)
+      if (nested) {
+        const layout = expandedLayouts.get(nested.subsystemId)
+        if (layout) {
+          nestedRemoveEdge(layout.subsystemPath, nested.edgeId)
+        }
+        continue
+      }
+      removeEdge(e.id)
+    }
+  }, [expandedLayouts, nestedRemoveEdge, openSubsystemIds, removeEdge])
 
   const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
     e.preventDefault()
@@ -1162,74 +1263,156 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
 
   const handleCopy = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const nested = parseNestedNodeId(contextMenu.targetId)
+    if (nested) {
+      const layout = expandedLayouts.get(nested.subsystemId)
+      const node = layout?.embeddedProject.nodes.find(n => n.id === nested.nodeId)
+      if (!node) return
+      const copied = JSON.parse(JSON.stringify(node)) as any
+      setClipboardNode(copied)
+      setContextMenu(null)
+      return
+    }
     const node = project.nodes.find(n=>n.id===contextMenu.targetId)
     if (!node) return
     const copied = JSON.parse(JSON.stringify(node)) as any
     setClipboardNode(copied)
     setContextMenu(null)
-  }, [contextMenu, project.nodes, setClipboardNode])
+  }, [contextMenu, expandedLayouts, project.nodes, setClipboardNode])
 
   const handleDelete = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const nested = parseNestedNodeId(contextMenu.targetId)
+    if (nested) {
+      const layout = expandedLayouts.get(nested.subsystemId)
+      if (layout) {
+        nestedRemoveNode(layout.subsystemPath, nested.nodeId)
+      }
+      setContextMenu(null)
+      return
+    }
+    if (contextMenu.targetId.endsWith('::container')) {
+      const subsystemId = contextMenu.targetId.split('::')[0]
+      collapseSubsystemView(subsystemId)
+      setContextMenu(null)
+      return
+    }
     removeNode(contextMenu.targetId)
     setContextMenu(null)
-  }, [contextMenu, removeNode])
+  }, [collapseSubsystemView, contextMenu, expandedLayouts, nestedRemoveNode, removeNode])
 
   const handlePaste = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'pane' || !clipboardNode) return
     const flowPos = screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y })
+    const source = JSON.parse(JSON.stringify(clipboardNode)) as any
     const newId = (Math.random().toString(36).slice(2,10))
-    const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
+    const named = { ...source, id: newId, name: `${source.name || source.label || 'Node'} Copy` }
+    const layout = determineActiveLayout()
+    if (layout) {
+      const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+      const localX = flowPos.x - containerPos.x
+      const localY = flowPos.y - containerPos.y
+      const actualX = localX + layout.contentOffset.x
+      const actualY = localY + layout.contentOffset.y
+      const newNode = { ...named, x: actualX, y: actualY }
+      nestedAddNode(layout.subsystemPath, newNode as any)
+      setContextMenu(null)
+      return
+    }
+    const newNode = { ...named, x: flowPos.x, y: flowPos.y }
     useStore.getState().addNode(newNode as any)
     setContextMenu(null)
-  }, [contextMenu, clipboardNode, screenToFlowPosition])
+  }, [clipboardNode, contextMenu, determineActiveLayout, nestedAddNode, nodePositions, screenToFlowPosition])
 
   // Keyboard shortcuts for copy, paste, delete
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent shortcuts if any subsystem editor is open
-      if (openSubsystemIds && openSubsystemIds.length > 0) return;
+      if (openSubsystemIds && openSubsystemIds.length > 0) return
       const active = document.activeElement
       const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable)
       if (isInput) return
+      const key = e.key
+      const isDelete = key === 'Delete' || key === 'Backspace'
+      const isCopy = (key === 'c' || key === 'C') && (e.ctrlKey || e.metaKey)
+      const isPaste = (key === 'v' || key === 'V') && (e.ctrlKey || e.metaKey)
+
       if (selectedNodeId) {
-        if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
-          // Copy
-          const node = project.nodes.find(n => n.id === selectedNodeId)
-          if (node) {
-            const copied = JSON.parse(JSON.stringify(node))
-            setClipboardNode(copied)
+        if (isCopy) {
+          const nested = parseNestedNodeId(selectedNodeId)
+          if (nested) {
+            const layout = expandedLayouts.get(nested.subsystemId)
+            const node = layout?.embeddedProject.nodes.find(n => n.id === nested.nodeId)
+            if (node) {
+              const copied = JSON.parse(JSON.stringify(node))
+              setClipboardNode(copied)
+            }
+          } else {
+            const node = project.nodes.find(n => n.id === selectedNodeId)
+            if (node) {
+              const copied = JSON.parse(JSON.stringify(node))
+              setClipboardNode(copied)
+            }
           }
           e.preventDefault()
-        } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
-          // Delete
-          removeNode(selectedNodeId)
+        } else if (isDelete) {
+          const nested = parseNestedNodeId(selectedNodeId)
+          if (nested) {
+            const layout = expandedLayouts.get(nested.subsystemId)
+            if (layout) {
+              nestedRemoveNode(layout.subsystemPath, nested.nodeId)
+            }
+          } else if (selectedNodeId.endsWith('::container')) {
+            const subsystemId = selectedNodeId.split('::')[0]
+            collapseSubsystemView(subsystemId)
+          } else {
+            removeNode(selectedNodeId)
+          }
           setSelectedNodeId(null)
           e.preventDefault()
         }
       }
-      // Edge deletion via keyboard when an edge is selected and no node is selected
-      if (!selectedNodeId && selectedEdgeId && (e.key === 'Delete' || e.key === 'Backspace')){
-        removeEdge(selectedEdgeId)
+
+      if (!selectedNodeId && selectedEdgeId && isDelete) {
+        const nestedEdge = parseNestedEdgeId(selectedEdgeId)
+        if (nestedEdge) {
+          const layout = expandedLayouts.get(nestedEdge.subsystemId)
+          if (layout) {
+            nestedRemoveEdge(layout.subsystemPath, nestedEdge.edgeId)
+          }
+        } else {
+          removeEdge(selectedEdgeId)
+        }
         setSelectedEdgeId(null)
-        onSelect && onSelect(null)
+        onSelect(null)
         e.preventDefault()
       }
-      if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
-        // Paste
-        if (clipboardNode) {
-          // Paste at center of viewport
-          const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
-          const newId = (Math.random().toString(36).slice(2,10))
-          const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
-          useStore.getState().addNode(newNode as any)
+
+      if (isPaste) {
+        if (!clipboardNode) {
+          e.preventDefault()
+          return
+        }
+        const layout = determineActiveLayout()
+        const pos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+        const source = JSON.parse(JSON.stringify(clipboardNode)) as any
+        const newId = (Math.random().toString(36).slice(2,10))
+        const named = { ...source, id: newId, name: `${source.name || source.label || 'Node'} Copy` }
+        if (layout) {
+          const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+          const localX = pos.x - containerPos.x
+          const localY = pos.y - containerPos.y
+          const actualX = localX + layout.contentOffset.x
+          const actualY = localY + layout.contentOffset.y
+          nestedAddNode(layout.subsystemPath, { ...named, x: actualX, y: actualY } as any)
+        } else {
+          useStore.getState().addNode({ ...named, x: pos.x, y: pos.y } as any)
         }
         e.preventDefault()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, openSubsystemIds, onSelect])
+  }, [openSubsystemIds, selectedNodeId, selectedEdgeId, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode])
 
   return (
     <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)}>
@@ -1261,21 +1444,17 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(id:string|
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
         onNodeClick={(_,n)=>{
           const nodeId = n.id
-          const isContainer = nodeId.endsWith('::container')
-          const inspectorId = isContainer ? nodeId.split('::')[0] : nodeId
-          onSelect(inspectorId)
+          emitSelectionForNode(nodeId)
           setSelectedNodeId(nodeId)
           setSelectedEdgeId(null)
         }}
         onNodeDragStart={(_,n)=>{
           const nodeId = n.id
-          const isContainer = nodeId.endsWith('::container')
-          const inspectorId = isContainer ? nodeId.split('::')[0] : nodeId
-          onSelect(inspectorId)
+          emitSelectionForNode(nodeId)
           setSelectedNodeId(nodeId)
           setSelectedEdgeId(null)
         }}
-        onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
+        onEdgeClick={(_,e)=>{ emitSelectionForEdge(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
