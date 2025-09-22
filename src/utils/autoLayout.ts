@@ -39,6 +39,7 @@ const typePriority = (type: AnyNode['type']): number => {
     case 'SubsystemInput':
       return 1
     case 'Converter':
+    case 'DualOutputConverter':
       return 2
     case 'Bus':
       return 3
@@ -532,14 +533,38 @@ export const autoLayoutProject = (project: Project, options?: { columnSpacing?: 
   const nodeMetrics = (computeResult && (computeResult as any).nodes) || {}
   for (const [nodeId, metrics] of Object.entries(nodeMetrics)) {
     if (!metrics || typeof metrics !== 'object') continue
-    const candidates = [
-      (metrics as any).P_in_total,
-      (metrics as any).P_in,
-      (metrics as any).P_out_total,
-      (metrics as any).P_out,
-    ]
-    const value = candidates.find(v => typeof v === 'number' && Number.isFinite(v))
-    if (typeof value === 'number') {
+    const candidates: number[] = []
+    const maybeAdd = (val: unknown) => {
+      if (typeof val === 'number' && Number.isFinite(val)) candidates.push(val)
+    }
+    maybeAdd((metrics as any).P_in_total)
+    maybeAdd((metrics as any).P_in)
+    maybeAdd((metrics as any).P_out_total)
+    maybeAdd((metrics as any).P_out)
+    const outputs = (metrics as any).__outputs
+    if (outputs && typeof outputs === 'object') {
+      const sumPout = Object.values(outputs as any).reduce((acc: number, out: any) => acc + (Number.isFinite(out?.P_out) ? Number(out.P_out) : 0), 0)
+      const sumPin  = Object.values(outputs as any).reduce((acc: number, out: any) => acc + (Number.isFinite(out?.P_in)  ? Number(out.P_in)  : 0), 0)
+      if (Number.isFinite(sumPout)) candidates.push(sumPout)
+      if (Number.isFinite(sumPin)) candidates.push(sumPin)
+    }
+    // Fallback: derive power from outgoing connections (sum of child P_in + edge losses)
+    try {
+      const derived = (project.edges || [])
+        .filter(e => e.from === nodeId)
+        .reduce((acc, e) => {
+          const child = (nodeMetrics as any)[e.to]
+          const edgeRes = (computeResult as any)?.edges?.[e.id]
+          const childPin = (child && typeof child.P_in === 'number') ? child.P_in : 0
+          const edgeLoss = (edgeRes && typeof edgeRes.P_loss_edge === 'number') ? edgeRes.P_loss_edge : 0
+          return acc + childPin + edgeLoss
+        }, 0)
+      if (Number.isFinite(derived)) candidates.push(derived)
+    } catch (_err) {
+      // ignore
+    }
+    if (candidates.length) {
+      const value = Math.max(...candidates)
       powerByNode.set(nodeId, value)
     }
   }

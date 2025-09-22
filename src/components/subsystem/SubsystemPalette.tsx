@@ -21,6 +21,7 @@ export default function SubsystemPalette({ subsystemId, subsystemPath, project }
   const buttonBase = 'w-full text-slate-900 border border-slate-300'
   const styleByType: Record<string, string> = {
     Converter: '!bg-blue-50 hover:!bg-blue-100',
+    DualOutputConverter: '!bg-sky-50 hover:!bg-sky-100',
     Load: '!bg-orange-50 hover:!bg-orange-100',
     Bus: '!bg-white hover:!bg-slate-100',
     Note: '!bg-white hover:!bg-slate-100',
@@ -32,6 +33,7 @@ export default function SubsystemPalette({ subsystemId, subsystemPath, project }
       <h2 className="text-sm font-semibold text-slate-600">Embedded Palette</h2>
       <div className="grid grid-cols-1 gap-2">
         <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Converter' })} onClick={()=>onAdd({ type: 'Converter' })}>Converter</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.DualOutputConverter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'DualOutputConverter' })} onClick={()=>onAdd({ type: 'DualOutputConverter' })}>Dual-output Converter</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Load}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Load' })} onClick={()=>onAdd({ type: 'Load' })}>Load</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Bus' })} onClick={()=>onAdd({ type: 'Bus' })}>Bus/Net</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Note}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Note' })} onClick={()=>onAdd({ type: 'Note' })}>Note</Button>

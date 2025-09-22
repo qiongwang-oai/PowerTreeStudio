@@ -17,7 +17,7 @@ export default function TotalsBar(){
       if (isNonCritical) nonCriticalLoadPower += pout
       else criticalLoadPower += pout
     }
-    if (n.type === 'Converter'){
+    if (n.type === 'Converter' || n.type === 'DualOutputConverter'){
       converterLoss += (n.loss || 0)
     }
   }

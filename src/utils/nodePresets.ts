@@ -4,6 +4,7 @@ import type { AnyNode, NodeType, Project } from '../models'
 type NodePresetVariantMap = {
   Source: '48v-default'
   Converter: '12v-buck-95' | 'vrm-0p9-92'
+  DualOutputConverter: 'dual-default'
   Load: '12v-generic'
   Bus: '12v-bus'
   Note: 'default'
@@ -60,6 +61,9 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
           Vin_min: 10,
           Vin_max: 13,
           Vout: 0.9,
+          controllerPartNumber: '',
+          powerStagePartNumber: '',
+          phaseCount: 1,
           efficiency: { type: 'fixed', value: 0.92 },
           x: 640,
           y: 160,
@@ -72,9 +76,45 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
         Vin_min: 40,
         Vin_max: 60,
         Vout: 12,
+        controllerPartNumber: '',
+        powerStagePartNumber: '',
+        phaseCount: 1,
         efficiency: { type: 'fixed', value: 0.95 },
         x: 320,
         y: 160,
+      } as AnyNode
+    }
+    case 'DualOutputConverter': {
+      return {
+        id,
+        type,
+        name: 'Dual-output Converter',
+        Vin_min: 38,
+        Vin_max: 60,
+        controllerPartNumber: '',
+        powerStagePartNumber: '',
+        outputs: [
+          {
+            id: 'outputA',
+            label: 'Output A',
+            Vout: 12,
+            Iout_max: 10,
+            Pout_max: 120,
+            phaseCount: 1,
+            efficiency: { type: 'fixed', value: 0.95 },
+          },
+          {
+            id: 'outputB',
+            label: 'Output B',
+            Vout: 5,
+            Iout_max: 20,
+            Pout_max: 100,
+            phaseCount: 1,
+            efficiency: { type: 'fixed', value: 0.9 },
+          },
+        ],
+        x: 340,
+        y: 260,
       } as AnyNode
     }
     case 'Load':

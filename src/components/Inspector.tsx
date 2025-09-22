@@ -1,9 +1,8 @@
 import React, { useMemo } from 'react'
 import { useStore } from '../state/store'
-import { ConverterNode, Project } from '../models'
+import { DualOutputConverterBranch, DualOutputConverterNode, Project } from '../models'
 import { Card, CardContent, CardHeader } from './ui/card'
 import { Tabs, TabsContent, TabsList } from './ui/tabs'
-import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceDot } from 'recharts'
 import { Button } from './ui/button'
 import { compute, etaFromModel } from '../calc'
 import { fmt } from '../utils'
@@ -12,6 +11,7 @@ import { sanitizeEmbeddedProject } from '../utils/embeddedProject'
 import type { InspectorSelection } from '../types/selection'
 import { resolveProjectAtPath } from '../utils/subsystemPath'
 import SubsystemInspector from './subsystem/SubsystemInspector'
+import EfficiencyEditor from './EfficiencyEditor'
 
 export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, onSelect}:{selection:InspectorSelection|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(selection:InspectorSelection)=>void}){
   const project = useStore(s=>s.project)
@@ -75,50 +75,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
   }
   if (!node) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
   const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(node.id, patch) }
-  const curve = (node as any as ConverterNode)?.efficiency
-  const isCurve = curve && curve.type === 'curve'
-  const base = isCurve ? (curve.base || 'Iout_max') : 'Iout_max'
-  const maxCurrent = (node as any).Iout_max || 1
-  // --- Efficiency curve points: use 'current' for UI, store as {loadPct, eta} ---
-  const points = isCurve ? (curve.points || []) : []
-  // Read: support both 'current' and 'loadPct' for backward compatibility
-  const currentPoints = isCurve
-    ? points.map(p => {
-        let current = 0;
-        if ('current' in p && typeof p.current === 'number') current = p.current;
-        else if ('loadPct' in p && typeof p.loadPct === 'number') current = (maxCurrent * p.loadPct / 100);
-        return { current, eta: p.eta };
-      })
-    : [];
-  currentPoints.sort((a, b) => a.current - b.current)
-  const graphData = (() => {
-    if (!isCurve || currentPoints.length === 0) return []
-    const min = 0
-    const max = maxCurrent
-    const pts = [...currentPoints]
-    if (pts[0].current > min) pts.unshift({ current: min, eta: pts[0].eta })
-    if (pts[pts.length - 1].current < max) pts.push({ current: max, eta: pts[pts.length - 1].eta })
-    return pts
-  })()
-  // Write: store both exact 'current' for UI fidelity and 'loadPct' for calculations/back-compat
-  function updateCurvePoints(newPoints: { current: number, eta: number }[]) {
-    const pts = newPoints.map(p => ({ current: p.current, loadPct: Math.round(100 * p.current / maxCurrent), eta: p.eta }))
-    update(node!.id, { efficiency: { ...curve, type: 'curve', base: 'Iout_max', points: pts } })
-  }
-  function handlePointChange(idx: number, field: 'current' | 'eta', value: number) {
-    const newPoints = currentPoints.map((p, i) => i === idx ? { ...p, [field]: value } : p)
-    updateCurvePoints(newPoints)
-  }
-  function handleAddPoint() {
-    const mid = maxCurrent / 2
-    const avgEta = currentPoints.reduce((a, b) => a + b.eta, 0) / (currentPoints.length || 1)
-    updateCurvePoints([...currentPoints, { current: mid, eta: avgEta }])
-  }
-  function handleDeletePoint(idx: number) {
-    if (currentPoints.length <= 1) return
-    const newPoints = currentPoints.filter((_, i) => i !== idx)
-    updateCurvePoints(newPoints)
-  }
   return (
     <div className="h-full flex flex-col">
       <Card className="flex-1">
@@ -136,7 +92,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
               items={[
                 { value: 'props', label: 'Properties' },
                 ...((node!.type !== 'Note') ? [{ value: 'warn', label: 'Node Summary' }] : []),
-                ...((!['Subsystem', 'Source', 'SubsystemInput', 'Note'].includes(node!.type)) ? [{ value: 'eta', label: 'Efficiency Curve' }] : []),
                 ...(node!.type === 'Subsystem' ? [{ value: 'embed', label: 'Embedded Tree' }] : [])
               ]}
             />
@@ -144,6 +99,12 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
               <div className="space-y-2 text-sm">
                 <div className="text-base text-slate-600 font-medium mb-1">Editable Properties</div>
                 <label className="flex items-center justify-between gap-2"><span>Name</span><input aria-label="name" className="input" value={node.name} onChange={e=>onChange('name', e.target.value)} /></label>
+                {(node.type==='Converter' || node.type==='DualOutputConverter') && (
+                  <>
+                    <label className="flex items-center justify-between gap-2"><span>Controller Part Number</span><input className="input" value={(node as any).controllerPartNumber || ''} onChange={e=>onChange('controllerPartNumber', e.target.value)} /></label>
+                    <label className="flex items-center justify-between gap-2"><span>Power Stage Part Number</span><input className="input" value={(node as any).powerStagePartNumber || ''} onChange={e=>onChange('powerStagePartNumber', e.target.value)} /></label>
+                  </>
+                )}
                 {node.type==='Source' && <>
                   <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
                   <div className="border-t mt-4 pt-2">
@@ -151,70 +112,81 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
                     <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
                   </div>
                 </>}
-                {node.type==='Converter' && <>
-                  <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
-                  <Field label="Vin_max (V)" value={(node as any).Vin_max} onChange={v=>onChange('Vin_max', v)} />
-                  <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
-                  <Field label="Pout_max (W)" value={(node as any).Pout_max||''} onChange={v=>onChange('Pout_max', v)} />
-                  <Field label="Iout_max (A)" value={(node as any).Iout_max||''} onChange={v=>onChange('Iout_max', v)} />
-                  <label className="flex items-center justify-between gap-2"><span>Efficiency</span>
-                    <select
-                      className="input"
-                      value={(node as any).efficiency?.type || 'fixed'}
-                      onChange={e => {
-                        const prev = (node as any).efficiency || {};
-                        if (e.target.value === 'fixed') {
-                          // Save previous curve points in _lastCurve
-                          onChange('efficiency', {
-                            type: 'fixed',
-                            value: typeof prev.value === 'number' ? prev.value : 0.92,
-                            _lastCurve: prev.type === 'curve' ? { base: prev.base, points: prev.points } : prev._lastCurve
-                          });
-                        } else if (e.target.value === 'curve') {
-                          // Restore previous curve points if available
-                          const lastCurve = prev._lastCurve || (prev.type === 'curve' ? { base: prev.base, points: prev.points } : null);
-                          onChange('efficiency', {
-                            type: 'curve',
-                            base: (lastCurve && lastCurve.base) || prev.base || 'Iout_max',
-                            points: (lastCurve && lastCurve.points && lastCurve.points.length > 0)
-                              ? lastCurve.points
-                              : [{ current: 0, eta: 0.85 }, { current: ((node as any).Iout_max || 1) / 2, eta: 0.92 }, { current: (node as any).Iout_max || 1, eta: 0.9 }]
-                          });
-                        }
-                      }}
-                    >
-                      <option value="fixed">fixed</option><option value="curve">curve</option>
-                    </select>
-                  </label>
-                  {(node as any).efficiency?.type === 'curve' && (
-                    (() => {
-                      const eff = (node as any).efficiency;
-                      const Iout = (analysis.nodes[node.id]?.I_out) ?? 0;
-                      const Pout = (analysis.nodes[node.id]?.P_out) ?? 0;
-                      let eta = 0;
-                      try {
-                        eta = etaFromModel(eff, Pout, Iout, node);
-                      } catch (e) { eta = 0; }
-                      return (
-                        <>
-                          <div className="text-sm text-slate-600 mt-1">
-                            I<sub>out</sub> (computed): <b>{Iout.toFixed(4)} A</b>
+                {node.type==='Converter' && (() => {
+                  const converterAnalysis = analysis.nodes[node.id] || {}
+                  const maxCurrent = (node as any).Iout_max || 1
+                  return (
+                    <>
+                      <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
+                      <Field label="Vin_max (V)" value={(node as any).Vin_max} onChange={v=>onChange('Vin_max', v)} />
+                      <Field label="Vout (V)" value={(node as any).Vout} onChange={v=>onChange('Vout', v)} />
+                      <Field label="Pout_max (W)" value={(node as any).Pout_max||''} onChange={v=>onChange('Pout_max', v)} />
+                      <Field label="Iout_max (A)" value={(node as any).Iout_max||''} onChange={v=>onChange('Iout_max', v)} />
+                      <Field label="Number of phases" value={(node as any).phaseCount ?? 1} onChange={v=>onChange('phaseCount', Math.max(1, Math.round(v)))} />
+                      <EfficiencyEditor
+                        label="Efficiency"
+                        efficiency={(node as any).efficiency}
+                        maxCurrent={maxCurrent}
+                        onChange={eff=>onChange('efficiency', eff)}
+                        analysis={{ P_out: converterAnalysis?.P_out, I_out: converterAnalysis?.I_out }}
+                        modelNode={node as any}
+                      />
+                      <div className="border-t mt-4 pt-2">
+                        <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
+                        <ReadOnlyRow label="Total input power (W)" value={fmt(converterAnalysis?.P_in ?? 0, 3)} />
+                        <ReadOnlyRow label="Total output power (W)" value={fmt(converterAnalysis?.P_out ?? 0, 3)} />
+                        <ReadOnlyRow label="Dissipation (W)" value={fmt((converterAnalysis?.P_in ?? 0) - (converterAnalysis?.P_out ?? 0), 3)} />
+                      </div>
+                    </>
+                  )
+                })()}
+                {node.type==='DualOutputConverter' && (() => {
+                  const dual = node as any as DualOutputConverterNode
+                  const outputs: DualOutputConverterBranch[] = Array.isArray(dual.outputs) ? dual.outputs : []
+                  const analysisEntry = analysis.nodes[node.id] as any
+                  const metrics: Record<string, any> = analysisEntry?.__outputs || {}
+                  const fallbackHandle = outputs.length > 0 && outputs[0]?.id ? outputs[0]!.id : 'outputA'
+                  const updateBranch = (idx: number, patch: Partial<DualOutputConverterBranch>) => {
+                    const next = outputs.length ? [...outputs] : []
+                    const existing = next[idx] || { id: `output${idx+1}`, efficiency: { type: 'fixed', value: 0.9 } }
+                    next[idx] = { ...existing, ...patch }
+                    onChange('outputs', next as any)
+                  }
+                  return (
+                    <>
+                      <Field label="Vin_min (V)" value={(dual as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
+                      <Field label="Vin_max (V)" value={(dual as any).Vin_max} onChange={v=>onChange('Vin_max', v)} />
+                      {outputs.map((branch, idx) => {
+                        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+                        const metric = metrics[handleId] || {}
+                        const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                        return (
+                          <div key={handleId} className="border rounded-md p-3 space-y-2 mt-3">
+                            <div className="text-sm font-semibold text-slate-600">{label}</div>
+                            <Field label="Vout (V)" value={branch?.Vout ?? 0} onChange={v=>updateBranch(idx, { Vout: v })} />
+                            <Field label="Pout_max (W)" value={branch?.Pout_max ?? ''} onChange={v=>updateBranch(idx, { Pout_max: v })} />
+                            <Field label="Iout_max (A)" value={branch?.Iout_max ?? ''} onChange={v=>updateBranch(idx, { Iout_max: v })} />
+                            <Field label="Number of phases" value={branch?.phaseCount ?? 1} onChange={v=>updateBranch(idx, { phaseCount: Math.max(1, Math.round(v)) })} />
+                            <EfficiencyEditor
+                              label="Efficiency"
+                              efficiency={branch?.efficiency}
+                              maxCurrent={branch?.Iout_max || 1}
+                              onChange={eff=>updateBranch(idx, { efficiency: eff })}
+                              analysis={{ P_out: metric?.P_out, I_out: metric?.I_out }}
+                              modelNode={branch as any}
+                            />
                           </div>
-                          <div className="text-sm text-slate-600 mt-1">
-                            η (at I<sub>out</sub> = {Iout.toFixed(3)} A): <b>{eta.toFixed(4)}</b>
-                          </div>
-                        </>
-                      );
-                    })()
-                  )}
-                  {(node as any).efficiency?.type==='fixed' && <Field label="η value (0-1)" value={(node as any).efficiency.value} onChange={v=>onChange('efficiency',{type:'fixed', value:v})} />}
-                  <div className="border-t mt-4 pt-2">
-                    <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
-                    <ReadOnlyRow label="Total input power (W)" value={fmt(analysis.nodes[node.id]?.P_in ?? 0, 3)} />
-                    <ReadOnlyRow label="Total output power (W)" value={fmt(analysis.nodes[node.id]?.P_out ?? 0, 3)} />
-                    <ReadOnlyRow label="Dissipation (W)" value={fmt((analysis.nodes[node.id]?.P_in ?? 0) - (analysis.nodes[node.id]?.P_out ?? 0), 3)} />
-                  </div>
-                </>}
+                        )
+                      })}
+                      <div className="border-t mt-4 pt-2">
+                        <div className="text-base text-slate-600 font-medium mb-1">Computed</div>
+                        <ReadOnlyRow label="Total input power (W)" value={fmt(analysisEntry?.P_in ?? 0, 3)} />
+                        <ReadOnlyRow label="Total output power (W)" value={fmt(analysisEntry?.P_out ?? 0, 3)} />
+                        <ReadOnlyRow label="Dissipation (W)" value={fmt((analysisEntry?.P_in ?? 0) - (analysisEntry?.P_out ?? 0), 3)} />
+                      </div>
+                    </>
+                  )
+                })()}
                 {node.type==='Load' && <>
                   <Field label="Vreq (V)" value={(node as any).Vreq} onChange={v=>onChange('Vreq', v)} />
                   <Field label="I_typ (A)" value={(node as any).I_typ} onChange={v=>onChange('I_typ', v)} />
@@ -334,7 +306,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
                     {(() => {
                       const res = analysis.nodes[node.id] as any
                       if (!res) return null
-                      if (node.type === 'Converter') {
+                      if (node.type === 'Converter' || node.type === 'DualOutputConverter') {
                         const eff = (node as any).efficiency
                         const eta = (()=>{ try{ return etaFromModel(eff, res.P_out||0, res.I_out||0, node as any) }catch(e){ return 0 } })()
                         return (
@@ -439,77 +411,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
                   </div>
                   
                 </div>
-              </TabsContent>
-            )}
-            {/* Only render the Efficiency Curve tab content if the tab is present */}
-            {(!['Subsystem', 'Source', 'SubsystemInput', 'Note'].includes(node.type)) && (
-              <TabsContent value={tab} when="eta">
-                {isCurve ? (
-                  <div className="mt-4 text-sm">
-                    <div className="h-40">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={graphData}>
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="current" unit="A" type="number" domain={[0, maxCurrent]} />
-                          <YAxis domain={[0, 1]} />
-                          <Tooltip formatter={(v: any, n: string) => n === 'eta' ? v.toFixed(3) : v} />
-                          <Line type="monotone" dataKey="eta" dot />
-                          {(() => {
-                            const eff = (node as any).efficiency
-                            const Iout = Math.max(0, Math.min(maxCurrent, (analysis.nodes[node.id]?.I_out) ?? 0))
-                            const Pout = (analysis.nodes[node.id]?.P_out) ?? 0
-                            let eta = 0
-                            try { eta = etaFromModel(eff, Pout, Iout, node as any) } catch (e) { eta = 0 }
-                            eta = Math.max(0, Math.min(1, eta))
-                            return <ReferenceDot x={Iout} y={eta} r={4} fill="#ef4444" stroke="none" />
-                          })()}
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="mt-4">
-                      <div className="flex flex-col gap-2">
-                        {currentPoints.map((pt, idx) => (
-                          <div key={idx} className="flex items-center gap-2">
-                            <label className="flex items-center gap-1 text-xs">
-                              <span>Current (A):</span>
-                              <input
-                                type="number"
-                                className="input w-20"
-                                value={pt.current}
-                                min={0}
-                                max={maxCurrent}
-                                step={0.01}
-                                onChange={e => handlePointChange(idx, 'current', Math.max(0, Math.min(maxCurrent, Number(e.target.value))))}
-                              />
-                            </label>
-                            <label className="flex items-center gap-1 text-xs">
-                              <span>Efficiency:</span>
-                              <input
-                                type="number"
-                                className="input w-16"
-                                value={pt.eta}
-                                min={0}
-                                max={1}
-                                step={0.001}
-                                onChange={e => handlePointChange(idx, 'eta', Math.max(0, Math.min(1, Number(e.target.value))))}
-                              />
-                            </label>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleDeletePoint(idx)}
-                              disabled={currentPoints.length <= 1}
-                              title={currentPoints.length <= 1 ? 'At least one point required' : 'Delete point'}
-                            >
-                              Delete
-                            </Button>
-                          </div>
-                        ))}
-                        <Button size="sm" variant="default" onClick={handleAddPoint} className="w-fit mt-2">Add Point</Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : <div className="text-sm text-slate-500">Switch to curve to edit points.</div>}
               </TabsContent>
             )}
             {node?.type==='Subsystem' && (

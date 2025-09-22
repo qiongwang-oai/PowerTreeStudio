@@ -81,6 +81,7 @@ function CustomNode(props: NodeProps) {
     : baseShadow
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
+    : nodeType === 'DualOutputConverter' ? 'bg-sky-50'
     : nodeType === 'Load' ? 'bg-orange-50'
     : nodeType === 'Subsystem' ? 'bg-violet-50'
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
@@ -95,6 +96,7 @@ function CustomNode(props: NodeProps) {
   const dynamicMinHeight = nodeType === 'Subsystem'
     ? baseSubsystemHeight + (subsystemPortCount * perPortHeight)
     : undefined
+  const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
   return (
     <div
       className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
@@ -115,7 +117,7 @@ function CustomNode(props: NodeProps) {
           <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderBottom: `4px solid ${accentColor}`, borderRight: `4px solid ${accentColor}`, borderBottomRightRadius: 12 }} />
         </div>
       )}
-      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
+      {(nodeType==='Converter' || nodeType==='DualOutputConverter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
           <div
@@ -231,26 +233,64 @@ function CustomNode(props: NodeProps) {
       </div>
       {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
       {bracketElement}
-      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
-        <>
-          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
-          <div
-            style={{
-              position: 'absolute',
-              right: -8,
-              top: 'calc(50% + 8px)',
-              transform: 'translate(100%, 0)',
-              fontSize: '10px',
-              color: '#666',
-              whiteSpace: 'nowrap',
-              pointerEvents: 'none',
-              textAlign: 'left',
-            }}
-          >
-            output
-          </div>
-        </>
-      )}
+      {nodeType === 'DualOutputConverter'
+        ? (() => {
+            const count = outputs.length || 1
+            return (
+              <>
+                {(outputs.length ? outputs : [{ id: 'outputA', label: 'Output A', Vout: 0 }]).map((output: any, idx: number) => {
+                  const handleId = output?.id || `output-${idx}`
+                  const label = output?.label || `Output ${String.fromCharCode(65 + idx)}`
+                  const topOffset = 50 + ((idx - (count - 1) / 2) * 24)
+                  return (
+                    <React.Fragment key={handleId}>
+                      <Handle
+                        type="source"
+                        position={Position.Right}
+                        id={handleId}
+                        style={{ background: '#555', top: `${topOffset}%` }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: -8,
+                          top: `${topOffset}%`,
+                          transform: 'translate(100%, -50%)',
+                          fontSize: '10px',
+                          color: '#666',
+                          whiteSpace: 'nowrap',
+                          pointerEvents: 'none',
+                          textAlign: 'left',
+                        }}
+                      >
+                        {label}
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </>
+            )
+          })()
+        : (nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
+          <>
+            <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
+            <div
+              style={{
+                position: 'absolute',
+                right: -8,
+                top: 'calc(50% + 8px)',
+                transform: 'translate(100%, 0)',
+                fontSize: '10px',
+                color: '#666',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                textAlign: 'left',
+              }}
+            >
+              output
+            </div>
+          </>
+        )}
     </div>
   )
 }
@@ -332,6 +372,38 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                     }
                   })()}</div>
                 </div>
+               ) : n.type === 'DualOutputConverter' ? (
+                (() => {
+                  const nodeResult = computeResult.nodes[n.id] as any
+                  const metrics: Record<string, any> = nodeResult?.__outputs || {}
+                  const outputs = Array.isArray((n as any).outputs) ? (n as any).outputs : []
+                  const fallback = outputs.length > 0 ? outputs[0] : undefined
+                  const pin = nodeResult?.P_in
+                  const pout = nodeResult?.P_out
+                  return (
+                    <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                      <div className="text-left" style={{minWidth:120}}>
+                        {outputs.map((branch:any, idx:number) => {
+                          const handleId = branch?.id || (idx === 0 ? (fallback?.id || 'outputA') : `${fallback?.id || 'outputA'}-${idx}`)
+                          const metric = metrics[handleId] || {}
+                          const eta = typeof metric.eta === 'number' ? metric.eta : undefined
+                          const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                          return (
+                            <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
+                              <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
+                              <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                      <div className="text-left" style={{minWidth:90}}>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                      </div>
+                    </div>
+                  )
+                })()
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                 <div style={{display:'flex', alignItems:'stretch', gap:8}}>
                   <div className="text-left">
@@ -367,6 +439,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       parallelCount,
       ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
       ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
+      ,...(n.type==='DualOutputConverter'? { outputs: (n as any).outputs || [], outputMetrics: ((computeResult.nodes[n.id] as any)||{}).__outputs || {} } : {})
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
@@ -722,7 +795,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         const pout = nodeRes?.P_out
         const pin = nodeRes?.P_in
         const showPout = (pout !== undefined) && (n.type !== 'Load')
-        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Bus')
+        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'DualOutputConverter' || n.type === 'Bus')
         right = (showPout || showPin) ? (
           <>
             <div className="w-px bg-slate-300 mx-1" />
@@ -773,12 +846,18 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
         const parent = project.nodes.find(n => n.id === e.from) as any
         const child = project.nodes.find(n => n.id === e.to) as any
-        const parentV = parent?.type === 'Source' ? parent?.Vout
-          : parent?.type === 'Converter' ? parent?.Vout
-          : parent?.type === 'Bus' ? parent?.V_bus
-          : parent?.type === 'SubsystemInput' ? parent?.Vout
-          : undefined
-        const childRange = child?.type === 'Converter' ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+        let parentV: number | undefined
+        if (parent?.type === 'Source') parentV = parent?.Vout
+        else if (parent?.type === 'Converter') parentV = parent?.Vout
+        else if (parent?.type === 'DualOutputConverter') {
+          const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+          const fallback = outputs.length > 0 ? outputs[0] : undefined
+          const handleId = (e as any).fromHandle as string | undefined
+          const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+          parentV = (branch || fallback)?.Vout
+        } else if (parent?.type === 'Bus') parentV = parent?.V_bus
+        else if (parent?.type === 'SubsystemInput') parentV = parent?.Vout
+        const childRange = (child?.type === 'Converter' || child?.type === 'DualOutputConverter') ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
         const childDirectVin = child?.type === 'Load' ? child?.Vreq
           : child?.type === 'Subsystem' ? (() => {
               const portId = (e as any).toHandle

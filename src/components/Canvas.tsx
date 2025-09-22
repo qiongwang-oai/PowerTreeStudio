@@ -100,6 +100,7 @@ function CustomNode(props: NodeProps) {
     : baseShadow;
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
+    : nodeType === 'DualOutputConverter' ? 'bg-sky-50'
     : nodeType === 'Load' ? 'bg-orange-50'
     : nodeType === 'Subsystem' ? 'bg-violet-50'
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
@@ -112,6 +113,7 @@ function CustomNode(props: NodeProps) {
   const dynamicMinHeight = nodeType === 'Subsystem'
     ? SUBSYSTEM_BASE_HEIGHT + (subsystemPortCount * SUBSYSTEM_PORT_HEIGHT)
     : undefined
+  const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
   return (
     <div
       className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
@@ -134,7 +136,7 @@ function CustomNode(props: NodeProps) {
       )}
       {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
       {bracketElement}
-      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
+      {(nodeType==='Converter' || nodeType==='DualOutputConverter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} isConnectable={handlesConnectable} />
           <div
@@ -249,26 +251,65 @@ function CustomNode(props: NodeProps) {
       >
         <div style={{ width: '100%' }}>{data.label}</div>
       </div>
-      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
-        <>
-          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} isConnectable={handlesConnectable} />
-          <div
-            style={{
-              position: 'absolute',
-              right: -8,
-              top: 'calc(50% + 8px)',
-              transform: 'translate(100%, 0)',
-              fontSize: '10px',
-              color: '#666',
-              whiteSpace: 'nowrap',
-              pointerEvents: 'none',
-              textAlign: 'left',
-            }}
-          >
-            output
-          </div>
-        </>
-      )}
+      {nodeType === 'DualOutputConverter'
+        ? (() => {
+            const count = outputs.length || 1
+            return (
+              <>
+                {(outputs.length ? outputs : [{ id: 'outputA', label: 'Output A', Vout: 0 }]).map((output: any, idx: number) => {
+                  const handleId = output?.id || `output-${idx}`
+                  const label = output?.label || `Output ${String.fromCharCode(65 + idx)}`
+                  const topOffset = 50 + ((idx - (count - 1) / 2) * 24)
+                  return (
+                    <React.Fragment key={handleId}>
+                      <Handle
+                        type="source"
+                        position={Position.Right}
+                        id={handleId}
+                        style={{ background: '#555', top: `${topOffset}%` }}
+                        isConnectable={handlesConnectable}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: -8,
+                          top: `${topOffset}%`,
+                          transform: 'translate(100%, -50%)',
+                          fontSize: '10px',
+                          color: '#666',
+                          whiteSpace: 'nowrap',
+                          pointerEvents: 'none',
+                          textAlign: 'left',
+                        }}
+                      >
+                        {label}
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </>
+            )
+          })()
+        : (nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
+          <>
+            <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} isConnectable={handlesConnectable} />
+            <div
+              style={{
+                position: 'absolute',
+                right: -8,
+                top: 'calc(50% + 8px)',
+                transform: 'translate(100%, 0)',
+                fontSize: '10px',
+                color: '#666',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                textAlign: 'left',
+              }}
+            >
+              output
+            </div>
+          </>
+        )}
     </div>
   );
 }
@@ -289,6 +330,7 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
   const pinValue = nodeResult?.P_in
   const poutValue = nodeResult?.P_out
   const pinSingleValue = (nodeResult as any)?.P_in_single ?? (node as any)?.P_in_single
+  const outputMetrics: Record<string, any> = (nodeResult as any)?.__outputs || {}
   const formatPowerValue = (value: unknown) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
       return `${value.toFixed(2)} W`
@@ -341,6 +383,31 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                   }
                   return '—'
                 })()}</div>
+              </div>,
+              [
+                { label: 'P_in', value: formatPowerValue(pinValue) },
+                { label: 'P_out', value: formatPowerValue(poutValue) },
+              ]
+            )
+          ) : node.type === 'DualOutputConverter' ? (
+            withPower(
+              <div style={{display:'flex',flexDirection:'column',gap:2}}>
+                {(() => {
+                  const outputs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
+                  const fallback = outputs.length > 0 ? outputs[0] : undefined
+                  return outputs.map((branch:any, idx:number) => {
+                    const handleId = branch?.id || (idx === 0 ? (fallback?.id || 'outputA') : `${fallback?.id || 'outputA'}-${idx}`)
+                    const metric = outputMetrics[handleId] || {}
+                    const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                    const eta = typeof metric.eta === 'number' ? metric.eta : undefined
+                    return (
+                      <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
+                        <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
+                        <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {formatPowerValue(metric.P_out)} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                      </div>
+                    )
+                  })
+                })()}
               </div>,
               [
                 { label: 'P_in', value: formatPowerValue(pinValue) },
@@ -400,6 +467,10 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
       .map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name }))
   }
   if (node.type === 'SubsystemInput') data.Vout = (node as any).Vout
+  if (node.type === 'DualOutputConverter'){
+    data.outputs = (node as any).outputs || []
+    data.outputMetrics = outputMetrics
+  }
   return data
 }
 
@@ -984,12 +1055,19 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
       const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
       const parent = project.nodes.find(n=>n.id===e.from) as any
       const child = project.nodes.find(n=>n.id===e.to) as any
-      const parentV = parent?.type==='Source'? parent?.Vout
-        : parent?.type==='Converter'? parent?.Vout
-        : parent?.type==='Bus'? parent?.V_bus
-        : parent?.type==='SubsystemInput'? parent?.Vout
-        : undefined
-      const childRange = child?.type==='Converter'? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+      let parentV: number | undefined
+      if (parent?.type==='Source') parentV = parent?.Vout
+      else if (parent?.type==='Converter') parentV = parent?.Vout
+      else if (parent?.type==='DualOutputConverter'){
+        const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+        const fallback = outputs.length > 0 ? outputs[0] : undefined
+        const handleId = (e as any).fromHandle as string | undefined
+        const branch = handleId ? outputs.find((b:any)=>b?.id===handleId) : undefined
+        parentV = (branch || fallback)?.Vout
+      }
+      else if (parent?.type==='Bus') parentV = parent?.V_bus
+      else if (parent?.type==='SubsystemInput') parentV = parent?.Vout
+      const childRange = (child?.type==='Converter' || child?.type==='DualOutputConverter')? { min: child?.Vin_min, max: child?.Vin_max } : undefined
       const childDirectVin = child?.type==='Load'? child?.Vreq
         : child?.type==='Subsystem'? (()=>{
             const portId = (e as any).toHandle
@@ -1071,11 +1149,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
         const I = localEdgeResult.I_edge ?? 0
         const strokeWidth = Math.max(1.5, 1.5 + 2 * Math.log10(I + 1e-3))
         const parent = layout.embeddedProject.nodes.find(n=>n.id===e.from) as any
-        const parentV = parent?.type==='Source'? parent?.Vout
-          : parent?.type==='Converter'? parent?.Vout
-          : parent?.type==='Bus'? parent?.V_bus
-          : parent?.type==='SubsystemInput'? parent?.Vout
-          : undefined
+        let parentV: number | undefined
+        if (parent?.type==='Source') parentV = parent?.Vout
+        else if (parent?.type==='Converter') parentV = parent?.Vout
+        else if (parent?.type==='DualOutputConverter') {
+          const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+          const fallback = outputs.length > 0 ? outputs[0] : undefined
+          const handleId = (e as any).fromHandle as string | undefined
+          const branch = handleId ? outputs.find((b:any)=>b?.id===handleId) : undefined
+          parentV = (branch || fallback)?.Vout
+        }
+        else if (parent?.type==='Bus') parentV = parent?.V_bus
+        else if (parent?.type==='SubsystemInput') parentV = parent?.Vout
         const baseLabel = `${(e.interconnect?.R_milliohm ?? 0).toFixed(1)} mΩ | ${I.toFixed(1)} A`
         const edgeColor = voltageToEdgeColor(parentV)
         const meta = layout.edgeMeta.get(e.id) || {}
@@ -1233,11 +1318,18 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
       return undefined
     })()
     const parent = project.nodes.find(n=>n.id===resolvedConnection.source) as any
-    const parentV = parent?.type==='Source'? parent?.Vout
-      : parent?.type==='Converter'? parent?.Vout
-      : parent?.type==='Bus'? parent?.V_bus
-      : parent?.type==='SubsystemInput'? parent?.Vout
-      : undefined
+    let parentV: number | undefined
+    if (parent?.type==='Source') parentV = parent?.Vout
+    else if (parent?.type==='Converter') parentV = parent?.Vout
+    else if (parent?.type==='DualOutputConverter') {
+      const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+      const fallback = outputs.length > 0 ? outputs[0] : undefined
+      const handleId = (resolvedConnection.sourceHandle as string | undefined)
+      const branch = handleId ? outputs.find((b:any)=>b?.id===handleId) : undefined
+      parentV = (branch || fallback)?.Vout
+    }
+    else if (parent?.type==='Bus') parentV = parent?.V_bus
+    else if (parent?.type==='SubsystemInput') parentV = parent?.Vout
     const defaultColor = voltageToEdgeColor(parentV)
     const groupKeyForNewEdge = resolvedConnection.source
       ? edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined })

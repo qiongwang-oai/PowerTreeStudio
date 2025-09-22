@@ -89,7 +89,7 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
               const pout = (rn as any).P_out || 0
               if (isNonCritical) tlNonCritical += pout; else tlCritical += pout
             }
-            if ((rn as any).type === 'Converter') tlConvLoss += ((rn as any).loss || 0)
+            if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') tlConvLoss += ((rn as any).loss || 0)
           }
           for (const e of Object.values(innerResult.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
           const tlTotalIn = tlCritical + tlNonCritical + tlConvLoss + tlEdgeLoss
@@ -272,7 +272,7 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
                             const pout = (rn as any).P_out || 0
                             if (isNonCritical) tlNonCritical += pout; else tlCritical += pout
                           }
-                          if ((rn as any).type === 'Converter') tlConvLoss += ((rn as any).loss || 0)
+                          if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') tlConvLoss += ((rn as any).loss || 0)
                         }
                         for (const e of Object.values(result.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
                         const tlTotalIn = tlCritical + tlNonCritical + tlConvLoss + tlEdgeLoss

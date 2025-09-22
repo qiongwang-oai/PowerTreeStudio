@@ -18,6 +18,7 @@ export default function Palette(){
   const styleByType: Record<string, string> = {
     Source: '!bg-green-50 hover:!bg-green-100',
     Converter: '!bg-blue-50 hover:!bg-blue-100',
+    DualOutputConverter: '!bg-sky-50 hover:!bg-sky-100',
     Load: '!bg-orange-50 hover:!bg-orange-100',
     Bus: '!bg-white hover:!bg-slate-100',
     Note: '!bg-white hover:!bg-slate-100',
@@ -30,6 +31,7 @@ export default function Palette(){
       <div className="grid grid-cols-1 gap-2">
         <Button variant="outline" className={`${buttonBase} ${styleByType.Source}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Source' })} onClick={()=>onAdd({ type: 'Source' })}>Source</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Converter' })} onClick={()=>onAdd({ type: 'Converter' })}>Converter</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.DualOutputConverter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'DualOutputConverter' })} onClick={()=>onAdd({ type: 'DualOutputConverter' })}>Dual-output Converter</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Load}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Load' })} onClick={()=>onAdd({ type: 'Load' })}>Load</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Bus' })} onClick={()=>onAdd({ type: 'Bus' })}>Bus/Net</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Note}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Note' })} onClick={()=>onAdd({ type: 'Note' })}>Note</Button>
@@ -66,6 +68,15 @@ export default function Palette(){
             onClick={()=>addNode(createNodePreset({ type: 'Converter', variant: 'vrm-0p9-92' }))}
           >
             VRM 0.9V 92%
+          </Button>
+          <Button
+            variant="outline"
+            className={`${buttonBase} ${styleByType.DualOutputConverter}`}
+            draggable
+            onDragStart={(e)=>onDragStart(e, { type: 'DualOutputConverter', variant: 'dual-default' })}
+            onClick={()=>addNode(createNodePreset({ type: 'DualOutputConverter', variant: 'dual-default' }))}
+          >
+            Dual-output default
           </Button>
         </div>
       </div>
