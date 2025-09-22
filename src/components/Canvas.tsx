@@ -29,6 +29,8 @@ const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props;
+  const isEmbeddedChild = Boolean((data as any)?.owningSubsystemId);
+  const handlesConnectable = !isEmbeddedChild;
   const isSelected = !!selected;
   const accentColor = '#0284c7';
   const nodeType = data.type;
@@ -133,7 +135,7 @@ function CustomNode(props: NodeProps) {
       {bracketElement}
       {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
-          <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
+          <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} isConnectable={handlesConnectable} />
           <div
             style={{
               position: 'absolute',
@@ -153,7 +155,7 @@ function CustomNode(props: NodeProps) {
       )}
       {nodeType==='SubsystemInput' && (
         <>
-          <Handle type="target" position={Position.Left} id={props.id} style={{ background: '#555' }} />
+          <Handle type="target" position={Position.Left} id={props.id} style={{ background: '#555' }} isConnectable={handlesConnectable} />
           <div
             style={{
               position: 'absolute',
@@ -180,7 +182,7 @@ function CustomNode(props: NodeProps) {
           const count = ports.length
           if (count === 0) return (
             <>
-              <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
+              <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} isConnectable={handlesConnectable} />
               <div
                 style={{
                   position: 'absolute',
@@ -210,6 +212,7 @@ function CustomNode(props: NodeProps) {
                       position={Position.Left}
                       id={p.id}
                       style={{ background: '#555', top: `${pct}%`, transform: 'translate(-50%, -50%)' }}
+                      isConnectable={handlesConnectable}
                     />
                     <div
                       style={{
@@ -247,7 +250,7 @@ function CustomNode(props: NodeProps) {
       </div>
       {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
         <>
-          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
+          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} isConnectable={handlesConnectable} />
           <div
             style={{
               position: 'absolute',
@@ -421,7 +424,7 @@ function EmbeddedSubsystemContainerNode(props: NodeProps) {
         transition: 'box-shadow 0.2s ease'
       }}
     >
-      <Handle type="source" position={Position.Right} id="output" style={{ background: color }} />
+      <Handle type="source" position={Position.Right} id="output" style={{ background: color }} isConnectable={false} />
       <div
         style={{
           position: 'absolute',
@@ -642,6 +645,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
   const nestedUpdateNodePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
   const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
+  const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
   const { screenToFlowPosition } = useReactFlow()
@@ -767,6 +771,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
               ...childData,
               owningSubsystemId: node.id,
               originalNodeId: child.node.id,
+              // mark this node as an embedded child so its handles are not connectable
+              disableEmbeddedConnections: true,
             },
             parentNode: layout.containerId,
             extent: 'parent',
@@ -1133,6 +1139,11 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
       const stack=[start]; const seen=new Set<string>([start])
       while(stack.length){ const u=stack.pop()!; if (u===goal) return true; for (const v of (adj[u]||[])) if (!seen.has(v)){ seen.add(v); stack.push(v) } }
       return false
+    }
+    // Forbid connecting to or from any handle inside an embedded view on the main canvas
+    const endpointIsEmbedded = (id?: string) => !!id && id.includes('::')
+    if (endpointIsEmbedded(c.source) || endpointIsEmbedded(c.target)) {
+      return
     }
     const resolvedConnection = (() => {
       if (!c.target) return c
