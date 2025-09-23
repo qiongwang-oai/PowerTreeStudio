@@ -42,7 +42,7 @@ const typePriority = (type: AnyNode['type']): number => {
     case 'DualOutputConverter':
       return 2
     case 'Bus':
-      return 3
+      return 2
     case 'Subsystem':
       return 4
     case 'Load':
@@ -329,7 +329,7 @@ const assignCoordinates = (
     Converter: 116,
     DualOutputConverter: 116,
     Load: 142,
-    Bus: 72,
+    Bus: 116,
     Note: 120,
     Subsystem: 170,
     SubsystemInput: 86,
@@ -560,15 +560,17 @@ const assignCoordinates = (
       .map(entry => entry.nodes[0])
       .filter((node): node is NodeInfo => !!node)
     if (topNodes.length > 1) {
-      const reference = coords.get(topNodes[0].id)
-      if (reference) {
-        const targetY = reference.y
+      const referenceId = topNodes[0].id
+      const referencePos = coords.get(referenceId)
+      if (referencePos) {
+        const targetCenter = centerY(referenceId)
         columnEntries.forEach(entry => {
           const first = entry.nodes[0]
           if (!first) return
           const firstPos = coords.get(first.id)
           if (!firstPos) return
-          const delta = targetY - firstPos.y
+          const currentCenter = centerY(first.id)
+          const delta = targetCenter - currentCenter
           if (Math.abs(delta) < 1e-3) return
           entry.nodes.forEach(info => {
             const pos = coords.get(info.id)
