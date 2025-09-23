@@ -747,6 +747,38 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                 }
               })()}</div>
             </div>
+          ) : n.type === 'DualOutputConverter' ? (
+            (() => {
+              const nodeResult = computeResult.nodes[n.id] as any
+              const metrics: Record<string, any> = nodeResult?.__outputs || {}
+              const outputs = Array.isArray((n as any).outputs) ? (n as any).outputs : []
+              const fallback = outputs.length > 0 ? outputs[0] : undefined
+              const pin = nodeResult?.P_in
+              const pout = nodeResult?.P_out
+              return (
+                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                  <div className="text-left" style={{minWidth:120}}>
+                    {outputs.map((branch:any, idx:number) => {
+                      const handleId = branch?.id || (idx === 0 ? (fallback?.id || 'outputA') : `${fallback?.id || 'outputA'}-${idx}`)
+                      const metric = metrics[handleId] || {}
+                      const eta = typeof metric.eta === 'number' ? metric.eta : undefined
+                      const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                      return (
+                        <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
+                          <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
+                          <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                  <div className="text-left" style={{minWidth:90}}>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                  </div>
+                </div>
+              )
+            })()
           ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
             <div style={{display:'flex', alignItems:'stretch', gap:8}}>
               <div className="text-left">
@@ -794,8 +826,9 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       } else {
         const pout = nodeRes?.P_out
         const pin = nodeRes?.P_in
-        const showPout = (pout !== undefined) && (n.type !== 'Load')
-        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'DualOutputConverter' || n.type === 'Bus')
+        // For DualOutputConverter, P_in/P_out are already rendered in the left block
+        const showPout = (pout !== undefined) && (n.type !== 'Load' && n.type !== 'DualOutputConverter')
+        const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Bus')
         right = (showPout || showPin) ? (
           <>
             <div className="w-px bg-slate-300 mx-1" />
@@ -824,7 +857,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
               </div>
             </div>
           ),
-          ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
+          ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {}),
+          ...(n.type==='DualOutputConverter'? { outputs: (n as any).outputs || [], outputMetrics: ((computeResult.nodes[n.id] as any)||{}).__outputs || {} } : {})
         }
       }
     }))
