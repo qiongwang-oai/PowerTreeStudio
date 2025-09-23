@@ -114,6 +114,29 @@ function CustomNode(props: NodeProps) {
     ? SUBSYSTEM_BASE_HEIGHT + (subsystemPortCount * SUBSYSTEM_PORT_HEIGHT)
     : undefined
   const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
+  const formatVoltage = (value: unknown) => {
+    const num = Number(value)
+    if (!Number.isFinite(num)) return null
+    return `${num} V`
+  }
+  const inputConnectionCount = Number((data as any)?.inputConnectionCount) || 0
+  const inputVoltageText = formatVoltage((data as any)?.inputVoltage)
+  const rawOutputVoltage = (data as any)?.outputVoltage
+  const outputVoltageText = (() => {
+    if (typeof rawOutputVoltage !== 'number') return null
+    if (!Number.isFinite(rawOutputVoltage)) return null
+    if (rawOutputVoltage <= 0) return null
+    return formatVoltage(rawOutputVoltage)
+  })()
+  const fallbackInputVoltageText = (() => {
+    if (nodeType === 'Bus') {
+      return formatVoltage((data as any)?.outputVoltage ?? (data as any)?.V_bus)
+    }
+    if (nodeType === 'SubsystemInput') {
+      return formatVoltage((data as any)?.outputVoltage ?? (data as any)?.Vout)
+    }
+    return null
+  })()
   return (
     <div
       className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
@@ -152,7 +175,19 @@ function CustomNode(props: NodeProps) {
               textAlign: 'right',
             }}
           >
-            {nodeType==='Load' ? `${Number(((data as any).Vreq ?? 0))} V` : 'input'}
+            {(() => {
+              if (nodeType === 'Load') {
+                return `${Number(((data as any).Vreq ?? 0))} V`
+              }
+              if (nodeType === 'Converter' || nodeType === 'DualOutputConverter') {
+                return inputConnectionCount > 0 && inputVoltageText ? inputVoltageText : 'input'
+              }
+              if (nodeType === 'Bus') {
+                if (inputConnectionCount > 0 && inputVoltageText) return inputVoltageText
+                return fallbackInputVoltageText ?? 'input'
+              }
+              return 'input'
+            })()}
           </div>
         </>
       )}
@@ -172,10 +207,7 @@ function CustomNode(props: NodeProps) {
               textAlign: 'right',
             }}
           >
-            {(() => {
-              const raw = Number((data as any)?.Vout)
-              return Number.isFinite(raw) ? `${raw} V` : 'input'
-            })()}
+            {(inputConnectionCount > 0 && inputVoltageText ? inputVoltageText : (fallbackInputVoltageText ?? formatVoltage((data as any)?.Vout) ?? 'input'))}
           </div>
         </>
       )}
@@ -199,7 +231,12 @@ function CustomNode(props: NodeProps) {
                   textAlign: 'right',
                 }}
               >
-                input
+                {(() => {
+                  const connections = Number((data as any)?.inputConnectionCount) || 0
+                  const voltageText = formatVoltage((data as any)?.inputVoltage)
+                  if (connections > 0 && voltageText) return voltageText
+                  return voltageText ?? 'input'
+                })()}
               </div>
             </>
           )
@@ -207,7 +244,10 @@ function CustomNode(props: NodeProps) {
             <>
               {ports.map((p:any, idx:number) => {
                 const pct = ((idx+1)/(count+1))*100
-                const label = `${Number(p.Vout ?? 0)} V`
+                const connectionCount = Number((p as any)?.connectionCount) || 0
+                const portInputVoltageText = formatVoltage((p as any)?.inputVoltage)
+                const definedVoltageText = portInputVoltageText ?? formatVoltage(p.Vout)
+                const label = connectionCount > 0 && portInputVoltageText ? portInputVoltageText : (definedVoltageText ?? 'input')
                 return (
                   <React.Fragment key={p.id}>
                     <Handle
@@ -259,6 +299,8 @@ function CustomNode(props: NodeProps) {
                 {(outputs.length ? outputs : [{ id: 'outputA', label: 'Output A', Vout: 0 }]).map((output: any, idx: number) => {
                   const handleId = output?.id || `output-${idx}`
                   const label = output?.label || `Output ${String.fromCharCode(65 + idx)}`
+                  const voltageValue = Number(output?.Vout)
+                  const branchVoltageText = Number.isFinite(voltageValue) && voltageValue > 0 ? formatVoltage(voltageValue) : null
                   const topOffset = 50 + ((idx - (count - 1) / 2) * 24)
                   return (
                     <React.Fragment key={handleId}>
@@ -282,7 +324,7 @@ function CustomNode(props: NodeProps) {
                           textAlign: 'left',
                         }}
                       >
-                        {label}
+                        {branchVoltageText ?? label}
                       </div>
                     </React.Fragment>
                   )
@@ -306,7 +348,12 @@ function CustomNode(props: NodeProps) {
                 textAlign: 'left',
               }}
             >
-              output
+              {(() => {
+                if (nodeType === 'Converter' || nodeType === 'Bus' || nodeType === 'SubsystemInput') {
+                  return outputVoltageText ?? formatVoltage((data as any)?.outputVoltage) ?? 'output'
+                }
+                return 'output'
+              })()}
             </div>
           </>
         )}
@@ -324,9 +371,112 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined) {
+function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined, edges?: Edge[], allNodes?: AnyNode[]) {
   const parallelCount = parallelCountForNode(node as any)
   const nodeResult = computeNodes?.[node.id]
+  const incomingEdges = Array.isArray(edges)
+    ? edges.filter(edge => edge.to === node.id)
+    : []
+  const nodeLookup = Array.isArray(allNodes)
+    ? new Map(allNodes.map(n => [n.id, n]))
+    : undefined
+  const getSourceNode = (id: string): AnyNode | undefined => {
+    if (nodeLookup) return nodeLookup.get(id)
+    if (Array.isArray(allNodes)) return allNodes.find(n => n.id === id)
+    return undefined
+  }
+  const resolveNodeOutputVoltage = (sourceNode: AnyNode | undefined, computeNode: any, handleId?: string): number | undefined => {
+    if (!sourceNode) return undefined
+    const raw = sourceNode as any
+    const toNumber = (value: unknown): number | undefined => {
+      const num = Number(value)
+      return Number.isFinite(num) ? num : undefined
+    }
+    switch (sourceNode.type) {
+      case 'Source':
+        return toNumber(raw.Vout)
+      case 'Converter':
+        return toNumber(raw.Vout)
+      case 'DualOutputConverter': {
+        const outputs = Array.isArray(raw.outputs) ? raw.outputs : []
+        const fallback = outputs.length > 0 ? outputs[0] : undefined
+        const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+        const candidate = branch?.Vout ?? fallback?.Vout
+        const direct = toNumber(candidate)
+        if (direct !== undefined) return direct
+        const metrics = computeNode?.__outputs || {}
+        const metricKey = branch?.id || fallback?.id
+        if (metricKey && Number.isFinite(metrics[metricKey]?.Vout)) {
+          return Number(metrics[metricKey].Vout)
+        }
+        return undefined
+      }
+      case 'Bus':
+        return toNumber(raw.V_bus)
+      case 'SubsystemInput':
+        return toNumber(raw.Vout)
+      case 'Subsystem': {
+        const metrics = computeNode?.__portVoltageMap
+        if (metrics && handleId && Number.isFinite(metrics[handleId])) {
+          return Number(metrics[handleId])
+        }
+        const projectNodes = Array.isArray(raw.project?.nodes) ? raw.project.nodes as AnyNode[] : []
+        const port = projectNodes.find((n: any) => n.id === handleId && n.type === 'SubsystemInput') as any
+        return toNumber(port?.Vout)
+      }
+      default:
+        return undefined
+    }
+  }
+  const getVoltageFromEdge = (edge: Edge): number | undefined => {
+    const source = getSourceNode(edge.from)
+    if (!source) return undefined
+    const value = resolveNodeOutputVoltage(source, computeNodes?.[edge.from], (edge as any).fromHandle as string | undefined)
+    return Number.isFinite(value) ? Number(value) : undefined
+  }
+  const EDGE_DEFAULT_KEY = '__default__'
+  const edgesByHandle = new Map<string, Edge[]>()
+  for (const edge of incomingEdges) {
+    const handle = (edge as any).toHandle as string | undefined
+    const key = handle ?? EDGE_DEFAULT_KEY
+    const bucket = edgesByHandle.get(key)
+    if (bucket) bucket.push(edge)
+    else edgesByHandle.set(key, [edge])
+  }
+  const edgesForHandle = (handleId?: string, allowDefaultFallback = false): Edge[] => {
+    if (handleId) {
+      const direct = edgesByHandle.get(handleId) || []
+      if (handleId === 'input') {
+        const defaults = edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+        if (defaults.length === 0) return direct
+        return direct.length ? [...direct, ...defaults] : [...defaults]
+      }
+      if (allowDefaultFallback && direct.length === 0) {
+        return edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+      }
+      return direct
+    }
+    return edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+  }
+  const inferVoltageForHandle = (handleId?: string, allowDefaultFallback = false): number | undefined => {
+    const list = edgesForHandle(handleId, allowDefaultFallback)
+    for (const edge of list) {
+      const value = getVoltageFromEdge(edge)
+      if (value !== undefined) return value
+    }
+    return undefined
+  }
+  const defaultTargetHandleId = node.type === 'SubsystemInput' ? node.id : 'input'
+  const defaultHandleEdges = edgesForHandle(defaultTargetHandleId, node.type === 'SubsystemInput')
+  const defaultHandleConnectionCount = defaultHandleEdges.length
+  const defaultHandleVoltage = inferVoltageForHandle(defaultTargetHandleId, node.type === 'SubsystemInput')
+  const resolvedInputVoltage = (() => {
+    if (typeof defaultHandleVoltage === 'number' && Number.isFinite(defaultHandleVoltage)) {
+      return defaultHandleVoltage
+    }
+    const vin = nodeResult?.V_upstream
+    return typeof vin === 'number' && Number.isFinite(vin) ? vin : undefined
+  })()
   const pinValue = nodeResult?.P_in
   const poutValue = nodeResult?.P_out
   const pinSingleValue = (nodeResult as any)?.P_in_single ?? (node as any)?.P_in_single
@@ -460,13 +610,58 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
     type: node.type,
     parallelCount,
   }
+  if (node.type === 'Converter' || node.type === 'DualOutputConverter' || node.type === 'Bus' || node.type === 'SubsystemInput') {
+    data.inputConnectionCount = defaultHandleConnectionCount
+    if (typeof resolvedInputVoltage === 'number' && Number.isFinite(resolvedInputVoltage)) {
+      data.inputVoltage = resolvedInputVoltage
+    }
+  }
+  if (node.type === 'Converter') {
+    const vout = (node as any).Vout
+    if (typeof vout === 'number' && Number.isFinite(vout)) {
+      data.outputVoltage = vout
+    }
+  }
+  if (node.type === 'Bus') {
+    const vbus = (node as any).V_bus
+    if (typeof vbus === 'number' && Number.isFinite(vbus)) {
+      data.outputVoltage = vbus
+    }
+  }
   if (node.type === 'Load') data.Vreq = (node as any).Vreq
   if (node.type === 'Subsystem') {
-    data.inputPorts = ((node as any).project?.nodes||[])
+    const projectNodes = Array.isArray((node as any).project?.nodes)
+      ? (node as any).project.nodes
+      : []
+    data.inputPorts = projectNodes
       .filter((x:any)=>x.type==='SubsystemInput')
-      .map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name }))
+      .map((x:any)=>{
+        const fallback = Number(x.Vout)
+        const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
+        const inferred = inferVoltageForHandle(x.id, true)
+        const connections = edgesForHandle(x.id, true).length
+        return {
+          id: x.id,
+          Vout: x.Vout,
+          name: x.name,
+          connectionCount: connections,
+          inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
+        }
+      })
+    if (!Array.isArray(data.inputPorts) || data.inputPorts.length === 0) {
+      data.inputConnectionCount = defaultHandleConnectionCount
+      if (typeof resolvedInputVoltage === 'number' && Number.isFinite(resolvedInputVoltage)) {
+        data.inputVoltage = resolvedInputVoltage
+      }
+    }
   }
-  if (node.type === 'SubsystemInput') data.Vout = (node as any).Vout
+  if (node.type === 'SubsystemInput') {
+    const vout = (node as any).Vout
+    if (typeof vout === 'number' && Number.isFinite(vout)) {
+      data.Vout = vout
+      data.outputVoltage = vout
+    }
+  }
   if (node.type === 'DualOutputConverter'){
     data.outputs = (node as any).outputs || []
     data.outputMetrics = outputMetrics
@@ -835,7 +1030,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
           style: { width: layout.width, height: layout.height },
         })
         for (const child of layout.childNodes) {
-          const childData = buildNodeDisplayData(child.node, layout.analysis.nodes)
+          const childData = buildNodeDisplayData(child.node, layout.analysis.nodes, layout.embeddedProject.edges, layout.embeddedProject.nodes as AnyNode[])
           nodes.push({
             id: child.rfId,
             type: 'custom',
@@ -854,7 +1049,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
           })
         }
       } else {
-        const data = buildNodeDisplayData(node, computeResult.nodes)
+        const data = buildNodeDisplayData(node, computeResult.nodes, project.edges, project.nodes as AnyNode[])
         nodes.push({
           id: node.id,
           type: 'custom',
@@ -866,7 +1061,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
       }
     }
     return nodes
-  }, [project.nodes, computeResult.nodes, expandedLayouts])
+  }, [project.nodes, project.edges, computeResult.nodes, expandedLayouts])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
