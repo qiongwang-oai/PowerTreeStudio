@@ -21,4 +21,47 @@ describe('curve efficiency', ()=>{
     expect(conv.P_in! - conv.P_out!).toBeGreaterThan(0)
     expect(e2.P_loss_edge).toBeGreaterThan(0)
   })
+
+  it('applies per-phase efficiency data for multi-phase converters', () => {
+    const project: Project = {
+      id: 'ph',
+      name: 'PerPhase',
+      units: { voltage: 'V', current: 'A', power: 'W', resistance: 'mΩ' },
+      defaultMargins: { currentPct: 10, powerPct: 10, voltageDropPct: 5, voltageMarginPct: 3 },
+      scenarios: ['Typical', 'Max', 'Idle'],
+      currentScenario: 'Typical',
+      nodes: [
+        { id: 's', type: 'Source', name: 'Src', Vout: 12 },
+        {
+          id: 'c',
+          type: 'Converter',
+          name: 'VRM',
+          Vin_min: 10,
+          Vin_max: 14,
+          Vout: 10,
+          Iout_max: 40,
+          phaseCount: 2,
+          efficiency: {
+            type: 'curve',
+            base: 'Iout_max',
+            perPhase: true,
+            points: [
+              { current: 0, eta: 0.9 },
+              { current: 20, eta: 0.95 },
+            ],
+          },
+        } as any,
+        { id: 'l', type: 'Load', name: 'L', Vreq: 10, I_typ: 30, I_max: 30 },
+      ] as any,
+      edges: [
+        { id: 'es', from: 's', to: 'c' },
+        { id: 'ec', from: 'c', to: 'l' },
+      ],
+    }
+
+    const result = compute(project)
+    const conv = result.nodes['c'] as any
+    const eta = (conv.P_out || 0) / Math.max(conv.P_in || 1, 1e-9)
+    expect(eta).toBeCloseTo(0.9375, 4)
+  })
 })

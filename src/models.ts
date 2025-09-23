@@ -1,7 +1,8 @@
 export type NodeType = 'Source'|'Converter'|'DualOutputConverter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'
+export type EfficiencyPoint = { loadPct?: number; current?: number; eta: number }
 export type EfficiencyModel =
- | { type: 'fixed', value: number }
- | { type: 'curve', base: 'Pout_max' | 'Iout_max', points: { loadPct:number, eta:number }[] }
+ | { type: 'fixed', value: number, perPhase?: boolean }
+ | { type: 'curve', base: 'Pout_max' | 'Iout_max', points: EfficiencyPoint[], perPhase?: boolean }
 export type BaseNode = { id: string; type: NodeType; name: string; x?:number; y?:number; notes?: string; warnings?: string[] }
 export type SourceNode = BaseNode & { type: 'Source'; Vout: number; I_max?: number; P_max?: number; count?: number; redundancy?: 'N'|'N+1' }
 export type ConverterNode = BaseNode & {

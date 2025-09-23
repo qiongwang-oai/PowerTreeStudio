@@ -29,25 +29,68 @@ export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
   const utilPct = Number.isFinite(utilPctRaw as any) ? clamp((utilPctRaw as any as number), 0, 100) : 100
   return load.I_typ * (utilPct/100) * count
 }
-export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
-  if (model.type==='fixed') return model.value
-  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9; // default efficiency if points missing
-  // Support both loadPct and current for backward compatibility
+type EfficiencyNodeMeta = {
+  Pout_max?: number
+  Iout_max?: number
+  phaseCount?: number
+}
+
+export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: EfficiencyNodeMeta): number {
+  const phaseCountRaw = (node?.phaseCount ?? 1) as number
+  const phaseCount = Number.isFinite(phaseCountRaw) && phaseCountRaw > 0 ? Math.max(1, Math.round(phaseCountRaw)) : 1
+  const perPhase = !!(model as any)?.perPhase && phaseCount > 0
+  const divisor = perPhase ? phaseCount : 1
+  const scaledPout = perPhase ? (P_out / divisor) : P_out
+  const scaledIout = perPhase ? (I_out / divisor) : I_out
+
+  if (model.type === 'fixed') return model.value
+  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9 // default efficiency if points missing
+
   const base = model.base
-  const maxBase = base==='Pout_max'? node.Pout_max : node.Iout_max
-  if (!maxBase) return 0.9
-  let points = [...model.points]
-  if ('current' in points[0] && typeof (points[0] as any).current === 'number') {
-    points = points.map(p => ({ loadPct: 'current' in p && typeof p.current === 'number' ? Math.round(100 * p.current / maxBase) : (p.loadPct ?? 0), eta: p.eta }))
+  const rawMax = base === 'Pout_max' ? node?.Pout_max : node?.Iout_max
+  const maxBase = Number.isFinite(rawMax) && (rawMax as number) > 0 ? (rawMax as number) / Math.max(divisor, 1) : undefined
+  if (!maxBase || maxBase <= 0) {
+    return 0.9
   }
-  points.sort((a,b)=>a.loadPct-b.loadPct)
-  const frac = base==='Pout_max'? (P_out/ maxBase) : (I_out/ maxBase)
-  const pct = clamp(frac*100, 0, 100)
-  let prev = points[0], next = points[points.length-1]
-  for (let i=0;i<points.length-1;i++){ if (pct>=points[i].loadPct && pct<=points[i+1].loadPct){ prev=points[i]; next=points[i+1]; break } }
-  if (pct<=points[0].loadPct){ prev=points[0]; next=points[0] }
-  if (pct>=points[points.length-1].loadPct){ prev=points[points.length-1]; next=points[points.length-1] }
-  const eta = prev.eta + (next.eta-prev.eta)*(pct-prev.loadPct)/(next.loadPct-prev.loadPct||1)
+
+  const normalizedPoints = model.points
+    .map((p: any) => {
+      const eta = typeof p.eta === 'number' ? p.eta : 0
+      let pct: number | undefined
+      if (typeof p.loadPct === 'number') pct = clamp(p.loadPct, 0, 100)
+      else if (typeof p.current === 'number') pct = clamp((p.current / maxBase) * 100, 0, 100)
+      return { pct, eta }
+    })
+    .filter(p => typeof p.pct === 'number')
+    .sort((a, b) => (a.pct! - b.pct!))
+
+  if (normalizedPoints.length === 0) {
+    return typeof model.points[0]?.eta === 'number' ? model.points[0]!.eta : 0.9
+  }
+
+  const fracBase = base === 'Pout_max' ? (scaledPout / maxBase) : (scaledIout / maxBase)
+  const pct = clamp(fracBase * 100, 0, 100)
+  let prev = normalizedPoints[0]!
+  let next = normalizedPoints[normalizedPoints.length - 1]!
+  for (let i = 0; i < normalizedPoints.length - 1; i++) {
+    const curr = normalizedPoints[i]!
+    const following = normalizedPoints[i + 1]!
+    if (pct >= curr.pct! && pct <= following.pct!) {
+      prev = curr
+      next = following
+      break
+    }
+  }
+  if (pct <= normalizedPoints[0]!.pct!) {
+    prev = normalizedPoints[0]!
+    next = normalizedPoints[0]!
+  }
+  if (pct >= normalizedPoints[normalizedPoints.length - 1]!.pct!) {
+    prev = normalizedPoints[normalizedPoints.length - 1]!
+    next = normalizedPoints[normalizedPoints.length - 1]!
+  }
+  const spread = Math.max((next.pct! - prev.pct!), 1e-9)
+  const eta = prev.eta + (next.eta - prev.eta) * (pct - prev.pct!) / spread
   return eta
 }
 export function detectCycle(nodes: AnyNode[], edges: Edge[]): {hasCycle:boolean, order:string[]} {
