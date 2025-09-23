@@ -173,7 +173,7 @@ export function compute(project: Project): ComputeResult {
       if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
       const P_out = childInputSum + edgeLossSum
       const P_in = P_out // ideal
-      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; (bus as any).loss = 0
+      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; bus.I_in = I_out; (bus as any).loss = 0
     }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
@@ -419,7 +419,46 @@ export function compute(project: Project): ComputeResult {
   // Reconcile converters bottom-up using updated child inputs and edge losses
   for (const nodeId of reverseOrder){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter'){
+    if (node.type === 'Bus'){
+      const bus = node as ComputeNode
+      const outEdges = (outgoing[bus.id] || []).filter(e => {
+        const h = (e as any).fromHandle
+        return h === undefined || h === 'output'
+      })
+      let childInputSum = 0
+      let edgeLossSum = 0
+      let I_out = 0
+      for (const e of outEdges){
+        const em = emap[e.id]
+        if (em){
+          I_out += em.I_edge || 0
+          edgeLossSum += em.P_loss_edge || 0
+        }
+        const child = nmap[e.to]
+        if (child){
+          if (child.type === 'Subsystem'){
+            const toHandle = (e as any).toHandle as string | undefined
+            const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+            const vals = Object.values(perPort)
+            if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+            else if (vals.length === 1) childInputSum += vals[0] || 0
+            else childInputSum += 0
+          } else {
+            childInputSum += (child.P_in || 0)
+          }
+        }
+      }
+      const Vbus = Math.max(((bus as any).V_bus || 0), 1e-9)
+      if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
+      const P_out = childInputSum + edgeLossSum
+      const P_in = P_out
+      bus.P_out = P_out
+      bus.P_in = P_in
+      ;(bus as any).I_out = I_out
+      bus.I_in = I_out
+      ;(bus as any).loss = 0
+    }
+    else if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
       let childInputSum = 0
       let edgeLossSum = 0
@@ -744,6 +783,7 @@ export function compute(project: Project): ComputeResult {
         }
       }
       bus.I_out = I_out_sum
+      bus.I_in = I_out_sum
     }
   }
   // Apply converter limit warnings using finalized values
