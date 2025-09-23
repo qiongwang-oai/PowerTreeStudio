@@ -1,4 +1,5 @@
 import { Project } from './models'
-import sample from './assets/Server_subsystem.json'
+import YAML from 'yaml'
+import sampleYaml from '../Sample_Server.yaml?raw'
 
-export const sampleProject: Project = sample as any
+export const sampleProject: Project = YAML.parse(sampleYaml) as any
