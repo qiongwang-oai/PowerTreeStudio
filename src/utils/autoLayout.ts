@@ -513,6 +513,49 @@ const assignCoordinates = (
       }
     }
 
+    for (const entry of columnEntries) {
+      if (entry.nodes.length <= 1) continue
+      const decorated = entry.nodes
+        .map(info => {
+          const pos = coords.get(info.id)
+          if (!pos) return null
+          const depth = depthMap.get(info.id) ?? 0
+          const children = (maps.outgoing.get(info.id) ?? []).filter(edge => {
+            const targetDepth = depthMap.get(edge.to)
+            return typeof targetDepth === 'number' && targetDepth > depth
+          })
+          return {
+            id: info.id,
+            pos,
+            hasForwardChildren: children.length > 0,
+          }
+        })
+        .filter((value): value is { id: string; pos: { x: number; y: number }; hasForwardChildren: boolean } => !!value)
+        .sort((a, b) => a.pos.y - b.pos.y)
+
+      if (decorated.length <= 1) continue
+      const baseY = decorated[0].pos.y
+      let previousY = baseY - ROW_SPACING
+
+      decorated.forEach((item, index) => {
+        let nextY = item.pos.y
+        if (!item.hasForwardChildren) {
+          const desiredY = baseY + index * ROW_SPACING
+          if (nextY > desiredY) {
+            nextY = desiredY
+          }
+        }
+        const minY = previousY + ROW_SPACING
+        if (nextY < minY) {
+          nextY = minY
+        }
+        if (Math.abs(nextY - item.pos.y) > 1e-3) {
+          coords.set(item.id, { x: item.pos.x, y: nextY })
+        }
+        previousY = nextY
+      })
+    }
+
     const topNodes = columnEntries
       .map(entry => entry.nodes[0])
       .filter((node): node is NodeInfo => !!node)
