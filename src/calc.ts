@@ -1,4 +1,4 @@
-import { AnyNode, ConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scenario, SourceNode, SubsystemNode } from './models'
+import { AnyNode, ConverterNode, DualOutputConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scenario, SourceNode, SubsystemNode } from './models'
 import { clamp } from './utils'
 
 export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge?: number, R_total?: number }
@@ -29,25 +29,68 @@ export function scenarioCurrent(load: LoadNode, scenario: Scenario): number {
   const utilPct = Number.isFinite(utilPctRaw as any) ? clamp((utilPctRaw as any as number), 0, 100) : 100
   return load.I_typ * (utilPct/100) * count
 }
-export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: ConverterNode): number {
-  if (model.type==='fixed') return model.value
-  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9; // default efficiency if points missing
-  // Support both loadPct and current for backward compatibility
+type EfficiencyNodeMeta = {
+  Pout_max?: number
+  Iout_max?: number
+  phaseCount?: number
+}
+
+export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: EfficiencyNodeMeta): number {
+  const phaseCountRaw = (node?.phaseCount ?? 1) as number
+  const phaseCount = Number.isFinite(phaseCountRaw) && phaseCountRaw > 0 ? Math.max(1, Math.round(phaseCountRaw)) : 1
+  const perPhase = !!(model as any)?.perPhase && phaseCount > 0
+  const divisor = perPhase ? phaseCount : 1
+  const scaledPout = perPhase ? (P_out / divisor) : P_out
+  const scaledIout = perPhase ? (I_out / divisor) : I_out
+
+  if (model.type === 'fixed') return model.value
+  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9 // default efficiency if points missing
+
   const base = model.base
-  const maxBase = base==='Pout_max'? node.Pout_max : node.Iout_max
-  if (!maxBase) return 0.9
-  let points = [...model.points]
-  if ('current' in points[0] && typeof (points[0] as any).current === 'number') {
-    points = points.map(p => ({ loadPct: 'current' in p && typeof p.current === 'number' ? Math.round(100 * p.current / maxBase) : (p.loadPct ?? 0), eta: p.eta }))
+  const rawMax = base === 'Pout_max' ? node?.Pout_max : node?.Iout_max
+  const maxBase = Number.isFinite(rawMax) && (rawMax as number) > 0 ? (rawMax as number) / Math.max(divisor, 1) : undefined
+  if (!maxBase || maxBase <= 0) {
+    return 0.9
   }
-  points.sort((a,b)=>a.loadPct-b.loadPct)
-  const frac = base==='Pout_max'? (P_out/ maxBase) : (I_out/ maxBase)
-  const pct = clamp(frac*100, 0, 100)
-  let prev = points[0], next = points[points.length-1]
-  for (let i=0;i<points.length-1;i++){ if (pct>=points[i].loadPct && pct<=points[i+1].loadPct){ prev=points[i]; next=points[i+1]; break } }
-  if (pct<=points[0].loadPct){ prev=points[0]; next=points[0] }
-  if (pct>=points[points.length-1].loadPct){ prev=points[points.length-1]; next=points[points.length-1] }
-  const eta = prev.eta + (next.eta-prev.eta)*(pct-prev.loadPct)/(next.loadPct-prev.loadPct||1)
+
+  const normalizedPoints = model.points
+    .map((p: any) => {
+      const eta = typeof p.eta === 'number' ? p.eta : 0
+      let pct: number | undefined
+      if (typeof p.loadPct === 'number') pct = clamp(p.loadPct, 0, 100)
+      else if (typeof p.current === 'number') pct = clamp((p.current / maxBase) * 100, 0, 100)
+      return { pct, eta }
+    })
+    .filter(p => typeof p.pct === 'number')
+    .sort((a, b) => (a.pct! - b.pct!))
+
+  if (normalizedPoints.length === 0) {
+    return typeof model.points[0]?.eta === 'number' ? model.points[0]!.eta : 0.9
+  }
+
+  const fracBase = base === 'Pout_max' ? (scaledPout / maxBase) : (scaledIout / maxBase)
+  const pct = clamp(fracBase * 100, 0, 100)
+  let prev = normalizedPoints[0]!
+  let next = normalizedPoints[normalizedPoints.length - 1]!
+  for (let i = 0; i < normalizedPoints.length - 1; i++) {
+    const curr = normalizedPoints[i]!
+    const following = normalizedPoints[i + 1]!
+    if (pct >= curr.pct! && pct <= following.pct!) {
+      prev = curr
+      next = following
+      break
+    }
+  }
+  if (pct <= normalizedPoints[0]!.pct!) {
+    prev = normalizedPoints[0]!
+    next = normalizedPoints[0]!
+  }
+  if (pct >= normalizedPoints[normalizedPoints.length - 1]!.pct!) {
+    prev = normalizedPoints[normalizedPoints.length - 1]!
+    next = normalizedPoints[normalizedPoints.length - 1]!
+  }
+  const spread = Math.max((next.pct! - prev.pct!), 1e-9)
+  const eta = prev.eta + (next.eta - prev.eta) * (pct - prev.pct!) / spread
   return eta
 }
 export function detectCycle(nodes: AnyNode[], edges: Edge[]): {hasCycle:boolean, order:string[]} {
@@ -90,6 +133,57 @@ export function compute(project: Project): ComputeResult {
       const eta = etaFromModel(conv.efficiency, P_children, I_out, conv)
       const P_out=P_children; const P_in=P_out/Math.max(eta,1e-9); conv.P_out=P_out; conv.P_in=P_in; conv.I_out=I_out
       const Vin_assumed=(conv.Vin_min+conv.Vin_max)/2; conv.I_in=P_in/Math.max(Vin_assumed,1e-9); conv.loss=P_in-P_out }
+    else if (node.type==='DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const branches = Array.isArray(dual.outputs) ? dual.outputs : []
+      const branchIds = new Set((branches || []).map(b => b?.id).filter(Boolean) as string[])
+      const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
+      const edgesForNode = outgoing[dual.id] || []
+      const edgesByHandle: Record<string, typeof edgesForNode> = {}
+      for (const e of edgesForNode){
+        const rawHandle = (e as any).fromHandle as string | undefined
+        const resolved = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
+        ;(edgesByHandle[resolved] = edgesByHandle[resolved] || []).push(e)
+      }
+      const metrics: Record<string, { id: string; label?: string; Vout?: number; I_out: number; P_out: number; P_in: number; eta: number; loss: number }> = {}
+      let totalPout = 0
+      let totalPin = 0
+      let totalIout = 0
+      branches.forEach((branch, idx) => {
+        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+        const branchEdges = edgesByHandle[handleId] || []
+        let P_children = 0
+        let I_out = 0
+        for (const edge of branchEdges){
+          const child = nmap[edge.to]
+          if (child?.P_in) P_children += child.P_in
+          const em = emap[edge.id]
+          if (em && typeof em.I_edge === 'number') I_out += em.I_edge || 0
+        }
+        if (I_out === 0) I_out = P_children / Math.max(branch?.Vout || 0, 1e-9)
+        const effModel = branch?.efficiency || { type: 'fixed', value: 0.9 }
+        const eta = etaFromModel(effModel, P_children, I_out, branch as any)
+        const Pin = P_children / Math.max(eta, 1e-9)
+        metrics[handleId] = {
+          id: handleId,
+          label: branch?.label,
+          Vout: branch?.Vout,
+          I_out,
+          P_out: P_children,
+          P_in: Pin,
+          eta,
+          loss: Pin - P_children,
+        }
+        totalPout += P_children
+        totalPin += Pin
+        totalIout += I_out
+      })
+      dual.P_out = totalPout
+      dual.P_in = totalPin
+      dual.I_out = totalIout
+      dual.loss = (totalPin || 0) - (totalPout || 0)
+      ;(dual as any).__outputs = metrics
+    }
     else if (node.type==='Bus'){
       // Treat Bus as an ideal pass-through converter: η = 100%, Vin == Vout == V_bus, no limits
       const bus = node as any as ComputeNode
@@ -122,7 +216,7 @@ export function compute(project: Project): ComputeResult {
       if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
       const P_out = childInputSum + edgeLossSum
       const P_in = P_out // ideal
-      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; (bus as any).loss = 0
+      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; bus.I_in = I_out; (bus as any).loss = 0
     }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
@@ -236,14 +330,22 @@ export function compute(project: Project): ComputeResult {
   for (const e of Object.values(emap)){
     const child=nmap[e.to]; const parent=nmap[e.from]
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
-    const upV = parent?.type==='Source'? (parent as any).Vout
-      : parent?.type==='Converter'? (parent as any).Vout
-      : parent?.type==='Bus'? (parent as any).V_bus
-      : parent?.type==='SubsystemInput'? (parent as any).Vout
-      : undefined
+    let upV: number | undefined
+    if (parent?.type==='Source') upV = (parent as any).Vout
+    else if (parent?.type==='Converter') upV = (parent as any).Vout
+    else if (parent?.type==='DualOutputConverter'){
+      const dualParent = parent as any as DualOutputConverterNode
+      const branches = Array.isArray(dualParent.outputs) ? dualParent.outputs : []
+      const fallback = branches.length > 0 ? branches[0] : undefined
+      const handleId = (e as any).fromHandle as string | undefined
+      const branch = handleId ? branches.find(b => b?.id === handleId) : undefined
+      upV = (branch || fallback)?.Vout
+    }
+    else if (parent?.type==='Bus') upV = (parent as any).V_bus
+    else if (parent?.type==='SubsystemInput') upV = (parent as any).Vout
     let I = 0
     if (child){
-      if (child.type==='Converter'){
+      if (child.type==='Converter' || child.type==='DualOutputConverter'){
         I = ((child.P_in || 0) / Math.max((upV ?? 0), 1e-9))
       } else if (child.type==='Subsystem'){
         // Use per-port power if available and targetHandle provided; otherwise try voltage match
@@ -279,7 +381,7 @@ export function compute(project: Project): ComputeResult {
     if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
     // Voltage compatibility warnings between upstream (parent) and downstream (child)
     if (parent && child && upV !== undefined) {
-      if (child.type === 'Converter') {
+      if (child.type === 'Converter' || child.type === 'DualOutputConverter') {
         const min = (child as any).Vin_min
         const max = (child as any).Vin_max
         if (Number.isFinite(min) && Number.isFinite(max) && (upV < min || upV > max)) {
@@ -319,12 +421,87 @@ export function compute(project: Project): ComputeResult {
       const updatedEta = etaFromModel(conv.efficiency, conv.P_out || 0, conv.I_out || 0, conv)
       conv.P_in = (conv.P_out || 0) / Math.max(updatedEta, 1e-9)
       conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
+    } else if (node.type === 'DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const branches = Array.isArray(dual.outputs) ? dual.outputs : []
+      const existing: Record<string, any> = ((dual as any).__outputs) || {}
+      const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
+      const metrics: Record<string, any> = {}
+      let totalPin = 0
+      let totalPout = 0
+      let totalIout = 0
+      branches.forEach((branch, idx) => {
+        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+        const prev = existing[handleId] || {}
+        const P_out = prev.P_out ?? 0
+        const I_out = prev.I_out ?? 0
+        const effModel = branch?.efficiency || { type: 'fixed', value: 0.9 }
+        const eta = etaFromModel(effModel, P_out, I_out, branch as any)
+        const P_in = P_out / Math.max(eta, 1e-9)
+        metrics[handleId] = {
+          id: handleId,
+          label: branch?.label,
+          Vout: branch?.Vout,
+          P_out,
+          I_out,
+          eta,
+          P_in,
+          loss: P_in - P_out,
+        }
+        totalPin += P_in
+        totalPout += P_out
+        totalIout += I_out
+      })
+      dual.P_in = totalPin
+      dual.P_out = totalPout
+      dual.I_out = totalIout
+      dual.loss = (totalPin || 0) - (totalPout || 0)
+      ;(dual as any).__outputs = metrics
     }
   }
   // Reconcile converters bottom-up using updated child inputs and edge losses
   for (const nodeId of reverseOrder){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter'){
+    if (node.type === 'Bus'){
+      const bus = node as ComputeNode
+      const outEdges = (outgoing[bus.id] || []).filter(e => {
+        const h = (e as any).fromHandle
+        return h === undefined || h === 'output'
+      })
+      let childInputSum = 0
+      let edgeLossSum = 0
+      let I_out = 0
+      for (const e of outEdges){
+        const em = emap[e.id]
+        if (em){
+          I_out += em.I_edge || 0
+          edgeLossSum += em.P_loss_edge || 0
+        }
+        const child = nmap[e.to]
+        if (child){
+          if (child.type === 'Subsystem'){
+            const toHandle = (e as any).toHandle as string | undefined
+            const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+            const vals = Object.values(perPort)
+            if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+            else if (vals.length === 1) childInputSum += vals[0] || 0
+            else childInputSum += 0
+          } else {
+            childInputSum += (child.P_in || 0)
+          }
+        }
+      }
+      const Vbus = Math.max(((bus as any).V_bus || 0), 1e-9)
+      if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
+      const P_out = childInputSum + edgeLossSum
+      const P_in = P_out
+      bus.P_out = P_out
+      bus.P_in = P_in
+      ;(bus as any).I_out = I_out
+      bus.I_in = I_out
+      ;(bus as any).loss = 0
+    }
+    else if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
       let childInputSum = 0
       let edgeLossSum = 0
@@ -357,6 +534,64 @@ export function compute(project: Project): ComputeResult {
       conv.I_out = I_out
       conv.P_in = P_out / Math.max(eta, 1e-9)
       conv.loss = (conv.P_in || 0) - (conv.P_out || 0)
+    } else if (node.type === 'DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const branches = Array.isArray(dual.outputs) ? dual.outputs : []
+      const branchIds = new Set((branches || []).map(b => b?.id).filter(Boolean) as string[])
+      const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
+      const metrics: Record<string, any> = {}
+      let totalPout = 0
+      let totalPin = 0
+      let totalIout = 0
+      branches.forEach((branch, idx) => {
+        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+        let childInputSum = 0
+        let edgeLossSum = 0
+        let I_out = 0
+        for (const e of Object.values(emap)){
+          if (e.from !== dual.id) continue
+          const fromHRaw = (e as any).fromHandle as string | undefined
+          const fromH = fromHRaw && branchIds.has(fromHRaw) ? fromHRaw : fallbackHandle
+          if (fromH !== handleId) continue
+          const child = nmap[e.to]
+          I_out += (e.I_edge || 0)
+          edgeLossSum += (e.P_loss_edge || 0)
+          if (child){
+            if (child.type === 'Subsystem'){
+              const toHandle = (e as any).toHandle as string | undefined
+              const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+              const vals = Object.values(perPort)
+              if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+              else if (vals.length === 1) childInputSum += vals[0] || 0
+              else childInputSum += 0
+            } else {
+              childInputSum += (child.P_in || 0)
+            }
+          }
+        }
+        const P_out = childInputSum + edgeLossSum
+        const effModel = branch?.efficiency || { type: 'fixed', value: 0.9 }
+        const eta = etaFromModel(effModel, P_out, I_out, branch as any)
+        const P_in = P_out / Math.max(eta, 1e-9)
+        metrics[handleId] = {
+          id: handleId,
+          label: branch?.label,
+          Vout: branch?.Vout,
+          P_out,
+          I_out,
+          eta,
+          P_in,
+          loss: P_in - P_out,
+        }
+        totalPout += P_out
+        totalPin += P_in
+        totalIout += I_out
+      })
+      dual.P_out = totalPout
+      dual.P_in = totalPin
+      dual.I_out = totalIout
+      dual.loss = (dual.P_in || 0) - (dual.P_out || 0)
+      ;(dual as any).__outputs = metrics
     }
   }
   // Recompute edge currents with updated child P_in after reconciliation
@@ -404,8 +639,8 @@ export function compute(project: Project): ComputeResult {
   // Recompute converter input current from incoming edges connected to the input handle only
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter' || node.type === 'Bus'){
-      const conv = node as any as ConverterNode & ComputeNode
+    if (node.type === 'Converter' || node.type === 'DualOutputConverter' || node.type === 'Bus'){
+      const conv = node as any as ComputeNode
       let I_in_sum = 0
       for (const e of Object.values(emap)){
         if (e.to === conv.id){
@@ -415,6 +650,104 @@ export function compute(project: Project): ComputeResult {
         }
       }
       conv.I_in = I_in_sum
+    }
+  }
+  const parentsNeedingRefresh = new Set<string>()
+  for (const nodeId of order){
+    const node = nmap[nodeId]; if (!node) continue
+    if (node.type === 'DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const incomingEdges = Object.values(emap).filter(e => e.to === dual.id)
+      let upstreamVoltage: number | undefined
+      for (const e of incomingEdges){
+        const toHandle = (e as any).toHandle
+        if (toHandle !== undefined && toHandle !== 'input') continue
+        const parent = nmap[e.from]
+        const parentV = parent?.type === 'Source' ? (parent as any).Vout
+          : parent?.type === 'Converter' ? (parent as any).Vout
+          : parent?.type === 'DualOutputConverter' ? (() => {
+              const outputs = Array.isArray((parent as any).outputs) ? (parent as any).outputs : []
+              const fallback = outputs.length > 0 ? outputs[0] : undefined
+              const handleId = (e as any).fromHandle as string | undefined
+              const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+              return (branch || fallback)?.Vout
+            })()
+          : parent?.type === 'Bus' ? (parent as any).V_bus
+          : parent?.type === 'SubsystemInput' ? (parent as any).Vout
+          : undefined
+        if (typeof parentV === 'number' && Number.isFinite(parentV)){
+          upstreamVoltage = parentV
+          break
+        }
+      }
+      if (!(typeof upstreamVoltage === 'number' && Number.isFinite(upstreamVoltage) && Math.abs(upstreamVoltage) > 1e-9)){
+        upstreamVoltage = ((dual.Vin_min || 0) + (dual.Vin_max || 0)) / 2
+      }
+      const currentIn = (dual.P_in || 0) / Math.max(upstreamVoltage || 0, 1e-9)
+      dual.I_in = currentIn
+      for (const e of incomingEdges){
+        const toHandle = (e as any).toHandle
+        if (toHandle !== undefined && toHandle !== 'input') continue
+        const parent = nmap[e.from]
+        let parentV: number | undefined
+        if (parent?.type === 'Source') parentV = (parent as any).Vout
+        else if (parent?.type === 'Converter') parentV = (parent as any).Vout
+        else if (parent?.type === 'DualOutputConverter'){
+          const outputs = Array.isArray((parent as any).outputs) ? (parent as any).outputs : []
+          const fallback = outputs.length > 0 ? outputs[0] : undefined
+          const handleId = (e as any).fromHandle as string | undefined
+          const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+          parentV = (branch || fallback)?.Vout
+        }
+        else if (parent?.type === 'Bus') parentV = (parent as any).V_bus
+        else if (parent?.type === 'SubsystemInput') parentV = (parent as any).Vout
+        const R_total = e.interconnect?.R_milliohm ? e.interconnect.R_milliohm / 1000 : 0
+        const V_drop = currentIn * R_total
+        e.I_edge = currentIn
+        e.R_total = R_total
+        e.V_drop = V_drop
+        e.P_loss_edge = currentIn * currentIn * R_total
+        if (typeof parentV === 'number' && Number.isFinite(parentV)) {
+          ;(dual as any).V_upstream = parentV - V_drop
+        }
+        parentsNeedingRefresh.add(e.from)
+      }
+    }
+  }
+  for (const pid of parentsNeedingRefresh){
+    const parent = nmap[pid]
+    if (!parent) continue
+    if (parent.type === 'Source'){
+      const outs = outgoing[parent.id] || []
+      let I = 0
+      for (const edge of outs){
+        const em = emap[edge.id]
+        if (!em) continue
+        const fromH = (edge as any).fromHandle
+        if (fromH !== undefined && fromH !== 'output') continue
+        if (typeof em.I_edge === 'number') I += em.I_edge || 0
+      }
+      const V = (parent as any).Vout || 0
+      parent.I_out = I
+      parent.I_in = I
+      parent.P_out = I * V
+      parent.P_in = parent.P_out
+    } else if (parent.type === 'SubsystemInput'){
+      const outs = outgoing[parent.id] || []
+      let I = 0
+      let edgeLoss = 0
+      for (const edge of outs){
+        const em = emap[edge.id]
+        if (!em) continue
+        if (typeof em.I_edge === 'number') I += em.I_edge || 0
+        if (typeof em.P_loss_edge === 'number') edgeLoss += em.P_loss_edge || 0
+      }
+      const V = (parent as any).Vout || 0
+      const P_in = I * V
+      parent.I_out = I
+      parent.P_out = P_in + edgeLoss
+      parent.P_in = P_in
+      parent.I_in = I
     }
   }
   // Ensure edges into Bus carry the sum of outgoing currents of that Bus
@@ -441,7 +774,7 @@ export function compute(project: Project): ComputeResult {
   // Finalize converter output current strictly from directly connected output edges
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
-    if (node.type === 'Converter' || node.type === 'Bus'){
+    if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
       let I_out_sum = 0
       for (const e of Object.values(emap)){
@@ -452,6 +785,48 @@ export function compute(project: Project): ComputeResult {
         }
       }
       conv.I_out = I_out_sum
+    } else if (node.type === 'DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const branches = Array.isArray(dual.outputs) ? dual.outputs : []
+      const existing: Record<string, any> = ((dual as any).__outputs) || {}
+      const branchIds = new Set((branches || []).map(b => b?.id).filter(Boolean) as string[])
+      const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
+      const totals: Record<string, number> = {}
+      for (const e of Object.values(emap)){
+        if (e.from !== dual.id) continue
+        const rawHandle = (e as any).fromHandle as string | undefined
+        const handleId = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
+        totals[handleId] = (totals[handleId] || 0) + (e.I_edge || 0)
+      }
+      let sum = 0
+      const metrics: Record<string, any> = {}
+      branches.forEach((branch, idx) => {
+        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+        const I_out = totals[handleId] || 0
+        sum += I_out
+        const prev = existing[handleId] || {}
+        metrics[handleId] = {
+          ...prev,
+          id: handleId,
+          label: branch?.label,
+          Vout: branch?.Vout,
+          I_out,
+        }
+      })
+      dual.I_out = sum
+      ;(dual as any).__outputs = metrics
+    } else if (node.type === 'Bus'){
+      const bus = node as any as ComputeNode
+      let I_out_sum = 0
+      for (const e of Object.values(emap)){
+        if (e.from === bus.id){
+          const fromH = (e as any).fromHandle
+          if (fromH !== undefined && fromH !== 'output') continue
+          I_out_sum += (e.I_edge || 0)
+        }
+      }
+      bus.I_out = I_out_sum
+      bus.I_in = I_out_sum
     }
   }
   // Apply converter limit warnings using finalized values
@@ -467,6 +842,24 @@ export function compute(project: Project): ComputeResult {
       if (conv.Pout_max && P_out > (conv.Pout_max as any as number) * (1 - defaultMargins.powerPct/100)){
         conv.warnings.push(`P_out ${P_out.toFixed(2)}W exceeds limit ${conv.Pout_max}W (incl. margin).`)
       }
+    } else if (node.type === 'DualOutputConverter'){
+      const dual = node as any as DualOutputConverterNode & ComputeNode
+      const branches = Array.isArray(dual.outputs) ? dual.outputs : []
+      const metrics: Record<string, any> = ((dual as any).__outputs) || {}
+      const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
+      branches.forEach((branch, idx) => {
+        const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
+        const metric = metrics[handleId] || {}
+        const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+        const I_out = metric.I_out || 0
+        const P_out = metric.P_out || 0
+        if (branch?.Iout_max && I_out > (branch.Iout_max as number) * (1 - defaultMargins.currentPct/100)){
+          dual.warnings.push(`${label}: I_out ${I_out.toFixed(3)}A exceeds limit ${branch.Iout_max}A (incl. margin).`)
+        }
+        if (branch?.Pout_max && P_out > (branch.Pout_max as number) * (1 - defaultMargins.powerPct/100)){
+          dual.warnings.push(`${label}: P_out ${P_out.toFixed(2)}W exceeds limit ${branch.Pout_max}W (incl. margin).`)
+        }
+      })
     }
   }
   // Update Source-like totals after converters are reconciled
@@ -560,7 +953,7 @@ export function computeDeepAggregates(project: Project): DeepAggregates {
         const pout = node.P_out || 0
         if (isNonCritical) nonCriticalLoadPower += pout
         else criticalLoadPower += pout
-      } else if (node.type === 'Converter'){
+      } else if (node.type === 'Converter' || node.type === 'DualOutputConverter'){
         converterLoss += (node.loss || 0)
       }
     }

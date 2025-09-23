@@ -12,6 +12,7 @@ import { download, importProjectFile, serializeProject } from './io'
 import { exportReport } from './report'
 import ReportDialog from './components/report/ReportDialog'
 import AutoAlignPrompt from './components/AutoAlignPrompt'
+import type { InspectorSelection } from './types/selection'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -47,7 +48,7 @@ export default function App(){
   const autoAlign = useStore(s=>s.autoAlign)
   const pastLen = useStore(s=>s.past.length)
   const futureLen = useStore(s=>s.future.length)
-  const [selected, setSelected] = React.useState<string|null>(null)
+  const [selected, setSelected] = React.useState<InspectorSelection | null>(null)
   const [rightPane, setRightPane] = React.useState<number>(300)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
@@ -194,7 +195,7 @@ export default function App(){
               background: 'transparent'
             }}
           />
-          <Inspector selected={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} onSelect={(id)=>setSelected(id)} />
+          <Inspector selection={selected} onDeleted={()=>setSelected(null)} onOpenSubsystemEditor={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} onSelect={setSelected} />
         </aside>
         {/* TotalsBar removed; metrics shown in Canvas banner */}
         {openSubsystemIds.map((id, idx)=>{

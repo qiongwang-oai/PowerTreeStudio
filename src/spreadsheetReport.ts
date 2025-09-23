@@ -91,7 +91,7 @@ function buildTableForProject(project: Project): any[][] {
       const pout = (rn as any).P_out || 0
       if (isNonCritical) tlNonCritical += pout; else tlCritical += pout
     }
-    if ((rn as any).type === 'Converter') tlConvLoss += ((rn as any).loss || 0)
+    if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') tlConvLoss += ((rn as any).loss || 0)
   }
   for (const e of Object.values(result.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
   rows.push(['Copper traces and power converters','—', 0, 0, tlEdgeLoss, tlConvLoss, (tlEdgeLoss + tlConvLoss), 'NA',''])

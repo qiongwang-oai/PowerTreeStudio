@@ -39,9 +39,10 @@ const typePriority = (type: AnyNode['type']): number => {
     case 'SubsystemInput':
       return 1
     case 'Converter':
+    case 'DualOutputConverter':
       return 2
     case 'Bus':
-      return 3
+      return 2
     case 'Subsystem':
       return 4
     case 'Load':
@@ -306,6 +307,56 @@ const assignCoordinates = (
   const componentMap = buildComponents(maps)
   const components = sortComponents(project, depthMap, componentMap, maps)
   let currentY = TOP_MARGIN
+  const spanCache = new Map<string, number>()
+  const getSpanUnits = (nodeId: string): number => {
+    if (spanCache.has(nodeId)) return spanCache.get(nodeId)!
+    const depth = depthMap.get(nodeId) ?? 0
+    const outgoingEdges = maps.outgoing.get(nodeId) ?? []
+    let sum = 0
+    for (const edge of outgoingEdges){
+      const childDepth = depthMap.get(edge.to) ?? Infinity
+      if (childDepth <= depth) continue
+      sum += getSpanUnits(edge.to)
+    }
+    const span = Math.max(1, sum)
+    spanCache.set(nodeId, span)
+    return span
+  }
+
+  // Approximate visual heights for node types to align handle centers
+  const typeBaseHeight: Record<string, number> = {
+    Source: 86,
+    Converter: 116,
+    DualOutputConverter: 116,
+    Load: 142,
+    Bus: 116,
+    Note: 120,
+    Subsystem: 170,
+    SubsystemInput: 86,
+  }
+
+  const estimateNodeHeightById = (nodeId: string): number => {
+    const node = maps.nodesById.get(nodeId)
+    if (!node) return ROW_SPACING
+    let h = typeBaseHeight[node.type] ?? ROW_SPACING
+    if (node.type === 'DualOutputConverter') {
+      const outs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
+      if (outs.length > 1) h += (outs.length - 1) * 14
+    }
+    if (node.type === 'Subsystem') {
+      const ports = Array.isArray((node as any).project?.nodes)
+        ? (node as any).project.nodes.filter((p: any) => p?.type === 'SubsystemInput')
+        : []
+      if (ports.length > 1) h += (ports.length - 1) * 14
+    }
+    return h
+  }
+
+  const centerY = (nodeId: string): number => {
+    const pos = coords.get(nodeId)
+    if (!pos) return 0
+    return pos.y + estimateNodeHeightById(nodeId) / 2
+  }
 
   for (const component of components) {
     const startY = currentY
@@ -327,7 +378,7 @@ const assignCoordinates = (
     }
 
     const sortedColumns = Array.from(columnMap.keys()).sort((a, b) => a - b)
-    let maxRows = 0
+    let maxSpanUnits = 0
     const columnEntries: { column: number; nodes: NodeInfo[] }[] = []
 
     for (const column of sortedColumns) {
@@ -409,16 +460,18 @@ const assignCoordinates = (
       const sortedEntries = sortedGroups.flatMap(group => group.members.map(member => member.entry))
 
       columnEntries.push({ column, nodes: sortedEntries })
-      if (sortedEntries.length > maxRows) {
-        maxRows = sortedEntries.length
+      const columnSpanUnits = sortedEntries.reduce((acc, info) => acc + getSpanUnits(info.id), 0)
+      if (columnSpanUnits > maxSpanUnits) {
+        maxSpanUnits = columnSpanUnits
       }
     }
 
-    const componentHeight = maxRows > 0 ? (maxRows - 1) * ROW_SPACING : 0
+    const componentHeight = maxSpanUnits > 0 ? Math.max(0, (maxSpanUnits - 1) * ROW_SPACING) : 0
 
     columnEntries.forEach(({ column, nodes }, index) => {
       const baseX = COLUMN_START_X + column * columnSpacing
-      const columnHeight = nodes.length > 0 ? (nodes.length - 1) * ROW_SPACING : 0
+      const totalSpanUnits = nodes.reduce((acc, info) => acc + getSpanUnits(info.id), 0)
+      const columnHeight = totalSpanUnits > 0 ? Math.max(0, (totalSpanUnits - 1) * ROW_SPACING) : 0
       let baseY = startY
       if (index === 0) {
         const offset = (componentHeight - columnHeight) / 2
@@ -426,63 +479,98 @@ const assignCoordinates = (
           baseY += offset
         }
       }
-      nodes.forEach((info, rowIndex) => {
-        const y = baseY + rowIndex * ROW_SPACING
+      let cursorUnits = 0
+      nodes.forEach((info) => {
+        const y = baseY + cursorUnits * ROW_SPACING
         coords.set(info.id, { x: baseX, y })
-        rankWithinComponent.set(info.id, rowIndex)
+        rankWithinComponent.set(info.id, cursorUnits)
+        cursorUnits += getSpanUnits(info.id)
       })
     })
 
     for (let idx = columnEntries.length - 2; idx >= 0; idx--) {
       const { nodes } = columnEntries[idx]
-      let childMin = Infinity
-      let childMax = -Infinity
       for (const info of nodes) {
+        const parentPos = coords.get(info.id)
+        if (!parentPos) continue
         const outgoing = maps.outgoing.get(info.id) ?? []
+        let bestChildId: string | null = null
+        let bestChildY: number | null = null
         for (const edge of outgoing) {
-          const targetPos = coords.get(edge.to)
-          if (!targetPos) continue
-          if (targetPos.y < childMin) childMin = targetPos.y
-          if (targetPos.y > childMax) childMax = targetPos.y
+          const childPos = coords.get(edge.to)
+          if (!childPos) continue
+          if (bestChildY === null || childPos.y < bestChildY) {
+            bestChildY = childPos.y
+            bestChildId = edge.to
+          }
         }
+        if (!bestChildId) continue
+        const parentCenter = centerY(info.id)
+        const childCenter = centerY(bestChildId)
+        const shift = childCenter - parentCenter
+        if (Math.abs(shift) < 1e-3) continue
+        coords.set(info.id, { x: parentPos.x, y: parentPos.y + shift })
       }
-      if (!Number.isFinite(childMin) || !Number.isFinite(childMax)) continue
+    }
 
-      let columnMin = Infinity
-      let columnMax = -Infinity
-      for (const info of nodes) {
-        const pos = coords.get(info.id)
-        if (!pos) continue
-        if (pos.y < columnMin) columnMin = pos.y
-        if (pos.y > columnMax) columnMax = pos.y
-      }
-      if (!Number.isFinite(columnMin) || !Number.isFinite(columnMax)) continue
+    for (const entry of columnEntries) {
+      if (entry.nodes.length <= 1) continue
+      const decorated = entry.nodes
+        .map(info => {
+          const pos = coords.get(info.id)
+          if (!pos) return null
+          const depth = depthMap.get(info.id) ?? 0
+          const children = (maps.outgoing.get(info.id) ?? []).filter(edge => {
+            const targetDepth = depthMap.get(edge.to)
+            return typeof targetDepth === 'number' && targetDepth > depth
+          })
+          return {
+            id: info.id,
+            pos,
+            hasForwardChildren: children.length > 0,
+          }
+        })
+        .filter((value): value is { id: string; pos: { x: number; y: number }; hasForwardChildren: boolean } => !!value)
+        .sort((a, b) => a.pos.y - b.pos.y)
 
-      const targetCenter = (childMin + childMax) / 2
-      const columnCenter = (columnMin + columnMax) / 2
-      const shift = targetCenter - columnCenter
-      if (Math.abs(shift) < 1e-3) continue
+      if (decorated.length <= 1) continue
+      const baseY = decorated[0].pos.y
+      let previousY = baseY - ROW_SPACING
 
-      for (const info of nodes) {
-        const pos = coords.get(info.id)
-        if (!pos) continue
-        coords.set(info.id, { x: pos.x, y: pos.y + shift })
-      }
+      decorated.forEach((item, index) => {
+        let nextY = item.pos.y
+        if (!item.hasForwardChildren) {
+          const desiredY = baseY + index * ROW_SPACING
+          if (nextY > desiredY) {
+            nextY = desiredY
+          }
+        }
+        const minY = previousY + ROW_SPACING
+        if (nextY < minY) {
+          nextY = minY
+        }
+        if (Math.abs(nextY - item.pos.y) > 1e-3) {
+          coords.set(item.id, { x: item.pos.x, y: nextY })
+        }
+        previousY = nextY
+      })
     }
 
     const topNodes = columnEntries
       .map(entry => entry.nodes[0])
       .filter((node): node is NodeInfo => !!node)
     if (topNodes.length > 1) {
-      const reference = coords.get(topNodes[0].id)
-      if (reference) {
-        const targetY = reference.y
+      const referenceId = topNodes[0].id
+      const referencePos = coords.get(referenceId)
+      if (referencePos) {
+        const targetCenter = centerY(referenceId)
         columnEntries.forEach(entry => {
           const first = entry.nodes[0]
           if (!first) return
           const firstPos = coords.get(first.id)
           if (!firstPos) return
-          const delta = targetY - firstPos.y
+          const currentCenter = centerY(first.id)
+          const delta = targetCenter - currentCenter
           if (Math.abs(delta) < 1e-3) return
           entry.nodes.forEach(info => {
             const pos = coords.get(info.id)
@@ -532,14 +620,38 @@ export const autoLayoutProject = (project: Project, options?: { columnSpacing?: 
   const nodeMetrics = (computeResult && (computeResult as any).nodes) || {}
   for (const [nodeId, metrics] of Object.entries(nodeMetrics)) {
     if (!metrics || typeof metrics !== 'object') continue
-    const candidates = [
-      (metrics as any).P_in_total,
-      (metrics as any).P_in,
-      (metrics as any).P_out_total,
-      (metrics as any).P_out,
-    ]
-    const value = candidates.find(v => typeof v === 'number' && Number.isFinite(v))
-    if (typeof value === 'number') {
+    const candidates: number[] = []
+    const maybeAdd = (val: unknown) => {
+      if (typeof val === 'number' && Number.isFinite(val)) candidates.push(val)
+    }
+    maybeAdd((metrics as any).P_in_total)
+    maybeAdd((metrics as any).P_in)
+    maybeAdd((metrics as any).P_out_total)
+    maybeAdd((metrics as any).P_out)
+    const outputs = (metrics as any).__outputs
+    if (outputs && typeof outputs === 'object') {
+      const sumPout = Object.values(outputs as any).reduce((acc: number, out: any) => acc + (Number.isFinite(out?.P_out) ? Number(out.P_out) : 0), 0)
+      const sumPin  = Object.values(outputs as any).reduce((acc: number, out: any) => acc + (Number.isFinite(out?.P_in)  ? Number(out.P_in)  : 0), 0)
+      if (Number.isFinite(sumPout)) candidates.push(sumPout)
+      if (Number.isFinite(sumPin)) candidates.push(sumPin)
+    }
+    // Fallback: derive power from outgoing connections (sum of child P_in + edge losses)
+    try {
+      const derived = (project.edges || [])
+        .filter(e => e.from === nodeId)
+        .reduce((acc, e) => {
+          const child = (nodeMetrics as any)[e.to]
+          const edgeRes = (computeResult as any)?.edges?.[e.id]
+          const childPin = (child && typeof child.P_in === 'number') ? child.P_in : 0
+          const edgeLoss = (edgeRes && typeof edgeRes.P_loss_edge === 'number') ? edgeRes.P_loss_edge : 0
+          return acc + childPin + edgeLoss
+        }, 0)
+      if (Number.isFinite(derived)) candidates.push(derived)
+    } catch (_err) {
+      // ignore
+    }
+    if (candidates.length) {
+      const value = Math.max(...candidates)
       powerByNode.set(nodeId, value)
     }
   }

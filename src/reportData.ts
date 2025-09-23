@@ -55,7 +55,7 @@ export function buildLevelPieData(project: Project, result?: ComputeResult): Lev
   let levelEdgeLoss = 0
   let levelConvLoss = 0
   for (const rn of Object.values(res.nodes)) {
-    if ((rn as any).type === 'Converter') levelConvLoss += ((rn as any).loss || 0)
+    if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') levelConvLoss += ((rn as any).loss || 0)
   }
   for (const e of Object.values(res.edges)) levelEdgeLoss += (e.P_loss_edge || 0)
   const losses = levelEdgeLoss + levelConvLoss
@@ -70,5 +70,4 @@ export function buildLevelPieData(project: Project, result?: ComputeResult): Lev
   // Filter zero/negative and sort descending
   return baseSlices.filter(s => s.value > 1e-9).sort((a, b) => b.value - a.value)
 }
-
 

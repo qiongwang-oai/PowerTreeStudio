@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Project, AnyNode } from '../../models'
+import { Project, AnyNode, Edge } from '../../models'
 import { compute, etaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
@@ -9,6 +9,7 @@ import { useStore } from '../../state/store'
 import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
+import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
@@ -80,6 +81,7 @@ function CustomNode(props: NodeProps) {
     : baseShadow
   const bgClass = nodeType === 'Source' ? 'bg-green-50'
     : nodeType === 'Converter' ? 'bg-blue-50'
+    : nodeType === 'DualOutputConverter' ? 'bg-sky-50'
     : nodeType === 'Load' ? 'bg-orange-50'
     : nodeType === 'Subsystem' ? 'bg-violet-50'
     : nodeType === 'SubsystemInput' ? 'bg-slate-50'
@@ -94,6 +96,30 @@ function CustomNode(props: NodeProps) {
   const dynamicMinHeight = nodeType === 'Subsystem'
     ? baseSubsystemHeight + (subsystemPortCount * perPortHeight)
     : undefined
+  const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
+  const formatVoltage = (value: unknown) => {
+    const num = Number(value)
+    if (!Number.isFinite(num)) return null
+    return `${num} V`
+  }
+  const inputConnectionCount = Number((data as any)?.inputConnectionCount) || 0
+  const inputVoltageText = formatVoltage((data as any)?.inputVoltage)
+  const rawOutputVoltage = (data as any)?.outputVoltage
+  const outputVoltageText = (() => {
+    if (typeof rawOutputVoltage !== 'number') return null
+    if (!Number.isFinite(rawOutputVoltage)) return null
+    if (rawOutputVoltage <= 0) return null
+    return formatVoltage(rawOutputVoltage)
+  })()
+  const fallbackInputVoltageText = (() => {
+    if (nodeType === 'Bus') {
+      return formatVoltage((data as any)?.outputVoltage ?? (data as any)?.V_bus)
+    }
+    if (nodeType === 'SubsystemInput') {
+      return formatVoltage((data as any)?.outputVoltage ?? (data as any)?.Vout)
+    }
+    return null
+  })()
   return (
     <div
       className={`rounded-lg border ${borderClass} ${bgClass} px-2 py-1 text-xs text-center min-w-[140px] relative`}
@@ -114,7 +140,7 @@ function CustomNode(props: NodeProps) {
           <div style={{ position: 'absolute', bottom: -4, right: -4, width: 16, height: 16, borderBottom: `4px solid ${accentColor}`, borderRight: `4px solid ${accentColor}`, borderBottomRightRadius: 12 }} />
         </div>
       )}
-      {(nodeType==='Converter' || nodeType==='Load' || nodeType==='Bus') && (
+      {(nodeType==='Converter' || nodeType==='DualOutputConverter' || nodeType==='Load' || nodeType==='Bus') && (
         <>
           <Handle type="target" position={Position.Left} id="input" style={{ background: '#555' }} />
           <div
@@ -130,7 +156,39 @@ function CustomNode(props: NodeProps) {
               textAlign: 'right',
             }}
           >
-            {nodeType==='Load' ? `${Number(((data as any).Vreq ?? 0))} V` : 'input'}
+            {(() => {
+              if (nodeType === 'Load') {
+                return `${Number(((data as any).Vreq ?? 0))} V`
+              }
+              if (nodeType === 'Converter' || nodeType === 'DualOutputConverter') {
+                return inputConnectionCount > 0 && inputVoltageText ? inputVoltageText : 'input'
+              }
+              if (nodeType === 'Bus') {
+                if (inputConnectionCount > 0 && inputVoltageText) return inputVoltageText
+                return fallbackInputVoltageText ?? 'input'
+              }
+              return 'input'
+            })()}
+          </div>
+        </>
+      )}
+      {nodeType==='SubsystemInput' && (
+        <>
+          <Handle type="target" position={Position.Left} id={props.id} style={{ background: '#555' }} />
+          <div
+            style={{
+              position: 'absolute',
+              left: -8,
+              top: 'calc(50% + 8px)',
+              transform: 'translate(-100%, 0)',
+              fontSize: '10px',
+              color: '#666',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              textAlign: 'right',
+            }}
+          >
+            {(inputConnectionCount > 0 && inputVoltageText ? inputVoltageText : (fallbackInputVoltageText ?? formatVoltage((data as any)?.Vout) ?? 'input'))}
           </div>
         </>
       )}
@@ -162,7 +220,10 @@ function CustomNode(props: NodeProps) {
             <>
               {ports.map((p:any, idx:number) => {
                 const pct = ((idx+1)/(count+1))*100
-                const label = `${Number(p.Vout ?? 0)} V`
+                const connectionCount = Number((p as any)?.connectionCount) || 0
+                const portInputVoltageText = formatVoltage((p as any)?.inputVoltage)
+                const definedVoltageText = portInputVoltageText ?? formatVoltage(p.Vout)
+                const label = connectionCount > 0 && portInputVoltageText ? portInputVoltageText : (definedVoltageText ?? 'input')
                 return (
                   <React.Fragment key={p.id}>
                     <Handle
@@ -207,28 +268,224 @@ function CustomNode(props: NodeProps) {
       </div>
       {/* Dot overlay intentionally removed when parallel count exceeds threshold */}
       {bracketElement}
-      {(nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
-        <>
-          <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
-          <div
-            style={{
-              position: 'absolute',
-              right: -8,
-              top: 'calc(50% + 8px)',
-              transform: 'translate(100%, 0)',
-              fontSize: '10px',
-              color: '#666',
-              whiteSpace: 'nowrap',
-              pointerEvents: 'none',
-              textAlign: 'left',
-            }}
-          >
-            output
-          </div>
-        </>
-      )}
+      {nodeType === 'DualOutputConverter'
+        ? (() => {
+            const count = outputs.length || 1
+            return (
+              <>
+                {(outputs.length ? outputs : [{ id: 'outputA', label: 'Output A', Vout: 0 }]).map((output: any, idx: number) => {
+                  const handleId = output?.id || `output-${idx}`
+                  const label = output?.label || `Output ${String.fromCharCode(65 + idx)}`
+                  const voltageValue = Number(output?.Vout)
+                  const branchVoltageText = Number.isFinite(voltageValue) && voltageValue > 0 ? `${voltageValue} V` : null
+                  const topOffset = 50 + ((idx - (count - 1) / 2) * 24)
+                  return (
+                    <React.Fragment key={handleId}>
+                      <Handle
+                        type="source"
+                        position={Position.Right}
+                        id={handleId}
+                        style={{ background: '#555', top: `${topOffset}%` }}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: -8,
+                          top: `${topOffset}%`,
+                          transform: 'translate(100%, -50%)',
+                          fontSize: '10px',
+                          color: '#666',
+                          whiteSpace: 'nowrap',
+                          pointerEvents: 'none',
+                          textAlign: 'left',
+                        }}
+                      >
+                        {branchVoltageText ?? label}
+                      </div>
+                    </React.Fragment>
+                  )
+                })}
+              </>
+            )
+          })()
+        : (nodeType === 'Source' || nodeType === 'Converter' || nodeType === 'SubsystemInput' || nodeType === 'Bus') && (
+          <>
+            <Handle type="source" position={Position.Right} id="output" style={{ background: '#555' }} />
+            <div
+              style={{
+                position: 'absolute',
+                right: -8,
+                top: 'calc(50% + 8px)',
+                transform: 'translate(100%, 0)',
+                fontSize: '10px',
+                color: '#666',
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+                textAlign: 'left',
+              }}
+            >
+              {(() => {
+                if (nodeType === 'Converter' || nodeType === 'Bus' || nodeType === 'SubsystemInput') {
+                  return outputVoltageText ?? formatVoltage((data as any)?.outputVoltage) ?? 'output'
+                }
+                return 'output'
+              })()}
+            </div>
+          </>
+        )}
     </div>
   )
+}
+
+function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined, edges?: Edge[], allNodes?: AnyNode[]) {
+  const nodeResult = computeNodes?.[node.id]
+  const incomingEdges = Array.isArray(edges)
+    ? edges.filter(edge => edge.to === node.id)
+    : []
+  const nodeLookup = Array.isArray(allNodes)
+    ? new Map(allNodes.map(n => [n.id, n]))
+    : undefined
+  const getSourceNode = (id: string): AnyNode | undefined => {
+    if (nodeLookup) return nodeLookup.get(id)
+    if (Array.isArray(allNodes)) return allNodes.find(n => n.id === id)
+    return undefined
+  }
+  const resolveNodeOutputVoltage = (sourceNode: AnyNode | undefined, computeNode: any, handleId?: string): number | undefined => {
+    if (!sourceNode) return undefined
+    const raw = sourceNode as any
+    const toNumber = (value: unknown): number | undefined => {
+      const num = Number(value)
+      return Number.isFinite(num) ? num : undefined
+    }
+    switch (sourceNode.type) {
+      case 'Source':
+        return toNumber(raw.Vout)
+      case 'Converter':
+        return toNumber(raw.Vout)
+      case 'DualOutputConverter': {
+        const outputs = Array.isArray(raw.outputs) ? raw.outputs : []
+        const fallback = outputs.length > 0 ? outputs[0] : undefined
+        const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+        const candidate = branch?.Vout ?? fallback?.Vout
+        const direct = toNumber(candidate)
+        if (direct !== undefined) return direct
+        const metrics = computeNode?.__outputs || {}
+        const metricKey = branch?.id || fallback?.id
+        if (metricKey && Number.isFinite(metrics[metricKey]?.Vout)) {
+          return Number(metrics[metricKey].Vout)
+        }
+        return undefined
+      }
+      case 'Bus':
+        return toNumber(raw.V_bus)
+      case 'SubsystemInput':
+        return toNumber(raw.Vout)
+      case 'Subsystem': {
+        const metrics = computeNode?.__portVoltageMap
+        if (metrics && handleId && Number.isFinite(metrics[handleId])) {
+          return Number(metrics[handleId])
+        }
+        const projectNodes = Array.isArray(raw.project?.nodes) ? raw.project.nodes as AnyNode[] : []
+        const port = projectNodes.find((n: any) => n.id === handleId && n.type === 'SubsystemInput') as any
+        return toNumber(port?.Vout)
+      }
+      default:
+        return undefined
+    }
+  }
+  const getVoltageFromEdge = (edge: Edge): number | undefined => {
+    const source = getSourceNode(edge.from)
+    if (!source) return undefined
+    const value = resolveNodeOutputVoltage(source, computeNodes?.[edge.from], (edge as any).fromHandle as string | undefined)
+    return Number.isFinite(value) ? Number(value) : undefined
+  }
+  const EDGE_DEFAULT_KEY = '__default__'
+  const edgesByHandle = new Map<string, Edge[]>()
+  for (const edge of incomingEdges) {
+    const handle = (edge as any).toHandle as string | undefined
+    const key = handle ?? EDGE_DEFAULT_KEY
+    const bucket = edgesByHandle.get(key)
+    if (bucket) bucket.push(edge)
+    else edgesByHandle.set(key, [edge])
+  }
+  const edgesForHandle = (handleId?: string, allowDefaultFallback = false): Edge[] => {
+    if (handleId) {
+      const direct = edgesByHandle.get(handleId) || []
+      if (handleId === 'input') {
+        const defaults = edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+        if (defaults.length === 0) return direct
+        return direct.length ? [...direct, ...defaults] : [...defaults]
+      }
+      if (allowDefaultFallback && direct.length === 0) {
+        return edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+      }
+      return direct
+    }
+    return edgesByHandle.get(EDGE_DEFAULT_KEY) || []
+  }
+  const inferVoltageForHandle = (handleId?: string, allowDefaultFallback = false): number | undefined => {
+    const list = edgesForHandle(handleId, allowDefaultFallback)
+    for (const edge of list) {
+      const value = getVoltageFromEdge(edge)
+      if (value !== undefined) return value
+    }
+    return undefined
+  }
+  const defaultTargetHandleId = node.type === 'SubsystemInput' ? node.id : 'input'
+  const defaultHandleEdges = edgesForHandle(defaultTargetHandleId, node.type === 'SubsystemInput')
+  const defaultHandleConnectionCount = defaultHandleEdges.length
+  const defaultHandleVoltage = inferVoltageForHandle(defaultTargetHandleId, node.type === 'SubsystemInput')
+  const resolvedInputVoltage = (() => {
+    if (typeof defaultHandleVoltage === 'number' && Number.isFinite(defaultHandleVoltage)) {
+      return defaultHandleVoltage
+    }
+    const vin = nodeResult?.V_upstream
+    return typeof vin === 'number' && Number.isFinite(vin) ? vin : undefined
+  })()
+  const data: any = { type: node.type }
+  if (node.type === 'Converter' || node.type === 'DualOutputConverter' || node.type === 'Bus' || node.type === 'SubsystemInput') {
+    data.inputConnectionCount = defaultHandleConnectionCount
+    if (typeof resolvedInputVoltage === 'number' && Number.isFinite(resolvedInputVoltage)) {
+      data.inputVoltage = resolvedInputVoltage
+    }
+  }
+  if (node.type === 'Converter') {
+    const vout = (node as any).Vout
+    if (typeof vout === 'number' && Number.isFinite(vout)) data.outputVoltage = vout
+  }
+  if (node.type === 'Bus') {
+    const vbus = (node as any).V_bus
+    if (typeof vbus === 'number' && Number.isFinite(vbus)) data.outputVoltage = vbus
+  }
+  if (node.type === 'Subsystem') {
+    const projectNodes = Array.isArray((node as any).project?.nodes)
+      ? (node as any).project.nodes
+      : []
+    data.inputPorts = projectNodes
+      .filter((x:any)=>x.type==='SubsystemInput')
+      .map((x:any)=>{
+        const fallback = Number(x.Vout)
+        const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
+        const inferred = inferVoltageForHandle(x.id, true)
+        const connections = edgesForHandle(x.id, true).length
+        return {
+          id: x.id,
+          Vout: x.Vout,
+          name: x.name,
+          connectionCount: connections,
+          inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
+        }
+      })
+  }
+  if (node.type === 'SubsystemInput') {
+    const vout = (node as any).Vout
+    if (typeof vout === 'number' && Number.isFinite(vout)) {
+      data.Vout = vout
+      data.outputVoltage = vout
+    }
+  }
+  if (node.type === 'DualOutputConverter') data.outputs = (node as any).outputs || []
+  return data
 }
 
 const parallelCountForNode = (node: any): number => {
@@ -258,6 +515,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const path = useMemo(()=> (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId], [subsystemPath, subsystemId])
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
+  const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
+  const setEdgesRef = useRef<React.Dispatch<React.SetStateAction<RFEdge[]>> | null>(null)
+  useEffect(() => {
+    liveMidpointDraft.current.clear()
+  }, [project.edges])
   const isTopmostEditor = useMemo(()=>{
     if (!openSubsystemIds || openSubsystemIds.length === 0) return true
     if (path.length !== openSubsystemIds.length) return false
@@ -273,6 +535,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>{
     const parallelCount = parallelCountForNode(n as any)
+    const extra = buildNodeDisplayData(n, computeResult.nodes, project.edges, project.nodes as AnyNode[])
     return {
     id: n.id,
     data: {
@@ -303,6 +566,38 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                     }
                   })()}</div>
                 </div>
+               ) : n.type === 'DualOutputConverter' ? (
+                (() => {
+                  const nodeResult = computeResult.nodes[n.id] as any
+                  const metrics: Record<string, any> = nodeResult?.__outputs || {}
+                  const outputs = Array.isArray((n as any).outputs) ? (n as any).outputs : []
+                  const fallback = outputs.length > 0 ? outputs[0] : undefined
+                  const pin = nodeResult?.P_in
+                  const pout = nodeResult?.P_out
+                  return (
+                    <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                      <div className="text-left" style={{minWidth:120}}>
+                        {outputs.map((branch:any, idx:number) => {
+                          const handleId = branch?.id || (idx === 0 ? (fallback?.id || 'outputA') : `${fallback?.id || 'outputA'}-${idx}`)
+                          const metric = metrics[handleId] || {}
+                          const eta = typeof metric.eta === 'number' ? metric.eta : undefined
+                          const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                          return (
+                            <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
+                              <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
+                              <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                      <div className="text-left" style={{minWidth:90}}>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                      </div>
+                    </div>
+                  )
+                })()
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
                 <div style={{display:'flex', alignItems:'stretch', gap:8}}>
                   <div className="text-left">
@@ -337,14 +632,16 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       type: (n as AnyNode).type,
       parallelCount,
       ...(n.type==='Load'? { Vreq: (n as any).Vreq } : {}),
-      ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
+      ...(n.type==='Subsystem'? { inputPorts: (extra as any).inputPorts } : {}),
+      ...(n.type==='DualOutputConverter'? { outputs: (extra as any).outputs, outputMetrics: ((computeResult.nodes[n.id] as any)||{}).__outputs || {} } : {}),
+      ...(extra || {}),
     },
     position: { x: n.x ?? (Math.random()*400)|0, y: n.y ?? (Math.random()*300)|0 },
     type: 'custom',
     draggable: true,
     selected: false,
   }
-  }), [project.nodes])
+  }), [project.nodes, project.edges, computeResult.nodes])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
@@ -374,32 +671,70 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     return offset
   }, [groupMidpointInfo, nodePositions])
 
-  const handleMidpointChange = useCallback((edgeId: string, nextOffset: number, absoluteAxisCoord?: number) => {
-    if (!Number.isFinite(nextOffset)) return
-    if (!updateEdgeNested) return
-    const clamped = Math.min(1, Math.max(0, nextOffset))
+  const handleMidpointChange = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    const setter = setEdgesRef.current
+    if (!setter) return
+    if (!Number.isFinite(payload.offset)) return
     const sourceEdge = project.edges.find(e => e.id === edgeId)
     if (!sourceEdge) return
     const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
-    const sourcePos = nodePositions.get(sourceEdge.from)
-    const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
-    let midpointX: number | undefined
-    if (typeof absoluteAxisCoord === 'number' && Number.isFinite(absoluteAxisCoord)) {
-      midpointX = absoluteAxisCoord
-    } else if (sourcePos && targetPos) {
-      const startX = sourcePos.x
-      const endX = targetPos.x
-      if (Number.isFinite(startX) && Number.isFinite(endX) && Math.abs(endX - startX) > 1e-3) {
-        midpointX = startX + (endX - startX) * clamped
+    const clamped = Math.min(1, Math.max(0, payload.offset))
+    let usableAbsolute = payload.absoluteAxisCoord
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = nodePositions.get(sourceEdge.from)
+      const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+      if (sourcePos && targetPos) {
+        const start = payload.axis === 'y' ? sourcePos.y : sourcePos.x
+        const end = payload.axis === 'y' ? targetPos.y : targetPos.x
+        if (Number.isFinite(start) && Number.isFinite(end) && Math.abs(end - start) > 1e-3) {
+          usableAbsolute = start + (end - start) * clamped
+        }
+      }
+    }
+    liveMidpointDraft.current.set(key, { ...payload, offset: clamped, absoluteAxisCoord: usableAbsolute })
+    setter(prev => prev.map(edge => {
+      const data: any = edge.data
+      if (!data || data.groupKey !== key) return edge
+      const nextData: any = { ...data, midpointOffset: clamped }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        nextData.midpointX = usableAbsolute
+      }
+      return { ...edge, data: nextData }
+    }))
+  }, [nodePositions, project.edges])
+
+  const handleMidpointCommit = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
+    if (!updateEdgeNested) return
+    if (!Number.isFinite(payload.offset)) return
+    const sourceEdge = project.edges.find(e => e.id === edgeId)
+    if (!sourceEdge) return
+    const key = edgeGroupKey({ from: sourceEdge.from, fromHandle: sourceEdge.fromHandle })
+    const draft = liveMidpointDraft.current.get(key)
+    liveMidpointDraft.current.delete(key)
+    const clamped = Math.min(1, Math.max(0, payload.offset))
+    let usableAbsolute = payload.absoluteAxisCoord
+    if ((typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) && draft && typeof draft.absoluteAxisCoord === 'number' && Number.isFinite(draft.absoluteAxisCoord)) {
+      usableAbsolute = draft.absoluteAxisCoord
+    }
+    if (typeof usableAbsolute !== 'number' || !Number.isFinite(usableAbsolute)) {
+      const sourcePos = nodePositions.get(sourceEdge.from)
+      const targetPos = sourceEdge.to ? nodePositions.get(sourceEdge.to) : undefined
+      if (sourcePos && targetPos) {
+        const axis = draft?.axis ?? payload.axis ?? 'x'
+        const start = axis === 'y' ? sourcePos.y : sourcePos.x
+        const end = axis === 'y' ? targetPos.y : targetPos.x
+        if (Number.isFinite(start) && Number.isFinite(end) && Math.abs(end - start) > 1e-3) {
+          usableAbsolute = start + (end - start) * clamped
+        }
       }
     }
     for (const edge of project.edges) {
       if (edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }) !== key) continue
-      if (midpointX !== undefined) {
-        updateEdgeNested(path, edge.id, { midpointOffset: clamped, midpointX })
-      } else {
-        updateEdgeNested(path, edge.id, { midpointOffset: clamped })
+      const patch: Partial<Edge> = { midpointOffset: clamped }
+      if (typeof usableAbsolute === 'number' && Number.isFinite(usableAbsolute)) {
+        patch.midpointX = usableAbsolute
       }
+      updateEdgeNested(path, edge.id, patch)
     }
   }, [nodePositions, path, project.edges, updateEdgeNested])
 
@@ -465,8 +800,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       midpointOffset,
       midpointX: info?.midpointX,
       onMidpointChange: handleMidpointChange,
+      onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
       defaultColor,
+      extendMidpointRange: true,
+      groupKey: key,
     }
     return ({
       id: e.id,
@@ -482,9 +820,12 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       data: edgeData,
       selected: false,
     })
-  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+  }), [project.edges, project.nodes, computeResult, getGroupOffset, handleMidpointChange, handleMidpointCommit, screenToFlowPosition])
 
   const [edges, setEdges, ] = useEdgesState(rfEdgesInit)
+  useEffect(() => {
+    setEdgesRef.current = setEdges
+  }, [setEdges])
 
   useEffect(()=>{
     setNodes(prev => {
@@ -601,6 +942,38 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
                 }
               })()}</div>
             </div>
+          ) : n.type === 'DualOutputConverter' ? (
+            (() => {
+              const nodeResult = computeResult.nodes[n.id] as any
+              const metrics: Record<string, any> = nodeResult?.__outputs || {}
+              const outputs = Array.isArray((n as any).outputs) ? (n as any).outputs : []
+              const fallback = outputs.length > 0 ? outputs[0] : undefined
+              const pin = nodeResult?.P_in
+              const pout = nodeResult?.P_out
+              return (
+                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                  <div className="text-left" style={{minWidth:120}}>
+                    {outputs.map((branch:any, idx:number) => {
+                      const handleId = branch?.id || (idx === 0 ? (fallback?.id || 'outputA') : `${fallback?.id || 'outputA'}-${idx}`)
+                      const metric = metrics[handleId] || {}
+                      const eta = typeof metric.eta === 'number' ? metric.eta : undefined
+                      const label = branch?.label || `Output ${String.fromCharCode(65 + idx)}`
+                      return (
+                        <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
+                          <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
+                          <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                  <div className="text-left" style={{minWidth:90}}>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                  </div>
+                </div>
+              )
+            })()
           ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
             <div style={{display:'flex', alignItems:'stretch', gap:8}}>
               <div className="text-left">
@@ -648,7 +1021,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       } else {
         const pout = nodeRes?.P_out
         const pin = nodeRes?.P_in
-        const showPout = (pout !== undefined) && (n.type !== 'Load')
+        // For DualOutputConverter, P_in/P_out are already rendered in the left block
+        const showPout = (pout !== undefined) && (n.type !== 'Load' && n.type !== 'DualOutputConverter')
         const showPin = (pin !== undefined) && (n.type === 'Converter' || n.type === 'Bus')
         right = (showPout || showPin) ? (
           <>
@@ -664,6 +1038,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           </>
         ) : null
       }
+      const extra = buildNodeDisplayData(n, computeResult.nodes, project.edges, project.nodes as AnyNode[])
       return {
         ...rn,
         data: {
@@ -678,11 +1053,13 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
               </div>
             </div>
           ),
-          ...(n.type==='Subsystem'? { inputPorts: ((n as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput').map((x:any)=>({ id:x.id, Vout:x.Vout, name: x.name })) } : {})
+          ...(n.type==='Subsystem'? { inputPorts: (extra as any).inputPorts } : {}),
+          ...(n.type==='DualOutputConverter'? { outputs: (extra as any).outputs, outputMetrics: ((computeResult.nodes[n.id] as any)||{}).__outputs || {} } : {}),
+          ...(extra || {}),
         }
       }
     }))
-  }, [computeResult, project.nodes, setNodes])
+  }, [computeResult, project.nodes, project.edges, setNodes])
 
   useEffect(() => {
     setNodes(prev => prev.map(rn => {
@@ -700,12 +1077,18 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
         const parent = project.nodes.find(n => n.id === e.from) as any
         const child = project.nodes.find(n => n.id === e.to) as any
-        const parentV = parent?.type === 'Source' ? parent?.Vout
-          : parent?.type === 'Converter' ? parent?.Vout
-          : parent?.type === 'Bus' ? parent?.V_bus
-          : parent?.type === 'SubsystemInput' ? parent?.Vout
-          : undefined
-        const childRange = child?.type === 'Converter' ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
+        let parentV: number | undefined
+        if (parent?.type === 'Source') parentV = parent?.Vout
+        else if (parent?.type === 'Converter') parentV = parent?.Vout
+        else if (parent?.type === 'DualOutputConverter') {
+          const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+          const fallback = outputs.length > 0 ? outputs[0] : undefined
+          const handleId = (e as any).fromHandle as string | undefined
+          const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+          parentV = (branch || fallback)?.Vout
+        } else if (parent?.type === 'Bus') parentV = parent?.V_bus
+        else if (parent?.type === 'SubsystemInput') parentV = parent?.Vout
+        const childRange = (child?.type === 'Converter' || child?.type === 'DualOutputConverter') ? { min: child?.Vin_min, max: child?.Vin_max } : undefined
         const childDirectVin = child?.type === 'Load' ? child?.Vreq
           : child?.type === 'Subsystem' ? (() => {
               const portId = (e as any).toHandle
@@ -733,8 +1116,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           midpointOffset,
           midpointX: info?.midpointX,
           onMidpointChange: handleMidpointChange,
+          onMidpointCommit: handleMidpointCommit,
           screenToFlow: screenToFlowPosition,
           defaultColor,
+          extendMidpointRange: true,
+          groupKey: key,
         }
         const existing = prevById.get(e.id)
         return {
@@ -753,7 +1139,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         }
       })
     })
-  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, screenToFlowPosition])
+  }, [project.edges, project.nodes, setEdges, computeResult, getGroupOffset, handleMidpointChange, handleMidpointCommit, screenToFlowPosition])
 
   useEffect(() => {
     setEdges(prev => prev.map(edge => {
@@ -782,16 +1168,30 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       while(stack.length){ const u=stack.pop()!; if (u===goal) return true; for (const v of (adj[u]||[])) if (!seen.has(v)){ seen.add(v); stack.push(v) } }
       return false
     }
-    if (c.source && c.target && reaches(c.target, c.source)) return
-    const edgeId = `${c.source}-${c.target}`
-    const baseOffset = (c.source && c.target)
-      ? getGroupOffset({ from: c.source, to: c.target, fromHandle: c.sourceHandle ?? undefined })
+    const resolvedConnection = (() => {
+      if (!c.target) return c
+      const targetNode = project.nodes.find(n => n.id === c.target)
+      if (!targetNode || (targetNode as any).type !== 'SubsystemInput') return c
+      const portId = targetNode.id
+      const owningSubsystem = project.nodes.find(n => (n as any).type === 'Subsystem' && Array.isArray((n as any).project?.nodes) && (n as any).project.nodes.some((inner: any) => inner.id === portId))
+      if (!owningSubsystem) return c
+      return {
+        ...c,
+        target: owningSubsystem.id,
+        targetHandle: portId,
+      }
+    })()
+    if (resolvedConnection.source && resolvedConnection.target && reaches(resolvedConnection.target, resolvedConnection.source)) return
+    const edgeId = `${resolvedConnection.source}-${resolvedConnection.target}`
+    const baseOffset = (resolvedConnection.source && resolvedConnection.target)
+      ? getGroupOffset({ from: resolvedConnection.source, to: resolvedConnection.target, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : 0.5
-    const groupInfo = (c.source)
-      ? groupMidpointInfo.get(edgeGroupKey({ from: c.source, fromHandle: c.sourceHandle ?? undefined }))
+    const groupKey = resolvedConnection.source
+      ? edgeGroupKey({ from: resolvedConnection.source, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : undefined
+    const groupInfo = groupKey ? groupMidpointInfo.get(groupKey) : undefined
     const baseMidpointX = groupInfo?.midpointX
-    const parent = project.nodes.find(n=>n.id===c.source) as any
+    const parent = project.nodes.find(n=>n.id===resolvedConnection.source) as any
     const parentV = parent?.type==='Source'? parent?.Vout
       : parent?.type==='Converter'? parent?.Vout
       : parent?.type==='Bus'? parent?.V_bus
@@ -802,26 +1202,38 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       midpointOffset: baseOffset,
       ...(baseMidpointX !== undefined ? { midpointX: baseMidpointX } : {}),
       onMidpointChange: handleMidpointChange,
+      onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
       defaultColor,
+      extendMidpointRange: true,
+      groupKey,
     }
     setEdges(eds=>addEdge({
-      ...c,
+      ...resolvedConnection,
       id: edgeId,
       type: 'orthogonal',
-      sourceHandle: c.sourceHandle,
-      targetHandle: c.targetHandle,
+      source: resolvedConnection.source as any,
+      target: resolvedConnection.target as any,
+      sourceHandle: resolvedConnection.sourceHandle,
+      targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
       style: { strokeWidth: 2, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
-    if (c.source && c.target) {
-      const payload: any = { id: edgeId, from: c.source, to: c.target, fromHandle: (c.sourceHandle as any) || undefined, toHandle: (c.targetHandle as any) || undefined, midpointOffset: baseOffset }
+    if (resolvedConnection.source && resolvedConnection.target) {
+      const payload: any = {
+        id: edgeId,
+        from: resolvedConnection.source,
+        to: resolvedConnection.target,
+        fromHandle: (resolvedConnection.sourceHandle as any) || undefined,
+        toHandle: (resolvedConnection.targetHandle as any) || undefined,
+        midpointOffset: baseOffset,
+      }
       if (baseMidpointX !== undefined) payload.midpointX = baseMidpointX
       addEdgeStore(path, payload)
     }
-  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, nodePositions, path, project.edges, screenToFlowPosition])
+  }, [addEdgeStore, getGroupOffset, groupMidpointInfo, handleMidpointChange, handleMidpointCommit, nodePositions, path, project.edges, project.nodes, screenToFlowPosition])
 
   const onNodesDelete: OnNodesDelete = useCallback((deleted)=>{
     if (!isTopmostEditor) return
@@ -913,8 +1325,31 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect, isTopmostEditor]);
 
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    e.preventDefault()
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'copy'
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isTopmostEditor) return
+    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    const raw = e.dataTransfer?.getData(NODE_PRESET_MIME) ?? null
+    const descriptor = deserializePresetDescriptor(raw)
+    if (!descriptor || descriptor.type === 'Source') return
+    e.preventDefault()
+    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
+    setContextMenu(null)
+    const baseNode = createNodePreset(descriptor)
+    const placed = withPosition(baseNode, { x: flowPos.x, y: flowPos.y })
+    addNodeNested(path, placed)
+  }, [addNodeNested, isTopmostEditor, path, screenToFlowPosition, setContextMenu])
+
   return (
-    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)}>
+    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)} onDragOver={handleDragOver} onDrop={handleDrop}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
