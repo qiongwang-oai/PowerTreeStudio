@@ -1,7 +1,7 @@
 import React from 'react'
 import { useStore } from './state/store'
 import Palette from './components/Palette'
-import Canvas from './components/Canvas'
+import Canvas, { CanvasHandle } from './components/Canvas'
 import Inspector from './components/Inspector'
 import { Button } from './components/ui/button'
 import SubsystemEditor from './components/subsystem/SubsystemEditor'
@@ -59,6 +59,7 @@ export default function App(){
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const minRight = 220, maxRight = 640
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
+  const canvasRef = React.useRef<CanvasHandle | null>(null)
   const onDragStart = (e: React.MouseEvent)=>{
     e.preventDefault()
     const startX = e.clientX
@@ -79,6 +80,13 @@ export default function App(){
   const warns = [...validate(project), ...result.globalWarnings]
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const onExport = ()=> download(project.name.replace(/\s+/g,'_'), serializeProject(project))
+  const onExportPdf = React.useCallback(async () => {
+    try {
+      await canvasRef.current?.exportToPdf()
+    } catch (err) {
+      console.error('Failed to export canvas PDF', err)
+    }
+  }, [])
   const onImport = async (f:File)=>{ const data = await importProjectFile(f); setProject(data); setImportedFileName(f.name) }
   const onReport = ()=> setReportOpen(true)
   const openAutoAlignPrompt = React.useCallback(() => {
@@ -162,6 +170,7 @@ export default function App(){
                   />
                   <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Open</Button>
                   <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
+                  <Button variant="outline" size="sm" onClick={onExportPdf}>Export PDF</Button>
                   <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
                   <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
                   <Button
@@ -183,7 +192,7 @@ export default function App(){
           </div>
         </div>
         <aside className="border-r bg-white overflow-auto pt-6"><Palette /></aside>
-        <main className="overflow-hidden"><ReactFlowProvider><Canvas onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} /></ReactFlowProvider></main>
+        <main className="overflow-hidden"><ReactFlowProvider><Canvas ref={canvasRef} onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} /></ReactFlowProvider></main>
         <aside className="relative border-l bg-white overflow-auto">
           <div
             role="separator"

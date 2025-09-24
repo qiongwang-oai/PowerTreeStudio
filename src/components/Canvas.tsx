@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesChange, OnNodesDelete, OnEdgesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
@@ -14,6 +14,7 @@ import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
 import type { InspectorSelection } from '../types/selection'
 import { findSubsystemPath } from '../utils/subsystemPath'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../utils/nodePresets'
+import { exportCanvasToPdf } from '../utils/exportCanvasPdf'
 
 const SUBSYSTEM_BASE_HEIGHT = 80
 const SUBSYSTEM_PORT_HEIGHT = 28
@@ -27,6 +28,15 @@ const EMBEDDED_EDGE_MARGIN_TOP = 16
 const EMBEDDED_EDGE_MARGIN_BOTTOM = 12
 const DEFAULT_EMBEDDED_NODE_WIDTH = 200
 const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
+
+type CanvasProps = {
+  onSelect: (selection: InspectorSelection | null) => void
+  onOpenSubsystem?: (id: string) => void
+}
+
+export type CanvasHandle = {
+  exportToPdf: () => Promise<void>
+}
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props;
@@ -510,7 +520,9 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
   )
   const label = (
     <div className="flex flex-col items-stretch gap-1">
-      <div className="text-center font-semibold">{node.name}</div>
+      <div className="text-center font-semibold" data-node-label>
+        {node.name}
+      </div>
       <div className="flex items-stretch justify-between gap-2">
         <div className="text-left">
           {node.type === 'Source' && 'Vout' in node ? (
@@ -901,7 +913,7 @@ const parseNestedEdgeId = (id: string) => {
   return { subsystemId, edgeId }
 }
 
-export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection: InspectorSelection | null)=>void, onOpenSubsystem?:(id:string)=>void}){
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect, onOpenSubsystem }, ref) {
   const project = useStore(s=>s.project)
   const addEdgeStore = useStore(s=>s.addEdge)
   const addNodeStore = useStore(s=>s.addNode)
@@ -916,7 +928,8 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
-  const { screenToFlowPosition } = useReactFlow()
+  const reactFlowInstance = useReactFlow()
+  const { screenToFlowPosition } = reactFlowInstance
   const openSubsystemIds = useStore(s => s.openSubsystemIds)
   const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
   const setSubsystemViewOffset = useStore(s=>s.setSubsystemViewOffset)
@@ -925,6 +938,7 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
   const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
   const setEdgesRef = useRef<React.Dispatch<React.SetStateAction<RFEdge[]>> | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     liveMidpointDraft.current.clear()
@@ -973,6 +987,31 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
     if (!nested) return null
     return expandedLayouts.get(nested.subsystemId) ?? null
   }, [expandedLayouts, selectedNodeId])
+
+  const exportToPdf = useCallback(async () => {
+    if (!wrapperRef.current) {
+      console.warn('Canvas wrapper not ready for export')
+      return
+    }
+    try {
+      const nodesSnapshot = reactFlowInstance.getNodes()
+      const edgesSnapshot = reactFlowInstance.getEdges()
+      const viewportSnapshot = reactFlowInstance.getViewport()
+      await exportCanvasToPdf({
+        wrapper: wrapperRef.current,
+        nodes: nodesSnapshot,
+        edges: edgesSnapshot,
+        viewport: viewportSnapshot,
+        fileName: project.name || 'PowerTreeCanvas',
+      })
+    } catch (err) {
+      console.error('Failed to export canvas as PDF', err)
+      const message = err instanceof Error && err.message ? err.message : 'Unable to export canvas as PDF. Please try again.'
+      window.alert(message)
+    }
+  }, [project.name, reactFlowInstance])
+
+  useImperativeHandle(ref, () => ({ exportToPdf }), [exportToPdf])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode, embeddedSubsystemContainer: EmbeddedSubsystemContainerNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -1761,9 +1800,9 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
   }, [openSubsystemIds, selectedNodeId, selectedEdgeId, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode])
 
   return (
-    <div className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)} onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}>
+    <div ref={wrapperRef} className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)} onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}>
       {/* Floating Banner */}
-      <div className="absolute top-3 left-3 z-40 bg-white/90 border border-slate-300 rounded-lg shadow-md px-4 py-2 flex flex-col gap-2 min-w-[340px]">
+      <div data-export-exclude="true" className="absolute top-3 left-3 z-40 bg-white/90 border border-slate-300 rounded-lg shadow-md px-4 py-2 flex flex-col gap-2 min-w-[340px]">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-600 font-medium">Scenario:</span>
           <div className="flex gap-1" role="tablist" aria-label="Scenario">
@@ -1818,10 +1857,12 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
           if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(nodeId)
         }}
       >
-        <MiniMap /><Controls /><Background gap={16} />
+        <div data-export-exclude="true"><MiniMap /></div>
+        <div data-export-exclude="true"><Controls /></div>
+        <div data-export-exclude="true"><Background gap={16} /></div>
       </ReactFlow>
       {contextMenu && (
-        <div className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
+        <div data-export-exclude="true" className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
           {contextMenu.type==='node' ? (
             <div className="py-1">
               <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
@@ -1836,4 +1877,6 @@ export default function Canvas({onSelect, onOpenSubsystem}:{onSelect:(selection:
       )}
     </div>
   )
-}
+})
+
+export default Canvas
