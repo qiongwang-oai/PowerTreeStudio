@@ -13,6 +13,7 @@ import { exportReport } from './report'
 import ReportDialog from './components/report/ReportDialog'
 import AutoAlignPrompt from './components/AutoAlignPrompt'
 import type { InspectorSelection } from './types/selection'
+import { QuickPresetDialogsProvider } from './components/quick-presets/QuickPresetDialogsContext'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -58,6 +59,7 @@ export default function App(){
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const openSubsystemIds = useStore(s => s.openSubsystemIds);
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
+  const quickPresets = useStore(s => s.quickPresets)
   const minRight = 220, maxRight = 640
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
   const canvasRef = React.useRef<CanvasHandle | null>(null)
@@ -80,7 +82,7 @@ export default function App(){
   const result = compute(project)
   const warns = [...validate(project), ...result.globalWarnings]
   const fileInputRef = React.useRef<HTMLInputElement>(null)
-  const onExport = ()=> download(project.name.replace(/\s+/g,'_'), serializeProject(project))
+  const onExport = ()=> download(project.name.replace(/\s+/g,'_'), serializeProject({ ...project, quickPresets }))
   const onExportPdf = React.useCallback(async () => {
     try {
       await canvasRef.current?.exportToPdf()
@@ -181,8 +183,9 @@ export default function App(){
   }, [undo, redo, openSubsystemIds])
   return (
     <ErrorBoundary>
-      <div className="h-screen grid" style={{gridTemplateRows:'76px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
-        <div className="col-span-3 px-3 py-1 border-b bg-white">
+      <QuickPresetDialogsProvider getCurrentSelection={() => selected}>
+        <div className="h-screen grid" style={{gridTemplateRows:'76px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
+          <div className="col-span-3 px-3 py-1 border-b bg-white">
           <div className="flex items-center h-full" style={{height: '76px'}}>
             <div className="ml-8 flex flex-1 items-end justify-between gap-4">
               <div className="flex flex-row items-end gap-6">
@@ -277,7 +280,8 @@ export default function App(){
             error={autoAlignError}
           />
         )}
-      </div>
+        </div>
+      </QuickPresetDialogsProvider>
     </ErrorBoundary>
   )
 }

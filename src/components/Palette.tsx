@@ -2,9 +2,15 @@ import React from 'react'
 import { Button } from './ui/button'
 import { useStore } from '../state/store'
 import { createNodePreset, NODE_PRESET_MIME, type NodePresetDescriptor, serializePresetDescriptor } from '../utils/nodePresets'
+import QuickPresetTile from './quick-presets/QuickPresetTile'
+import { QUICK_PRESET_MIME, buildQuickPresetDragData } from '../utils/quickPresets'
+import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 
 export default function Palette(){
   const addNode = useStore(s=>s.addNode)
+  const quickPresets = useStore(s => s.quickPresets)
+  const applyQuickPreset = useStore(s => s.applyQuickPreset)
+  const quickPresetDialogs = useQuickPresetDialogs()
   const onAdd = (descriptor: NodePresetDescriptor)=> {
     addNode(createNodePreset(descriptor as any))
   }
@@ -41,43 +47,34 @@ export default function Palette(){
       </div>
       <div>
         <h3 className="text-lg mt-3 font-semibold">Quick presets</h3>
-        <div className="flex flex-wrap gap-2 mt-2">
-          <Button
-            variant="outline"
-            className={`${buttonBase} ${styleByType.Source}`}
-            draggable
-            onDragStart={(e)=>onDragStart(e, { type: 'Source' })}
-            onClick={()=>addNode(createNodePreset({ type: 'Source' }))}
-          >
-            48V Source
-          </Button>
-          <Button
-            variant="outline"
-            className={`${buttonBase} ${styleByType.Converter}`}
-            draggable
-            onDragStart={(e)=>onDragStart(e, { type: 'Converter' })}
-            onClick={()=>addNode(createNodePreset({ type: 'Converter' }))}
-          >
-            12V Buck 95%
-          </Button>
-          <Button
-            variant="outline"
-            className={`${buttonBase} ${styleByType.Converter}`}
-            draggable
-            onDragStart={(e)=>onDragStart(e, { type: 'Converter', variant: 'vrm-0p9-92' })}
-            onClick={()=>addNode(createNodePreset({ type: 'Converter', variant: 'vrm-0p9-92' }))}
-          >
-            VRM 0.9V 92%
-          </Button>
-          <Button
-            variant="outline"
-            className={`${buttonBase} ${styleByType.DualOutputConverter}`}
-            draggable
-            onDragStart={(e)=>onDragStart(e, { type: 'DualOutputConverter', variant: 'dual-default' })}
-            onClick={()=>addNode(createNodePreset({ type: 'DualOutputConverter', variant: 'dual-default' }))}
-          >
-            Dual-output default
-          </Button>
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <Button size="sm" variant="outline" onClick={()=>quickPresetDialogs.openCaptureDialog({ kind: 'selection' })}>Save selection as preset</Button>
+          <Button size="sm" variant="outline" onClick={()=>quickPresetDialogs.openManager()}>Manage presets</Button>
+        </div>
+        <div className="grid grid-cols-1 gap-2 mt-3">
+          {quickPresets.map(preset => (
+            <QuickPresetTile
+              key={preset.id}
+              preset={preset}
+              onClick={() => {
+                const node = applyQuickPreset(preset.id)
+                if (!node) {
+                  window.alert('Unable to apply quick preset. It may be invalid.')
+                }
+              }}
+              onDragStart={(event) => {
+                if (!event.dataTransfer) return
+                event.dataTransfer.effectAllowed = 'copy'
+                event.dataTransfer.setData(QUICK_PRESET_MIME, buildQuickPresetDragData({ presetId: preset.id }))
+                event.dataTransfer.setData('text/plain', preset.name)
+              }}
+            />
+          ))}
+          {quickPresets.length === 0 && (
+            <div className="border border-dashed border-slate-300 rounded-lg p-4 text-sm text-slate-500">
+              No quick presets yet. Select a node and choose “Save as quick preset…” from the canvas or inspector.
+            </div>
+          )}
         </div>
       </div>
     </div>

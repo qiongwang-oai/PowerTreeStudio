@@ -12,6 +12,7 @@ import type { InspectorSelection } from '../types/selection'
 import { resolveProjectAtPath } from '../utils/subsystemPath'
 import SubsystemInspector from './subsystem/SubsystemInspector'
 import EfficiencyEditor from './EfficiencyEditor'
+import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 
 export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, onSelect}:{selection:InspectorSelection|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(selection:InspectorSelection)=>void}){
   const project = useStore(s=>s.project)
@@ -26,6 +27,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
   const edge = useMemo(()=> (selection && selection.kind==='edge') ? (project.edges.find(e=>e.id===selection.id) || null) : null, [project.edges, selection])
   const analysis = compute(project)
   const node = useMemo(()=> (selection && selection.kind==='node') ? (project.nodes.find(n=>n.id===selection.id) || null) : null, [project.nodes, selection])
+  const quickPresetDialogs = useQuickPresetDialogs()
   const [tab, setTab] = React.useState('props')
   if (!selection) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
   if (selection.kind === 'nested-node' || selection.kind === 'nested-edge') {
@@ -81,7 +83,19 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="font-semibold">{node.name} <span className="text-xs text-slate-500">({node.type})</span></div>
-            <Button variant="outline" size="sm" onClick={()=>{ removeNode(node.id); onDeleted && onDeleted() }}>Delete</Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const snapshot = JSON.parse(JSON.stringify(node)) as any
+                  quickPresetDialogs.openCaptureDialog({ kind: 'node', node: snapshot })
+                }}
+              >
+                Save as preset
+              </Button>
+              <Button variant="outline" size="sm" onClick={()=>{ removeNode(node.id); onDeleted && onDeleted() }}>Delete</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

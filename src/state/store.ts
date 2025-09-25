@@ -3,6 +3,17 @@ import { Project, AnyNode, Edge, Scenario } from '../models'
 import { sampleProject } from '../sampleData'
 import { autosave, loadAutosave } from '../io'
 import { autoLayoutProject } from '../utils/autoLayout'
+import { genId } from '../utils'
+import {
+  QuickPreset,
+  DEFAULT_QUICK_PRESETS,
+  loadQuickPresetsFromStorage,
+  persistQuickPresetsToStorage,
+  materializeQuickPreset,
+  createQuickPresetFromNode,
+  resetQuickPresetIds,
+  sanitizeNodeForPreset,
+} from '../utils/quickPresets'
 
 type State = {
   project: Project
@@ -48,9 +59,37 @@ type State = {
   expandSubsystemView: (id: string) => void
   collapseSubsystemView: (id: string) => void
   setSubsystemViewOffset: (id: string, offset: { x: number, y: number }) => void
+  quickPresets: QuickPreset[]
+  addQuickPreset: (preset: QuickPreset) => void
+  updateQuickPreset: (id: string, patch: { name?: string; description?: string | null; accentColor?: string | null; node?: ReturnType<typeof sanitizeNodeForPreset> }) => void
+  removeQuickPreset: (id: string) => void
+  duplicateQuickPreset: (id: string) => void
+  reorderQuickPresets: (sourceIndex: number, targetIndex: number) => void
+  resetQuickPresets: () => void
+  importQuickPresets: (presets: QuickPreset[], mode: 'merge' | 'replace') => void
+  applyQuickPreset: (id: string, position?: { x: number; y: number }) => AnyNode | null
+  captureQuickPresetFromNode: (node: AnyNode, meta?: { name?: string; description?: string; accentColor?: string }) => QuickPreset
 }
 
 const saved = loadAutosave()
+
+const storedQuickPresets = (() => {
+  try {
+    return loadQuickPresetsFromStorage()
+  } catch (err) {
+    console.warn('Failed to load quick presets from storage', err)
+    return DEFAULT_QUICK_PRESETS
+  }
+})()
+
+const ensureUniquePresetName = (name: string, presets: QuickPreset[], excludeId?: string): string => {
+  const base = name.trim() || 'Preset'
+  const existing = new Set(presets.filter(p => p.id !== excludeId).map(p => p.name))
+  if (!existing.has(base)) return base
+  let index = 2
+  while (existing.has(`${base} ${index}`)) index += 1
+  return `${base} ${index}`
+}
 
 export const useStore = create<State>((set,get)=>({
   project: saved || sampleProject,
@@ -58,7 +97,21 @@ export const useStore = create<State>((set,get)=>({
   clipboardNode: null,
   past: [],
   future: [],
-  setProject: (p) => { const prev = JSON.parse(JSON.stringify(get().project)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); set({project:p}); autosave(p) },
+  quickPresets: storedQuickPresets,
+  setProject: (p) => {
+    const prev = JSON.parse(JSON.stringify(get().project)) as Project
+    const importedQuickPresets = Array.isArray((p as any).quickPresets) ? (p as any).quickPresets as QuickPreset[] : null
+    const nextProject = JSON.parse(JSON.stringify(p)) as Project
+    if ('quickPresets' in nextProject) {
+      delete (nextProject as any).quickPresets
+    }
+    set(state=>({ past:[...state.past, prev], future: [] }))
+    set({project:nextProject})
+    autosave(nextProject)
+    if (importedQuickPresets) {
+      get().importQuickPresets(importedQuickPresets, 'replace')
+    }
+  },
   setImportedFileName: (name) => { set({ importedFileName: name }) },
   addNode: (n) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
   addEdge: (e) => { const p=get().project; if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
@@ -217,5 +270,125 @@ export const useStore = create<State>((set,get)=>({
         },
       }
     })
+  },
+  addQuickPreset: (preset) => {
+    set(state => {
+      const name = ensureUniquePresetName(preset.name, state.quickPresets)
+      const nextPreset: QuickPreset = {
+        ...preset,
+        name,
+        updatedAt: new Date().toISOString(),
+      }
+      const next = [...state.quickPresets, nextPreset]
+      persistQuickPresetsToStorage(next)
+      return { quickPresets: next }
+    })
+  },
+  updateQuickPreset: (id, patch) => {
+    set(state => {
+      const index = state.quickPresets.findIndex(p => p.id === id)
+      if (index === -1) return {}
+      const presets = [...state.quickPresets]
+      const current = presets[index]
+      const nextName = patch.name ? ensureUniquePresetName(patch.name, presets, id) : current.name
+      const nextPreset: QuickPreset = {
+        ...current,
+        ...patch,
+        name: nextName,
+        description: patch.description === undefined ? current.description : patch.description || undefined,
+        accentColor: patch.accentColor === undefined ? current.accentColor : (patch.accentColor || undefined),
+        node: patch.node ?? current.node,
+        updatedAt: new Date().toISOString(),
+      }
+      presets[index] = nextPreset
+      persistQuickPresetsToStorage(presets)
+      return { quickPresets: presets }
+    })
+  },
+  removeQuickPreset: (id) => {
+    set(state => {
+      const next = state.quickPresets.filter(p => p.id !== id)
+      persistQuickPresetsToStorage(next)
+      return { quickPresets: next }
+    })
+  },
+  duplicateQuickPreset: (id) => {
+    const state = get()
+    const preset = state.quickPresets.find(p => p.id === id)
+    if (!preset) return
+    const now = new Date().toISOString()
+    const copy: QuickPreset = {
+      ...preset,
+      id: genId('qp_'),
+      name: ensureUniquePresetName(`${preset.name} Copy`, state.quickPresets),
+      createdAt: now,
+      updatedAt: now,
+    }
+    set(inner => {
+      const next = [...inner.quickPresets, copy]
+      persistQuickPresetsToStorage(next)
+      return { quickPresets: next }
+    })
+  },
+  reorderQuickPresets: (sourceIndex, targetIndex) => {
+    set(state => {
+      if (sourceIndex === targetIndex) return {}
+      const next = [...state.quickPresets]
+      if (sourceIndex < 0 || sourceIndex >= next.length) return {}
+      const [removed] = next.splice(sourceIndex, 1)
+      if (!removed) return {}
+      const clamped = Math.min(Math.max(targetIndex, 0), next.length)
+      next.splice(clamped, 0, removed)
+      persistQuickPresetsToStorage(next)
+      return { quickPresets: next }
+    })
+  },
+  resetQuickPresets: () => {
+    const now = new Date().toISOString()
+    const defaults = DEFAULT_QUICK_PRESETS.map(preset => ({
+      ...preset,
+      id: genId('qp_'),
+      createdAt: now,
+      updatedAt: now,
+    }))
+    persistQuickPresetsToStorage(defaults)
+    set({ quickPresets: defaults })
+  },
+  importQuickPresets: (presets, mode) => {
+    set(state => {
+      const now = new Date().toISOString()
+      const normalized = resetQuickPresetIds(presets).map(preset => ({
+        ...preset,
+        createdAt: preset.createdAt || now,
+        updatedAt: now,
+      }))
+      let next: QuickPreset[]
+      if (mode === 'replace') {
+        next = normalized.map(preset => ({
+          ...preset,
+          name: ensureUniquePresetName(preset.name, []),
+        }))
+      } else {
+        next = [...state.quickPresets]
+        for (const preset of normalized) {
+          const name = ensureUniquePresetName(preset.name, next)
+          next.push({ ...preset, name })
+        }
+      }
+      persistQuickPresetsToStorage(next)
+      return { quickPresets: next }
+    })
+  },
+  applyQuickPreset: (id, position) => {
+    const preset = get().quickPresets.find(p => p.id === id)
+    if (!preset) return null
+    const node = materializeQuickPreset(preset, position)
+    get().addNode(node)
+    return node
+  },
+  captureQuickPresetFromNode: (node, meta) => {
+    const preset = createQuickPresetFromNode(node, meta)
+    get().addQuickPreset(preset)
+    return preset
   }
 }))

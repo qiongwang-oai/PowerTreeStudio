@@ -15,6 +15,8 @@ import type { InspectorSelection } from '../types/selection'
 import { findSubsystemPath } from '../utils/subsystemPath'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../utils/nodePresets'
 import { exportCanvasToPdf } from '../utils/exportCanvasPdf'
+import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../utils/quickPresets'
+import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 
 const SUBSYSTEM_BASE_HEIGHT = 64
 const SUBSYSTEM_PORT_HEIGHT = 24
@@ -941,6 +943,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
   const clipboardNode = useStore(s=>s.clipboardNode)
   const setClipboardNode = useStore(s=>s.setClipboardNode)
+  const quickPresets = useStore(s => s.quickPresets)
+  const quickPresetDialogs = useQuickPresetDialogs()
   const reactFlowInstance = useReactFlow()
   const { screenToFlowPosition } = reactFlowInstance
   const openSubsystemIds = useStore(s => s.openSubsystemIds)
@@ -1154,38 +1158,53 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
   }, [expandedLayouts, nodePositions])
 
   const handleCanvasDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
     e.preventDefault()
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = 'copy'
     }
   }, [])
 
-  const handleCanvasDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!dataTransferHasNodePreset(e.dataTransfer)) return
-    const raw = e.dataTransfer?.getData(NODE_PRESET_MIME) ?? null
-    const descriptor = deserializePresetDescriptor(raw)
-    if (!descriptor) return
-    e.preventDefault()
-    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
-    if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
-    setContextMenu(null)
-    const baseNode = createNodePreset(descriptor)
+  const placeNodeAtPosition = useCallback((node: AnyNode, flowPos: { x: number; y: number }) => {
     const match = findLayoutAtPoint(flowPos)
     if (match) {
-      if (descriptor.type === 'Source') return
+      if (node.type === 'Source') return
       const { layout, containerPos } = match
       const localX = flowPos.x - containerPos.x
       const localY = flowPos.y - containerPos.y
       const actualX = localX + layout.contentOffset.x
       const actualY = localY + layout.contentOffset.y
-      const placed = withPosition(baseNode, { x: actualX, y: actualY })
-      nestedAddNode(layout.subsystemPath, placed)
+      const placedNested = withPosition(node, { x: actualX, y: actualY })
+      nestedAddNode(layout.subsystemPath, placedNested)
       return
     }
-    const placed = withPosition(baseNode, { x: flowPos.x, y: flowPos.y })
+    const placed = withPosition(node, { x: flowPos.x, y: flowPos.y })
     addNodeStore(placed)
-  }, [addNodeStore, findLayoutAtPoint, nestedAddNode, screenToFlowPosition, setContextMenu])
+  }, [addNodeStore, findLayoutAtPoint, nestedAddNode])
+
+  const handleCanvasDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    const dt = e.dataTransfer
+    if (!dt) return
+    const quickPayload = readQuickPresetDragPayload(dt)
+    let baseNode: AnyNode | null = null
+    if (quickPayload) {
+      const preset = quickPresets.find(p => p.id === quickPayload.presetId)
+      if (!preset) return
+      baseNode = materializeQuickPreset(preset)
+    } else {
+      if (!dataTransferHasNodePreset(dt)) return
+      const raw = dt.getData(NODE_PRESET_MIME) ?? null
+      const descriptor = deserializePresetDescriptor(raw)
+      if (!descriptor) return
+      baseNode = createNodePreset(descriptor)
+    }
+    if (!baseNode) return
+    e.preventDefault()
+    const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
+    if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
+    setContextMenu(null)
+    placeNodeAtPosition(baseNode, flowPos)
+  }, [placeNodeAtPosition, quickPresets, screenToFlowPosition, setContextMenu])
 
   const getGroupOffset = useCallback((edge: { from: string; to?: string; fromHandle?: string | null }) => {
     const info = groupMidpointInfo.get(edgeGroupKey(edge))
@@ -1659,24 +1678,30 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
     setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
   }, [])
 
-  const handleCopy = useCallback(()=>{
-    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
-    const nested = parseNestedNodeId(contextMenu.targetId)
+  const cloneNodeSnapshot = useCallback((node: AnyNode | null | undefined): AnyNode | null => {
+    if (!node) return null
+    return JSON.parse(JSON.stringify(node)) as AnyNode
+  }, [])
+
+  const resolveNodeSnapshotById = useCallback((nodeId: string): AnyNode | null => {
+    const nested = parseNestedNodeId(nodeId)
     if (nested) {
       const layout = expandedLayouts.get(nested.subsystemId)
       const node = layout?.embeddedProject.nodes.find(n => n.id === nested.nodeId)
-      if (!node) return
-      const copied = JSON.parse(JSON.stringify(node)) as any
-      setClipboardNode(copied)
-      setContextMenu(null)
-      return
+      return cloneNodeSnapshot(node as AnyNode | undefined)
     }
-    const node = project.nodes.find(n=>n.id===contextMenu.targetId)
-    if (!node) return
-    const copied = JSON.parse(JSON.stringify(node)) as any
-    setClipboardNode(copied)
+    if (nodeId.endsWith('::container')) return null
+    const node = project.nodes.find(n => n.id === nodeId)
+    return cloneNodeSnapshot(node)
+  }, [cloneNodeSnapshot, expandedLayouts, project.nodes])
+
+  const handleCopy = useCallback(()=>{
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const snapshot = resolveNodeSnapshotById(contextMenu.targetId)
+    if (!snapshot) return
+    setClipboardNode(snapshot as any)
     setContextMenu(null)
-  }, [contextMenu, expandedLayouts, project.nodes, setClipboardNode])
+  }, [contextMenu, resolveNodeSnapshotById, setClipboardNode])
 
   const handleDelete = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
@@ -1698,6 +1723,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
     removeNode(contextMenu.targetId)
     setContextMenu(null)
   }, [collapseSubsystemView, contextMenu, expandedLayouts, nestedRemoveNode, removeNode])
+
+  const handleSaveQuickPreset = useCallback(() => {
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const snapshot = resolveNodeSnapshotById(contextMenu.targetId)
+    if (!snapshot) {
+      quickPresetDialogs.openCaptureDialog({ kind: 'selection' })
+      setContextMenu(null)
+      return
+    }
+    quickPresetDialogs.openCaptureDialog({ kind: 'node', node: snapshot })
+    setContextMenu(null)
+  }, [contextMenu, quickPresetDialogs, resolveNodeSnapshotById, setContextMenu])
 
   const handlePaste = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'pane' || !clipboardNode) return
@@ -1812,6 +1849,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [openSubsystemIds, selectedNodeId, selectedEdgeId, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode])
 
+  const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && contextMenu.targetId ? !contextMenu.targetId.endsWith('::container') : false
+
   return (
     <div ref={wrapperRef} className="h-full relative" aria-label="canvas" onClick={()=>setContextMenu(null)} onDragOver={handleCanvasDragOver} onDrop={handleCanvasDrop}>
       {/* Floating Banner */}
@@ -1879,6 +1918,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
           {contextMenu.type==='node' ? (
             <div className="py-1">
               <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
+              <button
+                className={`block w-full text-left px-3 py-1 ${canSaveQuickPresetFromContext ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`}
+                onClick={canSaveQuickPresetFromContext ? handleSaveQuickPreset : undefined}
+              >
+                Save as quick preset…
+              </button>
               <button className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
             </div>
           ) : (

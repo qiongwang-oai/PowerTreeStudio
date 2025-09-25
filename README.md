@@ -24,7 +24,7 @@ A visual editor and analyzer for DC power distribution trees ("power trees"). Mo
 - **Inspector**:
   - Edit node/edge properties
   - Read‑only computed fields (converter: total input/output/dissipation; load: total input; edge: dissipation)
-- **Quality of life**: autosave to localStorage, import/export JSON, Markdown report.
+- **Quality of life**: autosave to localStorage, import/export JSON/YAML, Markdown report, quick preset manager (capture existing nodes, drag presets onto canvas or subsystems, share via YAML).
 
 ### Getting started
 - Prereqs: Node.js 18+

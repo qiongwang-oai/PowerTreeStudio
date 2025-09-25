@@ -9,6 +9,7 @@ import { fmt } from '../../utils'
 import { download, importProjectFile, serializeProject } from '../../io'
 import { sanitizeEmbeddedProject } from '../../utils/embeddedProject'
 import EfficiencyEditor from '../EfficiencyEditor'
+import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 
 export default function SubsystemInspector({ subsystemId, subsystemPath, project, selected, onDeleted }:{ subsystemId:string, subsystemPath?: string[], project: Project, selected:string|null, onDeleted?:()=>void }){
   const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
@@ -16,6 +17,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const rootScenario = useStore(s=>s.project.currentScenario)
+  const quickPresetDialogs = useQuickPresetDialogs()
   // project import will be applied directly to the selected subsystem node via nestedSubsystemUpdateNode
   const fileRef = React.useRef<HTMLInputElement>(null)
 
@@ -66,7 +68,19 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="font-semibold">{node.name} <span className="text-xs text-slate-500">({node.type})</span></div>
-            <Button variant="outline" size="sm" onClick={()=>{ nestedRemoveNode((subsystemPath||[subsystemId]), node.id); onDeleted && onDeleted() }}>Delete</Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const snapshot = JSON.parse(JSON.stringify(node)) as any
+                  quickPresetDialogs.openCaptureDialog({ kind: 'node', node: snapshot })
+                }}
+              >
+                Save as preset
+              </Button>
+              <Button variant="outline" size="sm" onClick={()=>{ nestedRemoveNode((subsystemPath||[subsystemId]), node.id); onDeleted && onDeleted() }}>Delete</Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>

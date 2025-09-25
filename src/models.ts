@@ -1,3 +1,4 @@
+import type { QuickPreset } from './utils/quickPresets'
 export type NodeType = 'Source'|'Converter'|'DualOutputConverter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'
 export type EfficiencyPoint = { loadPct?: number; current?: number; eta: number }
 export type EfficiencyModel =
@@ -64,4 +65,4 @@ export type Edge = {
   midpointX?: number;
 }
 export type Scenario = 'Typical'|'Max'|'Idle'
-export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[] }
+export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[]; quickPresets?: QuickPreset[] }
