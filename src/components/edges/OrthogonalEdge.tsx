@@ -167,7 +167,8 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   const textColor = isActive ? '#374151' : labelBaseColor
   const knobBorder = isActive ? '#374151' : '#64748b'
   const knobBackground = isActive ? '#e2e8f0' : '#f8fafc'
-  const showHandle = Boolean(
+  const canShowHandle = Boolean(
+    selected &&
     data?.onMidpointChange &&
     data?.screenToFlow &&
     (data?.extendMidpointRange || length > 8 || Math.abs(axisEnd - axisStart) > 8)
@@ -176,7 +177,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   return (
     <>
       <BaseEdge path={path} style={{ ...style, stroke: strokeColor }} markerEnd={markerEnd} />
-      {showHandle && (
+      {canShowHandle && (
         <EdgeLabelRenderer>
           <div
             style={{
