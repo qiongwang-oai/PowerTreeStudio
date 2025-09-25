@@ -16,8 +16,9 @@ import { findSubsystemPath } from '../utils/subsystemPath'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../utils/nodePresets'
 import { exportCanvasToPdf } from '../utils/exportCanvasPdf'
 
-const SUBSYSTEM_BASE_HEIGHT = 80
-const SUBSYSTEM_PORT_HEIGHT = 28
+const SUBSYSTEM_BASE_HEIGHT = 64
+const SUBSYSTEM_PORT_HEIGHT = 24
+const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
 const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
 const EMBEDDED_NODE_MARGIN_X = 48
@@ -120,8 +121,16 @@ function CustomNode(props: NodeProps) {
     ? (data as any).inputPorts
     : []
   const subsystemPortCount = subsystemPorts.length
+  const extraPortRows = Math.max(subsystemPortCount - 1, 0)
+  const getSubsystemPortPosition = (index: number, total: number) => {
+    if (total <= 1) return 50
+    const baseMargin = Math.min(25, 60 / total)
+    const margin = Math.max(baseMargin, 12)
+    const span = 100 - margin * 2
+    return margin + (span * index) / (total - 1)
+  }
   const dynamicMinHeight = nodeType === 'Subsystem'
-    ? SUBSYSTEM_BASE_HEIGHT + (subsystemPortCount * SUBSYSTEM_PORT_HEIGHT)
+    ? SUBSYSTEM_BASE_HEIGHT + (extraPortRows * SUBSYSTEM_PORT_HEIGHT)
     : undefined
   const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
   const formatVoltage = (value: unknown) => {
@@ -155,8 +164,10 @@ function CustomNode(props: NodeProps) {
         minHeight: dynamicMinHeight,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: nodeType === 'Subsystem' ? 'stretch' : 'center',
+        justifyContent: nodeType === 'Subsystem' ? 'flex-start' : 'center',
+        paddingTop: nodeType === 'Subsystem' ? 3 : undefined,
+        paddingBottom: nodeType === 'Subsystem' ? 3 : undefined,
       }}
     >
       {isSelected && (
@@ -176,7 +187,7 @@ function CustomNode(props: NodeProps) {
             style={{
               position: 'absolute',
               left: -8,
-              top: 'calc(50% + 8px)',
+              top: 'calc(50% + 3px)',
               transform: 'translate(-100%, 0)',
               fontSize: '10px',
               color: '#666',
@@ -232,7 +243,7 @@ function CustomNode(props: NodeProps) {
                 style={{
                   position: 'absolute',
                   left: -8,
-                  top: 'calc(50% + 8px)',
+                  top: 'calc(50% + 3px)',
                   transform: 'translate(-100%, 0)',
                   fontSize: '10px',
                   color: '#666',
@@ -253,7 +264,8 @@ function CustomNode(props: NodeProps) {
           return (
             <>
               {ports.map((p:any, idx:number) => {
-                const pct = ((idx+1)/(count+1))*100
+                const pct = getSubsystemPortPosition(idx, count)
+                const labelOffset = 3
                 const connectionCount = Number((p as any)?.connectionCount) || 0
                 const portInputVoltageText = formatVoltage((p as any)?.inputVoltage)
                 const definedVoltageText = portInputVoltageText ?? formatVoltage(p.Vout)
@@ -271,7 +283,7 @@ function CustomNode(props: NodeProps) {
                       style={{
                         position: 'absolute',
                         left: -8,
-                        top: `calc(${pct}% + 8px)`,
+                        top: `calc(${pct}% + ${labelOffset}px)`,
                         transform: 'translate(-100%, 0)',
                         fontSize: '10px',
                         color: '#334155',
@@ -349,7 +361,7 @@ function CustomNode(props: NodeProps) {
               style={{
                 position: 'absolute',
                 right: -8,
-                top: 'calc(50% + 8px)',
+                top: 'calc(50% + 3px)',
                 transform: 'translate(100%, 0)',
                 fontSize: '10px',
                 color: '#666',
@@ -768,10 +780,11 @@ function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: numbe
       const ports = Array.isArray((node as any).project?.nodes)
         ? (node as any).project.nodes.filter((n: any) => n.type === 'SubsystemInput')
         : []
-      const estimatedHeight = SUBSYSTEM_BASE_HEIGHT + (ports.length * SUBSYSTEM_PORT_HEIGHT)
+      const extraRows = Math.max(ports.length - 1, 0)
+      const estimatedHeight = SUBSYSTEM_BASE_HEIGHT + (extraRows * SUBSYSTEM_PORT_HEIGHT)
       return {
         width: hasWidth ? rawWidth : 240,
-        height: hasHeight ? rawHeight : Math.max(estimatedHeight, DEFAULT_EMBEDDED_NODE_HEIGHT),
+        height: hasHeight ? rawHeight : Math.max(estimatedHeight, SUBSYSTEM_EMBEDDED_MIN_HEIGHT),
       }
     }
     case 'Bus':
