@@ -11,6 +11,29 @@ export default function Palette(){
   const quickPresets = useStore(s => s.quickPresets)
   const applyQuickPreset = useStore(s => s.applyQuickPreset)
   const quickPresetDialogs = useQuickPresetDialogs()
+  const savePresetButtonRef = React.useRef<HTMLButtonElement | null>(null)
+  const [manageButtonWidth, setManageButtonWidth] = React.useState<number | null>(null)
+
+  React.useEffect(() => {
+    const button = savePresetButtonRef.current
+    if (!button) return
+
+    const updateWidth = () => {
+      const rect = button.getBoundingClientRect()
+      setManageButtonWidth(rect.width)
+    }
+
+    updateWidth()
+
+    if (typeof ResizeObserver === 'function') {
+      const observer = new ResizeObserver(() => updateWidth())
+      observer.observe(button)
+      return () => observer.disconnect()
+    }
+
+    window.addEventListener('resize', updateWidth)
+    return () => window.removeEventListener('resize', updateWidth)
+  }, [])
   const onAdd = (descriptor: NodePresetDescriptor)=> {
     addNode(createNodePreset(descriptor as any))
   }
@@ -48,8 +71,22 @@ export default function Palette(){
       <div>
         <h3 className="text-lg mt-3 font-semibold">Quick presets</h3>
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          <Button size="sm" variant="outline" onClick={()=>quickPresetDialogs.openCaptureDialog({ kind: 'selection' })}>Save selection as preset</Button>
-          <Button size="sm" variant="outline" onClick={()=>quickPresetDialogs.openManager()}>Manage presets</Button>
+          <Button
+            ref={savePresetButtonRef}
+            size="sm"
+            variant="outline"
+            onClick={()=>quickPresetDialogs.openCaptureDialog({ kind: 'selection' })}
+          >
+            Save selection as preset
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={()=>quickPresetDialogs.openManager()}
+            style={manageButtonWidth ? { width: manageButtonWidth } : undefined}
+          >
+            Manage presets
+          </Button>
         </div>
         <div className="grid grid-cols-1 gap-2 mt-3">
           {quickPresets.map(preset => (
