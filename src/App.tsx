@@ -52,7 +52,8 @@ export default function App(){
   const [rightPane, setRightPane] = React.useState<number>(300)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
-  const [autoAlignInput, setAutoAlignInput] = React.useState<string>('340')
+  const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
+  const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const openSubsystemIds = useStore(s => s.openSubsystemIds);
@@ -91,7 +92,8 @@ export default function App(){
   const onReport = ()=> setReportOpen(true)
   const openAutoAlignPrompt = React.useCallback(() => {
     setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
-    setAutoAlignInput(prev => (prev.trim().length > 0 ? prev : '340'))
+    setAutoAlignHorizontalInput(prev => (prev.trim().length > 0 ? prev : '500'))
+    setAutoAlignVerticalInput(prev => (prev.trim().length > 0 ? prev : '100'))
     setAutoAlignError(null)
     setAutoAlignPromptOpen(true)
   }, [])
@@ -100,22 +102,57 @@ export default function App(){
     setAutoAlignError(null)
   }, [])
   const applyAutoAlign = React.useCallback(() => {
-    const trimmed = autoAlignInput.trim()
-    if (trimmed === '') {
+    const horizontalTrimmed = autoAlignHorizontalInput.trim()
+    const verticalTrimmed = autoAlignVerticalInput.trim()
+
+    let columnSpacing: number | undefined
+    if (horizontalTrimmed !== '') {
+      const parsed = Number(horizontalTrimmed)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setAutoAlignError('Please enter a positive horizontal spacing.')
+        return
+      }
+      columnSpacing = parsed
+    }
+
+    let rowSpacing: number | undefined
+    if (verticalTrimmed !== '') {
+      const parsed = Number(verticalTrimmed)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setAutoAlignError('Please enter a positive vertical spacing.')
+        return
+      }
+      rowSpacing = parsed
+    }
+
+    if (columnSpacing === undefined && rowSpacing === undefined) {
       autoAlign()
-      setAutoAlignInput('340')
+      setAutoAlignHorizontalInput('500')
+      setAutoAlignVerticalInput('100')
       closeAutoAlignPrompt()
       return
     }
-    const spacing = Number(trimmed)
-    if (!Number.isFinite(spacing) || spacing <= 0) {
-      setAutoAlignError('Please enter a positive number.')
-      return
+
+    const options: { columnSpacing?: number; rowSpacing?: number } = {}
+    if (columnSpacing !== undefined) options.columnSpacing = columnSpacing
+    if (rowSpacing !== undefined) options.rowSpacing = rowSpacing
+
+    autoAlign(options)
+
+    if (columnSpacing !== undefined) {
+      setAutoAlignHorizontalInput(String(columnSpacing))
     }
-    autoAlign(spacing)
-    setAutoAlignInput(String(spacing))
+    if (rowSpacing !== undefined) {
+      setAutoAlignVerticalInput(String(rowSpacing))
+    }
+
     closeAutoAlignPrompt()
-  }, [autoAlign, autoAlignInput, closeAutoAlignPrompt])
+  }, [
+    autoAlign,
+    autoAlignHorizontalInput,
+    autoAlignVerticalInput,
+    closeAutoAlignPrompt,
+  ])
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
     const cleared = { ...project, nodes: [], edges: [] }
@@ -231,8 +268,10 @@ export default function App(){
         {autoAlignPromptOpen && (
           <AutoAlignPrompt
             anchorRect={autoAlignAnchor}
-            value={autoAlignInput}
-            onChange={setAutoAlignInput}
+            horizontalValue={autoAlignHorizontalInput}
+            verticalValue={autoAlignVerticalInput}
+            onHorizontalChange={setAutoAlignHorizontalInput}
+            onVerticalChange={setAutoAlignVerticalInput}
             onConfirm={applyAutoAlign}
             onCancel={closeAutoAlignPrompt}
             error={autoAlignError}

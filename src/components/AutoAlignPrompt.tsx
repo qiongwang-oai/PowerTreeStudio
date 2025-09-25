@@ -3,8 +3,10 @@ import { Button } from './ui/button'
 
 type AutoAlignPromptProps = {
   anchorRect: DOMRect | null
-  value: string
-  onChange: (value: string) => void
+  horizontalValue: string
+  verticalValue: string
+  onHorizontalChange: (value: string) => void
+  onVerticalChange: (value: string) => void
   onConfirm: () => void
   onCancel: () => void
   error?: string | null
@@ -12,7 +14,16 @@ type AutoAlignPromptProps = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
 
-export default function AutoAlignPrompt({ anchorRect, value, onChange, onConfirm, onCancel, error }: AutoAlignPromptProps) {
+export default function AutoAlignPrompt({
+  anchorRect,
+  horizontalValue,
+  verticalValue,
+  onHorizontalChange,
+  onVerticalChange,
+  onConfirm,
+  onCancel,
+  error,
+}: AutoAlignPromptProps) {
   const inputRef = React.useRef<HTMLInputElement>(null)
 
   React.useEffect(() => {
@@ -54,18 +65,28 @@ export default function AutoAlignPrompt({ anchorRect, value, onChange, onConfirm
           }}
         >
           <div className="font-semibold text-slate-700 mb-2">Auto alignment</div>
-          <label className="block text-xs font-medium text-slate-600 mb-1" htmlFor="auto-align-spacing">
+          <label className="block text-xs font-medium text-slate-600 mb-1" htmlFor="auto-align-horizontal-spacing">
             Horizontal spacing (px)
           </label>
           <input
-            id="auto-align-spacing"
+            id="auto-align-horizontal-spacing"
             ref={inputRef}
             className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
             placeholder="Leave blank for default"
-            value={value}
-            onChange={event => onChange(event.target.value)}
+            value={horizontalValue}
+            onChange={event => onHorizontalChange(event.target.value)}
           />
-          <p className="text-xs text-slate-500 mt-1">Enter a positive number to override the spacing.</p>
+          <label className="block text-xs font-medium text-slate-600 mb-1 mt-3" htmlFor="auto-align-vertical-spacing">
+            Vertical spacing (px)
+          </label>
+          <input
+            id="auto-align-vertical-spacing"
+            className="w-full rounded-md border border-slate-300 px-2 py-1 text-sm focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+            placeholder="Leave blank for default"
+            value={verticalValue}
+            onChange={event => onVerticalChange(event.target.value)}
+          />
+          <p className="text-xs text-slate-500 mt-1">Enter positive numbers to override the spacing.</p>
           {error ? <p className="text-xs text-red-600 mt-1">{error}</p> : null}
           <div className="mt-3 flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onCancel}>

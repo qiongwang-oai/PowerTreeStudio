@@ -25,7 +25,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const autoAlignNested = useStore(s=>s.nestedSubsystemAutoAlign)
   const clearNested = useStore(s=>s.nestedSubsystemClear)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
-  const [autoAlignInput, setAutoAlignInput] = React.useState<string>('340')
+  const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
+  const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
@@ -66,7 +67,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
 
   const openAutoAlignPrompt = React.useCallback(() => {
     setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
-    setAutoAlignInput(prev => (prev.trim().length > 0 ? prev : '340'))
+    setAutoAlignHorizontalInput(prev => (prev.trim().length > 0 ? prev : '500'))
+    setAutoAlignVerticalInput(prev => (prev.trim().length > 0 ? prev : '100'))
     setAutoAlignError(null)
     setAutoAlignPromptOpen(true)
   }, [])
@@ -77,22 +79,58 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   }, [])
 
   const applyAutoAlign = React.useCallback(() => {
-    const trimmed = autoAlignInput.trim()
-    if (trimmed === '') {
+    const horizontalTrimmed = autoAlignHorizontalInput.trim()
+    const verticalTrimmed = autoAlignVerticalInput.trim()
+
+    let columnSpacing: number | undefined
+    if (horizontalTrimmed !== '') {
+      const parsed = Number(horizontalTrimmed)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setAutoAlignError('Please enter a positive horizontal spacing.')
+        return
+      }
+      columnSpacing = parsed
+    }
+
+    let rowSpacing: number | undefined
+    if (verticalTrimmed !== '') {
+      const parsed = Number(verticalTrimmed)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setAutoAlignError('Please enter a positive vertical spacing.')
+        return
+      }
+      rowSpacing = parsed
+    }
+
+    if (columnSpacing === undefined && rowSpacing === undefined) {
       autoAlignNested(subsystemPath)
-      setAutoAlignInput('340')
+      setAutoAlignHorizontalInput('500')
+      setAutoAlignVerticalInput('100')
       closeAutoAlignPrompt()
       return
     }
-    const spacing = Number(trimmed)
-    if (!Number.isFinite(spacing) || spacing <= 0) {
-      setAutoAlignError('Please enter a positive number.')
-      return
+
+    const options: { columnSpacing?: number; rowSpacing?: number } = {}
+    if (columnSpacing !== undefined) options.columnSpacing = columnSpacing
+    if (rowSpacing !== undefined) options.rowSpacing = rowSpacing
+
+    autoAlignNested(subsystemPath, options)
+
+    if (columnSpacing !== undefined) {
+      setAutoAlignHorizontalInput(String(columnSpacing))
     }
-    autoAlignNested(subsystemPath, spacing)
-    setAutoAlignInput(String(spacing))
+    if (rowSpacing !== undefined) {
+      setAutoAlignVerticalInput(String(rowSpacing))
+    }
+
     closeAutoAlignPrompt()
-  }, [autoAlignInput, autoAlignNested, subsystemPath, closeAutoAlignPrompt])
+  }, [
+    autoAlignHorizontalInput,
+    autoAlignNested,
+    autoAlignVerticalInput,
+    subsystemPath,
+    closeAutoAlignPrompt,
+  ])
 
   const handleClear = () => {
     if (!window.confirm('Clear this subsystem canvas? This will remove all nodes except inputs.')) return
@@ -143,8 +181,10 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
       {autoAlignPromptOpen && (
         <AutoAlignPrompt
           anchorRect={autoAlignAnchor}
-          value={autoAlignInput}
-          onChange={setAutoAlignInput}
+          horizontalValue={autoAlignHorizontalInput}
+          verticalValue={autoAlignVerticalInput}
+          onHorizontalChange={setAutoAlignHorizontalInput}
+          onVerticalChange={setAutoAlignVerticalInput}
           onConfirm={applyAutoAlign}
           onCancel={closeAutoAlignPrompt}
           error={autoAlignError}

@@ -16,9 +16,9 @@ type ParentDescriptor = {
   column: number
 }
 
-const DEFAULT_COLUMN_SPACING = 340
+const DEFAULT_COLUMN_SPACING = 500
 const COLUMN_START_X = 120
-const ROW_SPACING = 160
+const DEFAULT_ROW_SPACING = 100
 const COMPONENT_GAP = 200
 const TOP_MARGIN = 120
 
@@ -293,6 +293,7 @@ const assignCoordinates = (
   maps: NodeMaps,
   depthMap: Map<string, number>,
   columnSpacing: number,
+  rowSpacing: number,
   powerByNode: Map<string, number>
 ): Map<string, { x: number; y: number }> => {
   const coords = new Map<string, { x: number; y: number }>()
@@ -337,8 +338,8 @@ const assignCoordinates = (
 
   const estimateNodeHeightById = (nodeId: string): number => {
     const node = maps.nodesById.get(nodeId)
-    if (!node) return ROW_SPACING
-    let h = typeBaseHeight[node.type] ?? ROW_SPACING
+    if (!node) return rowSpacing
+    let h = typeBaseHeight[node.type] ?? rowSpacing
     if (node.type === 'DualOutputConverter') {
       const outs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
       if (outs.length > 1) h += (outs.length - 1) * 14
@@ -466,12 +467,12 @@ const assignCoordinates = (
       }
     }
 
-    const componentHeight = maxSpanUnits > 0 ? Math.max(0, (maxSpanUnits - 1) * ROW_SPACING) : 0
+    const componentHeight = maxSpanUnits > 0 ? Math.max(0, (maxSpanUnits - 1) * rowSpacing) : 0
 
     columnEntries.forEach(({ column, nodes }, index) => {
       const baseX = COLUMN_START_X + column * columnSpacing
       const totalSpanUnits = nodes.reduce((acc, info) => acc + getSpanUnits(info.id), 0)
-      const columnHeight = totalSpanUnits > 0 ? Math.max(0, (totalSpanUnits - 1) * ROW_SPACING) : 0
+      const columnHeight = totalSpanUnits > 0 ? Math.max(0, (totalSpanUnits - 1) * rowSpacing) : 0
       let baseY = startY
       if (index === 0) {
         const offset = (componentHeight - columnHeight) / 2
@@ -481,7 +482,7 @@ const assignCoordinates = (
       }
       let cursorUnits = 0
       nodes.forEach((info) => {
-        const y = baseY + cursorUnits * ROW_SPACING
+        const y = baseY + cursorUnits * rowSpacing
         coords.set(info.id, { x: baseX, y })
         rankWithinComponent.set(info.id, cursorUnits)
         cursorUnits += getSpanUnits(info.id)
@@ -535,17 +536,17 @@ const assignCoordinates = (
 
       if (decorated.length <= 1) continue
       const baseY = decorated[0].pos.y
-      let previousY = baseY - ROW_SPACING
+      let previousY = baseY - rowSpacing
 
       decorated.forEach((item, index) => {
         let nextY = item.pos.y
         if (!item.hasForwardChildren) {
-          const desiredY = baseY + index * ROW_SPACING
+          const desiredY = baseY + index * rowSpacing
           if (nextY > desiredY) {
             nextY = desiredY
           }
         }
-        const minY = previousY + ROW_SPACING
+        const minY = previousY + rowSpacing
         if (nextY < minY) {
           nextY = minY
         }
@@ -608,7 +609,10 @@ const updateEdges = (
   })
 }
 
-export const autoLayoutProject = (project: Project, options?: { columnSpacing?: number }): LayoutResult => {
+export const autoLayoutProject = (
+  project: Project,
+  options?: { columnSpacing?: number; rowSpacing?: number }
+): LayoutResult => {
   const maps = buildMaps(project)
   const depthMap = new Map<string, number>()
   const seeds = pickSeeds(project, maps, depthMap)
@@ -661,7 +665,12 @@ export const autoLayoutProject = (project: Project, options?: { columnSpacing?: 
     ? rawSpacing
     : DEFAULT_COLUMN_SPACING
 
-  const coords = assignCoordinates(project, maps, depthMap, columnSpacing, powerByNode)
+  const rawRowSpacing = options?.rowSpacing
+  const rowSpacing = typeof rawRowSpacing === 'number' && Number.isFinite(rawRowSpacing) && rawRowSpacing > 0
+    ? rawRowSpacing
+    : DEFAULT_ROW_SPACING
+
+  const coords = assignCoordinates(project, maps, depthMap, columnSpacing, rowSpacing, powerByNode)
   const nodes = project.nodes.map(node => {
     const position = coords.get(node.id)
     if (!position) return { ...node }
