@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react'
 import { useStore } from '../state/store'
-import { DualOutputConverterBranch, DualOutputConverterNode, Project } from '../models'
+import { CanvasMarkup, DualOutputConverterBranch, DualOutputConverterNode, Project } from '../models'
 import { Card, CardContent, CardHeader } from './ui/card'
 import { Tabs, TabsContent, TabsList } from './ui/tabs'
 import { Button } from './ui/button'
@@ -20,16 +20,20 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
   const removeNode = useStore(s=>s.removeNode)
   const updateEdge = useStore(s=>s.updateEdge as any)
   const removeEdge = useStore(s=>s.removeEdge)
+  const updateMarkup = useStore(s=>s.updateMarkup)
+  const removeMarkup = useStore(s=>s.removeMarkup)
   const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
   const expandSubsystemView = useStore(s=>s.expandSubsystemView)
   const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
   const fileRef = React.useRef<HTMLInputElement>(null)
+  const markups = project.markups ?? []
   const edge = useMemo(()=> (selection && selection.kind==='edge') ? (project.edges.find(e=>e.id===selection.id) || null) : null, [project.edges, selection])
+  const markup = useMemo(()=> (selection && selection.kind==='markup') ? (markups.find(m=>m.id===selection.id) || null) : null, [markups, selection])
   const analysis = compute(project)
   const node = useMemo(()=> (selection && selection.kind==='node') ? (project.nodes.find(n=>n.id===selection.id) || null) : null, [project.nodes, selection])
   const quickPresetDialogs = useQuickPresetDialogs()
   const [tab, setTab] = React.useState('props')
-  if (!selection) return <div className="p-3 text-sm text-slate-500">Select a node or edge to edit properties.</div>
+  if (!selection) return <div className="p-3 text-sm text-slate-500">Select a node, edge, or markup to edit properties.</div>
   if (selection.kind === 'nested-node' || selection.kind === 'nested-edge') {
     const nestedProject = resolveProjectAtPath(project, selection.subsystemPath)
     if (!nestedProject) {
@@ -45,6 +49,259 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         selected={nestedId}
         onDeleted={onDeleted}
       />
+    )
+  }
+  if (selection.kind === 'markup') {
+    if (!markup) {
+      return <div className="p-3 text-sm text-slate-500">Markup not found.</div>
+    }
+    const label = markup.type === 'text' ? 'Text markup'
+      : markup.type === 'line' ? 'Line / arrow markup'
+      : 'Rectangle markup'
+    const onDeleteMarkup = () => {
+      removeMarkup(markup.id)
+      onDeleted && onDeleted()
+    }
+    const renderControls = (() => {
+      if (markup.type === 'text') {
+        return (
+          <div className="space-y-3 text-sm">
+            <label className="flex flex-col gap-1">
+              <span>Content</span>
+              <textarea
+                className="input"
+                rows={4}
+                value={markup.text}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'text' ? { ...current, text: e.target.value } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Font size (px)</span>
+              <input
+                className="input"
+                type="number"
+                min={8}
+                value={markup.fontSize}
+                onChange={e => {
+                  const raw = Number(e.target.value)
+                  const nextSize = Number.isFinite(raw) ? Math.max(8, raw) : markup.fontSize
+                  updateMarkup(markup.id, current => current.type === 'text' ? { ...current, fontSize: nextSize } : current)
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Color</span>
+              <input
+                aria-label="Text color"
+                type="color"
+                className="h-8 w-12 cursor-pointer border border-slate-300 rounded"
+                value={markup.color}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'text' ? { ...current, color: e.target.value } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Bold</span>
+              <input
+                type="checkbox"
+                checked={markup.isBold === true}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'text' ? { ...current, isBold: e.target.checked } : current)}
+              />
+            </label>
+          </div>
+        )
+      }
+      if (markup.type === 'line') {
+        return (
+          <div className="space-y-3 text-sm">
+            <label className="flex items-center justify-between gap-2">
+              <span>Color</span>
+              <input
+                aria-label="Line color"
+                type="color"
+                className="h-8 w-12 cursor-pointer border border-slate-300 rounded"
+                value={markup.color}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'line' ? { ...current, color: e.target.value } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Thickness (px)</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                step={0.5}
+                value={markup.thickness}
+                onChange={e => {
+                  const raw = Number(e.target.value)
+                  const nextValue = Number.isFinite(raw) ? Math.max(0.5, raw) : markup.thickness
+                  updateMarkup(markup.id, current => current.type === 'line' ? { ...current, thickness: nextValue } : current)
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Dotted</span>
+              <input
+                type="checkbox"
+                checked={markup.isDashed === true}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'line' ? { ...current, isDashed: e.target.checked } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Arrow head</span>
+              <input
+                type="checkbox"
+                checked={markup.arrowHead === 'end'}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'line' ? { ...current, arrowHead: e.target.checked ? 'end' : 'none' } : current)}
+              />
+            </label>
+          </div>
+        )
+      }
+      if (markup.type === 'rectangle') {
+        const hasFill = typeof markup.fillColor === 'string'
+        const fillColorValue = hasFill ? markup.fillColor! : '#38bdf8'
+        const effectiveOpacity = typeof markup.fillOpacity === 'number' ? Math.min(1, Math.max(0, markup.fillOpacity)) : 0.18
+        const isAboveNodes = (markup.zIndex ?? -10) >= 20
+        return (
+          <div className="space-y-3 text-sm">
+            <label className="flex items-center justify-between gap-2">
+              <span>Border color</span>
+              <input
+                aria-label="Rectangle border color"
+                type="color"
+                className="h-8 w-12 cursor-pointer border border-slate-300 rounded"
+                value={markup.strokeColor}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, strokeColor: e.target.value } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Border width (px)</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                step={0.5}
+                value={markup.thickness}
+                onChange={e => {
+                  const raw = Number(e.target.value)
+                  const nextValue = Number.isFinite(raw) ? Math.max(0.5, raw) : markup.thickness
+                  updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, thickness: nextValue } : current)
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Dotted border</span>
+              <input
+                type="checkbox"
+                checked={markup.isDashed === true}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, isDashed: e.target.checked } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Filled</span>
+              <input
+                type="checkbox"
+                checked={hasFill}
+                onChange={e => {
+                  const shouldFill = e.target.checked
+                  updateMarkup(markup.id, current => {
+                    if (current.type !== 'rectangle') return current
+                    if (!shouldFill) {
+                      return { ...current, fillColor: null, fillOpacity: 0 }
+                    }
+                    return { ...current, fillColor: fillColorValue, fillOpacity: effectiveOpacity || 0.18 }
+                  })
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Fill color</span>
+              <input
+                aria-label="Rectangle fill color"
+                type="color"
+                disabled={!hasFill}
+                className={`h-8 w-12 cursor-pointer border border-slate-300 rounded ${hasFill ? '' : 'opacity-50'}`}
+                value={fillColorValue}
+                onChange={e => updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, fillColor: e.target.value } : current)}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Fill opacity</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={effectiveOpacity}
+                  disabled={!hasFill}
+                  onChange={e => {
+                    const raw = Number(e.target.value)
+                    const nextOpacity = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : effectiveOpacity
+                    updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, fillOpacity: nextOpacity } : current)
+                  }}
+                />
+                <input
+                  className="w-16 border border-slate-300 rounded px-1 py-0.5 text-right text-xs"
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={effectiveOpacity.toFixed(2)}
+                  disabled={!hasFill}
+                  onChange={e => {
+                    const raw = Number(e.target.value)
+                    const nextOpacity = Number.isFinite(raw) ? Math.min(1, Math.max(0, raw)) : effectiveOpacity
+                    updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, fillOpacity: nextOpacity } : current)
+                  }}
+                />
+              </div>
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Corner radius (px)</span>
+              <input
+                className="input"
+                type="number"
+                min={0}
+                step={1}
+                value={markup.cornerRadius ?? 0}
+                onChange={e => {
+                  const raw = Number(e.target.value)
+                  const nextRadius = Number.isFinite(raw) ? Math.max(0, raw) : (markup.cornerRadius ?? 0)
+                  updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, cornerRadius: nextRadius } : current)
+                }}
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2">
+              <span>Bring to front</span>
+              <input
+                type="checkbox"
+                checked={isAboveNodes}
+                onChange={e => {
+                  const nextZ = e.target.checked ? 50 : -10
+                  updateMarkup(markup.id, current => current.type === 'rectangle' ? { ...current, zIndex: nextZ } : current)
+                }}
+              />
+            </label>
+          </div>
+        )
+      }
+      return null
+    })()
+    return (
+      <div className="h-full flex flex-col">
+        <Card className="flex-1">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="font-semibold">{label}</div>
+              <Button variant="outline" size="sm" onClick={onDeleteMarkup}>Delete</Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {renderControls ?? <div className="text-sm text-slate-500">Unsupported markup type.</div>}
+          </CardContent>
+        </Card>
+      </div>
     )
   }
   if (edge) {

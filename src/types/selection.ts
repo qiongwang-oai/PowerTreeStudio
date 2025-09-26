@@ -1,6 +1,7 @@
 export type InspectorSelection =
   | { kind: 'node'; id: string }
   | { kind: 'edge'; id: string }
+  | { kind: 'markup'; id: string }
   | { kind: 'nested-node'; subsystemPath: string[]; nodeId: string }
   | { kind: 'nested-edge'; subsystemPath: string[]; edgeId: string }
 

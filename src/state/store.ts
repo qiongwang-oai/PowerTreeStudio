@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { Project, AnyNode, Edge, Scenario } from '../models'
+import { Project, AnyNode, Edge, Scenario, CanvasMarkup } from '../models'
 import { sampleProject } from '../sampleData'
 import { autosave, loadAutosave } from '../io'
 import { autoLayoutProject } from '../utils/autoLayout'
@@ -31,6 +31,10 @@ type State = {
   updateNodePos: (id: string, x: number, y: number) => void
   removeNode: (id: string) => void
   removeEdge: (id: string) => void
+  addMarkup: (markup: CanvasMarkup) => void
+  updateMarkup: (id: string, updater: (markup: CanvasMarkup) => CanvasMarkup) => void
+  removeMarkup: (id: string) => void
+  reorderMarkups: (updater: (markups: CanvasMarkup[]) => CanvasMarkup[]) => void
   setClipboardNode: (n: AnyNode | null) => void
   undo: () => void
   redo: () => void
@@ -71,8 +75,6 @@ type State = {
   captureQuickPresetFromNode: (node: AnyNode, meta?: { name?: string; description?: string; accentColor?: string }) => QuickPreset
 }
 
-const saved = loadAutosave()
-
 const storedQuickPresets = (() => {
   try {
     return loadQuickPresetsFromStorage()
@@ -91,20 +93,151 @@ const ensureUniquePresetName = (name: string, presets: QuickPreset[], excludeId?
   return `${base} ${index}`
 }
 
+const toNumber = (value: unknown, fallback: number): number => {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : fallback
+}
+
+const normalizePoint = (point: any, fallback: { x: number; y: number }): { x: number; y: number } => {
+  if (!point || typeof point !== 'object') return { ...fallback }
+  return {
+    x: toNumber(point.x, fallback.x),
+    y: toNumber(point.y, fallback.y),
+  }
+}
+
+const normalizeSize = (size: any, fallback: { width: number; height: number }): { width: number; height: number } => {
+  if (!size || typeof size !== 'object') return { ...fallback }
+  const width = Math.max(1, toNumber(size.width, fallback.width))
+  const height = Math.max(1, toNumber(size.height, fallback.height))
+  return { width, height }
+}
+
+const normalizeMarkup = (value: any): CanvasMarkup | null => {
+  if (!value || typeof value !== 'object') return null
+  const type = value.type
+  const id = typeof value.id === 'string' ? value.id : genId('markup_')
+  const zIndex = Number.isFinite(value.zIndex) ? Number(value.zIndex) : undefined
+  const locked = value.locked === true
+
+  if (type === 'text') {
+    const position = normalizePoint(value.position, { x: 160, y: 160 })
+    const color = typeof value.color === 'string' ? value.color : '#0f172a'
+    const text = typeof value.text === 'string' ? value.text : 'Text'
+    const fontSize = Math.max(6, toNumber(value.fontSize, 18))
+    const isBold = value.isBold === true
+    const backgroundColor = typeof value.backgroundColor === 'string' ? value.backgroundColor : null
+    const size = value.size ? normalizeSize(value.size, { width: 220, height: fontSize * 1.4 }) : undefined
+    return {
+      id,
+      type: 'text',
+      position,
+      size,
+      text,
+      color,
+      fontSize,
+      isBold,
+      backgroundColor,
+      zIndex,
+      locked,
+    }
+  }
+
+  if (type === 'line') {
+    const start = normalizePoint(value.start, { x: 200, y: 200 })
+    const end = normalizePoint(value.end, { x: start.x + 180, y: start.y })
+    const color = typeof value.color === 'string' ? value.color : '#1e293b'
+    const thickness = Math.max(1, toNumber(value.thickness, 2))
+    const isDashed = value.isDashed === true
+    const arrowHead = value.arrowHead === 'end' ? 'end' : 'none'
+    return {
+      id,
+      type: 'line',
+      start,
+      end,
+      color,
+      thickness,
+      isDashed,
+      arrowHead,
+      zIndex,
+      locked,
+    }
+  }
+
+  if (type === 'rectangle') {
+    const position = normalizePoint(value.position, { x: 220, y: 220 })
+    const size = normalizeSize(value.size, { width: 240, height: 160 })
+    const strokeColor = typeof value.strokeColor === 'string' ? value.strokeColor : '#0f172a'
+    const thickness = Math.max(1, toNumber(value.thickness, 2))
+    const isDashed = value.isDashed === true
+    const fillColor = typeof value.fillColor === 'string' ? value.fillColor : null
+    const rawOpacity = Number(value.fillOpacity)
+    const fillOpacity = Number.isFinite(rawOpacity) ? Math.min(1, Math.max(0, rawOpacity)) : 0.18
+    const cornerRadius = Math.max(0, toNumber(value.cornerRadius, 0))
+    return {
+      id,
+      type: 'rectangle',
+      position,
+      size,
+      strokeColor,
+      thickness,
+      isDashed,
+      fillColor,
+      fillOpacity,
+      cornerRadius,
+      zIndex,
+      locked,
+    }
+  }
+
+  return null
+}
+
+const ensureMarkupsInitialized = (project: Project): CanvasMarkup[] => {
+  if (!Array.isArray(project.markups)) {
+    project.markups = []
+  }
+  return project.markups
+}
+
+const normalizeProject = (project: Project): Project => {
+  const clone = JSON.parse(JSON.stringify(project)) as Project
+  const sourceMarkups = Array.isArray(clone.markups)
+    ? clone.markups
+    : Array.isArray(project.markups)
+    ? project.markups
+    : []
+  const normalizedMarkups = Array.isArray(sourceMarkups)
+    ? sourceMarkups
+        .map(normalizeMarkup)
+        .filter((markup): markup is CanvasMarkup => markup !== null)
+    : []
+  clone.markups = normalizedMarkups
+  return clone
+}
+
+const snapshotProject = (project: Project): Project => normalizeProject(project)
+
+const saved = (() => {
+  const raw = loadAutosave()
+  return raw ? normalizeProject(raw) : null
+})()
+
 export const useStore = create<State>((set,get)=>({
-  project: saved || sampleProject,
+  project: saved ?? normalizeProject(sampleProject),
   importedFileName: null,
   clipboardNode: null,
   past: [],
   future: [],
   quickPresets: storedQuickPresets,
   setProject: (p) => {
-    const prev = JSON.parse(JSON.stringify(get().project)) as Project
+    const prev = snapshotProject(get().project)
     const importedQuickPresets = Array.isArray((p as any).quickPresets) ? (p as any).quickPresets as QuickPreset[] : null
-    const nextProject = JSON.parse(JSON.stringify(p)) as Project
-    if ('quickPresets' in nextProject) {
-      delete (nextProject as any).quickPresets
+    const nextProjectRaw = JSON.parse(JSON.stringify(p)) as Project
+    if ('quickPresets' in nextProjectRaw) {
+      delete (nextProjectRaw as any).quickPresets
     }
+    const nextProject = normalizeProject(nextProjectRaw)
     set(state=>({ past:[...state.past, prev], future: [] }))
     set({project:nextProject})
     autosave(nextProject)
@@ -113,20 +246,110 @@ export const useStore = create<State>((set,get)=>({
     }
   },
   setImportedFileName: (name) => { set({ importedFileName: name }) },
-  addNode: (n) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
-  addEdge: (e) => { const p=get().project; if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
-  updateNode: (id, patch) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
-  updateEdge: (id, patch) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
-  setScenario: (s) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
-  updateNodePos: (id, x, y) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
-  removeNode: (id) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
-  removeEdge: (id) => { const p=get().project; const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.filter(e=>e.id!==id); set({project:{...p}}); autosave(get().project) }
+  addNode: (n) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
+  addEdge: (e) => { const p=get().project; ensureMarkupsInitialized(p); if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
+  updateNode: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
+  updateEdge: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
+  setScenario: (s) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
+  updateNodePos: (id, x, y) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
+  removeNode: (id) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
+  removeEdge: (id) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.filter(e=>e.id!==id); set({project:{...p}}); autosave(get().project) }
+  ,addMarkup: (markup) => {
+    const project = get().project
+    ensureMarkupsInitialized(project)
+    const candidate = normalizeMarkup(markup)
+    if (!candidate) return
+    const existingIds = new Set((project.markups || []).map(m => m.id))
+    let finalMarkup = candidate
+    if (existingIds.has(candidate.id)) {
+      let nextId = genId('markup_')
+      while (existingIds.has(nextId)) {
+        nextId = genId('markup_')
+      }
+      finalMarkup = { ...candidate, id: nextId }
+    }
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const markups = [...(project.markups || []), finalMarkup]
+    const nextProject = { ...project, markups }
+    set({ project: nextProject })
+    autosave(nextProject)
+  }
+  ,updateMarkup: (id, updater) => {
+    const project = get().project
+    ensureMarkupsInitialized(project)
+    const markups = project.markups || []
+    const index = markups.findIndex(m => m.id === id)
+    if (index === -1) return
+    const current = markups[index]
+    const updatedCandidate = updater(current)
+    const normalized = normalizeMarkup({ ...updatedCandidate, id })
+    if (!normalized) return
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const nextMarkups = [...markups]
+    nextMarkups[index] = { ...normalized, id }
+    const nextProject = { ...project, markups: nextMarkups }
+    set({ project: nextProject })
+    autosave(nextProject)
+  }
+  ,removeMarkup: (id) => {
+    const project = get().project
+    ensureMarkupsInitialized(project)
+    const markups = project.markups || []
+    if (!markups.some(m => m.id === id)) return
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const nextMarkups = markups.filter(m => m.id !== id)
+    const nextProject = { ...project, markups: nextMarkups }
+    set({ project: nextProject })
+    autosave(nextProject)
+  }
+  ,reorderMarkups: (updater) => {
+    const project = get().project
+    ensureMarkupsInitialized(project)
+    const currentMarkups = [...(project.markups || [])]
+    const result = updater([...currentMarkups])
+    if (!Array.isArray(result)) return
+    const normalized = result
+      .map(markup => normalizeMarkup(markup))
+      .filter((markup): markup is CanvasMarkup => markup !== null)
+    const seen = new Set<string>()
+    const deduped: CanvasMarkup[] = normalized.map(markup => {
+      let nextId = markup.id
+      while (seen.has(nextId)) {
+        nextId = genId('markup_')
+      }
+      seen.add(nextId)
+      return { ...markup, id: nextId }
+    })
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const nextProject = { ...project, markups: deduped }
+    set({ project: nextProject })
+    autosave(nextProject)
+  }
   ,setClipboardNode: (n) => { set({ clipboardNode: n }) }
-  ,undo: () => { const { past, project, future } = get(); if (past.length===0) return; const prev = past[past.length-1]; set({ past: past.slice(0,-1), future: [...future, JSON.parse(JSON.stringify(project))], project: prev }); autosave(get().project) }
-  ,redo: () => { const { past, project, future } = get(); if (future.length===0) return; const next = future[future.length-1]; set({ past: [...past, JSON.parse(JSON.stringify(project))], future: future.slice(0,-1), project: next }); autosave(get().project) }
+  ,undo: () => {
+    const { past, project, future } = get()
+    if (past.length === 0) return
+    const previousSnapshot = snapshotProject(past[past.length - 1])
+    const currentSnapshot = snapshotProject(project)
+    set({ past: past.slice(0, -1), future: [...future, currentSnapshot], project: previousSnapshot })
+    autosave(previousSnapshot)
+  }
+  ,redo: () => {
+    const { past, project, future } = get()
+    if (future.length === 0) return
+    const nextSnapshot = snapshotProject(future[future.length - 1])
+    const currentSnapshot = snapshotProject(project)
+    set({ past: [...past, currentSnapshot], future: future.slice(0, -1), project: nextSnapshot })
+    autosave(nextSnapshot)
+  }
   ,autoAlign: (options) => {
     const project = get().project
-    const prev = JSON.parse(JSON.stringify(project)) as Project
+    ensureMarkupsInitialized(project)
+    const prev = snapshotProject(project)
     set(state => ({ past: [...state.past, prev], future: [] }))
     const { nodes, edges } = autoLayoutProject(project, options)
     const next: Project = { ...project, nodes, edges }
@@ -135,7 +358,8 @@ export const useStore = create<State>((set,get)=>({
   }
   ,updateSubsystemProject: (subsystemId, updater) => {
     const p=get().project
-    const prev = JSON.parse(JSON.stringify(p)) as Project; set(state=>({ past:[...state.past, prev], future: [] }));
+    ensureMarkupsInitialized(p)
+    const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] }));
     p.nodes=p.nodes.map(n=>{
       if (n.id!==subsystemId || (n as any).type!=='Subsystem') return n
       const sub = n as any
@@ -161,7 +385,8 @@ export const useStore = create<State>((set,get)=>({
       }
     }
     const root = get().project
-    const prev = JSON.parse(JSON.stringify(root)) as Project; set(state=>({ past:[...state.past, prev], future: [] }));
+    ensureMarkupsInitialized(root)
+    const prev = snapshotProject(root); set(state=>({ past:[...state.past, prev], future: [] }));
     const nextRoot = applyAtPath(root, subsystemPath)
     set({ project: nextRoot }); autosave(get().project)
   }

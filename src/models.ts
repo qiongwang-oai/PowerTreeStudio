@@ -1,4 +1,5 @@
 import type { QuickPreset } from './utils/quickPresets'
+
 export type NodeType = 'Source'|'Converter'|'DualOutputConverter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'
 export type EfficiencyPoint = { loadPct?: number; current?: number; eta: number }
 export type EfficiencyModel =
@@ -65,4 +66,48 @@ export type Edge = {
   midpointX?: number;
 }
 export type Scenario = 'Typical'|'Max'|'Idle'
-export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[]; quickPresets?: QuickPreset[] }
+export type MarkupType = 'text' | 'line' | 'rectangle'
+
+export type BaseMarkup = {
+  id: string
+  type: MarkupType
+  zIndex?: number
+  locked?: boolean
+}
+
+export type TextMarkup = BaseMarkup & {
+  type: 'text'
+  position: { x: number; y: number }
+  size?: { width: number; height: number }
+  text: string
+  color: string
+  fontSize: number
+  isBold?: boolean
+  backgroundColor?: string | null
+}
+
+export type LineMarkup = BaseMarkup & {
+  type: 'line'
+  start: { x: number; y: number }
+  end: { x: number; y: number }
+  color: string
+  thickness: number
+  isDashed?: boolean
+  arrowHead?: 'none' | 'end'
+}
+
+export type RectangleMarkup = BaseMarkup & {
+  type: 'rectangle'
+  position: { x: number; y: number }
+  size: { width: number; height: number }
+  strokeColor: string
+  thickness: number
+  isDashed?: boolean
+  fillColor?: string | null
+  fillOpacity?: number
+  cornerRadius?: number
+}
+
+export type CanvasMarkup = TextMarkup | LineMarkup | RectangleMarkup
+
+export type Project = { id: string; name: string; units: { voltage:'V', current:'A', power:'W', resistance:'mΩ' }; defaultMargins: { currentPct:number, powerPct:number, voltageDropPct:number, voltageMarginPct:number }; scenarios: Scenario[]; currentScenario: Scenario; nodes: AnyNode[]; edges: Edge[]; markups?: CanvasMarkup[]; quickPresets?: QuickPreset[] }

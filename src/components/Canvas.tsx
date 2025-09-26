@@ -7,7 +7,7 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { validate } from '../rules'
-import type { AnyNode, Edge, Project, Scenario } from '../models'
+import type { AnyNode, Edge, Project, Scenario, CanvasMarkup } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
@@ -17,6 +17,7 @@ import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDesc
 import { exportCanvasToPdf } from '../utils/exportCanvasPdf'
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../utils/quickPresets'
 import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
+import MarkupLayer, { MarkupTool } from './markups/MarkupLayer'
 
 const SUBSYSTEM_BASE_HEIGHT = 64
 const SUBSYSTEM_PORT_HEIGHT = 24
@@ -35,6 +36,8 @@ const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
 type CanvasProps = {
   onSelect: (selection: InspectorSelection | null) => void
   onOpenSubsystem?: (id: string) => void
+  markupTool: MarkupTool | null
+  onMarkupToolChange: (tool: MarkupTool | null) => void
 }
 
 export type CanvasHandle = {
@@ -928,7 +931,8 @@ const parseNestedEdgeId = (id: string) => {
   return { subsystemId, edgeId }
 }
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect, onOpenSubsystem }, ref) {
+
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect, onOpenSubsystem, markupTool, onMarkupToolChange }, ref) {
   const project = useStore(s=>s.project)
   const addEdgeStore = useStore(s=>s.addEdge)
   const addNodeStore = useStore(s=>s.addNode)
@@ -951,6 +955,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
   const expandedSubsystemViews = useStore(s=>s.expandedSubsystemViews)
   const setSubsystemViewOffset = useStore(s=>s.setSubsystemViewOffset)
   const collapseSubsystemView = useStore(s=>s.collapseSubsystemView)
+  const addMarkupStore = useStore(s=>s.addMarkup)
+  const updateMarkupStore = useStore(s=>s.updateMarkup)
+  const removeMarkupStore = useStore(s=>s.removeMarkup)
+
+  const markups = project.markups ?? []
+  const [selectedMarkupId, setSelectedMarkupId] = useState<string | null>(null)
 
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
   const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
@@ -993,6 +1003,56 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
     }
     onSelect({ kind: 'edge', id: edgeId })
   }, [expandedLayouts, onSelect])
+
+  const emitSelectionForMarkup = useCallback((markupId: string) => {
+    onSelect({ kind: 'markup', id: markupId })
+  }, [onSelect])
+
+  const handleMarkupSelect = useCallback((markupId: string | null) => {
+    setSelectedNodeId(null)
+    setSelectedEdgeId(null)
+    if (markupId) {
+      setSelectedMarkupId(markupId)
+      emitSelectionForMarkup(markupId)
+    } else if (selectedMarkupId !== null) {
+      setSelectedMarkupId(null)
+      onSelect(null)
+    }
+  }, [emitSelectionForMarkup, onSelect, selectedMarkupId])
+
+  useEffect(() => {
+    if (selectedMarkupId && !markups.some(m => m.id === selectedMarkupId)) {
+      setSelectedMarkupId(null)
+      if (!selectedNodeId && !selectedEdgeId) {
+        onSelect(null)
+      }
+    }
+  }, [markups, selectedMarkupId, selectedNodeId, selectedEdgeId, onSelect])
+
+  useEffect(() => {
+    if (markupTool) {
+      handleMarkupSelect(null)
+    }
+  }, [markupTool, handleMarkupSelect])
+
+  const handleMarkupCreate = useCallback((markup: CanvasMarkup) => {
+    addMarkupStore(markup)
+    handleMarkupSelect(markup.id)
+    onMarkupToolChange(null)
+  }, [addMarkupStore, handleMarkupSelect, onMarkupToolChange])
+
+  const handleMarkupCommit = useCallback((id: string, next: CanvasMarkup) => {
+    const existing = markups.find(m => m.id === id)
+    if (existing) {
+      const currentPayload = JSON.stringify(existing)
+      const nextPayload = JSON.stringify(next)
+      if (currentPayload === nextPayload) {
+        return
+      }
+    }
+    updateMarkupStore(id, () => next)
+    setSelectedMarkupId(id)
+  }, [markups, updateMarkupStore])
 
   const determineActiveLayout = useCallback((): ExpandedSubsystemLayout | null => {
     if (!selectedNodeId) return null
@@ -1771,6 +1831,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
       const isCopy = (key === 'c' || key === 'C') && (e.ctrlKey || e.metaKey)
       const isPaste = (key === 'v' || key === 'V') && (e.ctrlKey || e.metaKey)
 
+      if (key === 'Escape') {
+        if (markupTool) {
+          onMarkupToolChange(null)
+          handleMarkupSelect(null)
+          e.preventDefault()
+          return
+        }
+      }
+
       if (selectedNodeId) {
         if (isCopy) {
           const nested = parseNestedNodeId(selectedNodeId)
@@ -1822,6 +1891,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
         e.preventDefault()
       }
 
+      if (!selectedNodeId && !selectedEdgeId && selectedMarkupId && isDelete) {
+        removeMarkupStore(selectedMarkupId)
+        setSelectedMarkupId(null)
+        onSelect(null)
+        e.preventDefault()
+      }
+
       if (isPaste) {
         if (!clipboardNode) {
           e.preventDefault()
@@ -1847,7 +1923,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [openSubsystemIds, selectedNodeId, selectedEdgeId, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode])
+  }, [openSubsystemIds, selectedNodeId, selectedEdgeId, selectedMarkupId, markupTool, clipboardNode, expandedLayouts, setClipboardNode, project.nodes, nestedRemoveNode, collapseSubsystemView, removeNode, nestedRemoveEdge, removeEdge, removeMarkupStore, onSelect, determineActiveLayout, screenToFlowPosition, nodePositions, nestedAddNode, handleMarkupSelect, onMarkupToolChange])
 
   const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && contextMenu.targetId ? !contextMenu.targetId.endsWith('::container') : false
 
@@ -1879,25 +1955,40 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
         edgeTypes={edgeTypes}
         fitView
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
+        panOnDrag={!markupTool}
+        selectionOnDrag={!markupTool}
+        zoomOnScroll={!markupTool}
         onNodeClick={(_,n)=>{
           const nodeId = n.id
           emitSelectionForNode(nodeId)
           setSelectedNodeId(nodeId)
           setSelectedEdgeId(null)
+          setSelectedMarkupId(null)
         }}
         onNodeDragStart={(_,n)=>{
           const nodeId = n.id
           emitSelectionForNode(nodeId)
           setSelectedNodeId(nodeId)
           setSelectedEdgeId(null)
+          setSelectedMarkupId(null)
         }}
-        onEdgeClick={(_,e)=>{ emitSelectionForEdge(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
+        onEdgeClick={(_,e)=>{
+          emitSelectionForEdge(e.id)
+          setSelectedEdgeId(e.id)
+          setSelectedNodeId(null)
+          setSelectedMarkupId(null)
+        }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
+        onPaneClick={() => {
+          setSelectedNodeId(null)
+          setSelectedEdgeId(null)
+          handleMarkupSelect(null)
+        }}
         onNodeDoubleClick={(_,n)=>{
           const nodeId = n.id
           if (nodeId.endsWith('::container')) {
@@ -1909,6 +2000,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas({ onSelect,
           if (t==='Subsystem' && onOpenSubsystem) onOpenSubsystem(nodeId)
         }}
       >
+        <MarkupLayer
+          markups={markups}
+          selectedId={selectedMarkupId}
+          activeTool={markupTool}
+          onSelect={handleMarkupSelect}
+          onCreateMarkup={handleMarkupCreate}
+          onCommitUpdate={handleMarkupCommit}
+          screenToFlow={screenToFlowPosition}
+        />
         <div data-export-exclude="true"><MiniMap /></div>
         <div data-export-exclude="true"><Controls /></div>
         <div data-export-exclude="true"><Background gap={16} /></div>
