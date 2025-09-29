@@ -10,6 +10,7 @@ import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
+import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
 import { genId } from '../../utils'
 
 function CustomNode(props: NodeProps) {
@@ -509,6 +510,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
+  const quickPresets = useStore(s=>s.quickPresets)
   const clipboard = useStore(s=>s.clipboard)
   const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
@@ -1348,7 +1350,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   }, [addNodeNested, clipboard, isTopmostEditor, onSelect, path, project.nodes, removeEdge, removeNode, screenToFlowPosition, selectedEdgeId, selectedNodeId, setClipboard])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    if (!dataTransferHasNodePreset(e.dataTransfer)) return
+    if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
     e.preventDefault()
     if (e.dataTransfer) {
       e.dataTransfer.dropEffect = 'copy'
@@ -1357,18 +1359,34 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!isTopmostEditor) return
-    if (!dataTransferHasNodePreset(e.dataTransfer)) return
-    const raw = e.dataTransfer?.getData(NODE_PRESET_MIME) ?? null
-    const descriptor = deserializePresetDescriptor(raw)
-    if (!descriptor || descriptor.type === 'Source') return
+    const dt = e.dataTransfer
+    if (!dt) return
+    const quickPayload = readQuickPresetDragPayload(dt)
+    let baseNode: AnyNode | null = null
+    if (quickPayload) {
+      const preset = quickPresets.find(p => p.id === quickPayload.presetId)
+      if (!preset) return
+      const materialized = materializeQuickPreset(preset)
+      if (materialized.type === 'Source') {
+        window.alert('Sources are not allowed inside embedded subsystems.')
+        return
+      }
+      baseNode = materialized
+    } else {
+      if (!dataTransferHasNodePreset(dt)) return
+      const raw = dt.getData(NODE_PRESET_MIME) ?? null
+      const descriptor = deserializePresetDescriptor(raw)
+      if (!descriptor || descriptor.type === 'Source') return
+      baseNode = createNodePreset(descriptor)
+    }
+    if (!baseNode) return
     e.preventDefault()
     const flowPos = screenToFlowPosition({ x: e.clientX, y: e.clientY })
     if (!flowPos || typeof flowPos.x !== 'number' || typeof flowPos.y !== 'number') return
     setContextMenu(null)
-    const baseNode = createNodePreset(descriptor)
     const placed = withPosition(baseNode, { x: flowPos.x, y: flowPos.y })
     addNodeNested(path, placed)
-  }, [addNodeNested, isTopmostEditor, path, screenToFlowPosition, setContextMenu])
+  }, [addNodeNested, isTopmostEditor, path, quickPresets, screenToFlowPosition, setContextMenu])
 
   return (
     <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)} onDragOver={handleDragOver} onDrop={handleDrop}>

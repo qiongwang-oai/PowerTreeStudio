@@ -78,7 +78,10 @@ type State = {
   reorderQuickPresets: (sourceIndex: number, targetIndex: number) => void
   resetQuickPresets: () => void
   importQuickPresets: (presets: QuickPreset[], mode: 'merge' | 'replace') => void
-  applyQuickPreset: (id: string, position?: { x: number; y: number }) => AnyNode | null
+  applyQuickPreset: (
+    id: string,
+    options?: { position?: { x: number; y: number }; subsystemPath?: string[] }
+  ) => AnyNode | null
   captureQuickPresetFromNode: (node: AnyNode, meta?: { name?: string; description?: string; accentColor?: string }) => QuickPreset
 }
 
@@ -611,10 +614,20 @@ export const useStore = create<State>((set,get)=>({
       return { quickPresets: next }
     })
   },
-  applyQuickPreset: (id, position) => {
+  applyQuickPreset: (id, options) => {
     const preset = get().quickPresets.find(p => p.id === id)
     if (!preset) return null
+    const position = options?.position
+    const subsystemPath = options?.subsystemPath
     const node = materializeQuickPreset(preset, position)
+    if (Array.isArray(subsystemPath) && subsystemPath.length > 0) {
+      if (node.type === 'Source') {
+        console.warn('Sources are not allowed inside embedded subsystems. Quick preset application skipped.')
+        return null
+      }
+      get().nestedSubsystemAddNode(subsystemPath, node)
+      return node
+    }
     get().addNode(node)
     return node
   },
