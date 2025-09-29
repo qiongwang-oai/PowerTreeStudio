@@ -11,6 +11,7 @@ import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
+import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 import { genId } from '../../utils'
 
 function CustomNode(props: NodeProps) {
@@ -511,6 +512,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
   const quickPresets = useStore(s=>s.quickPresets)
+  const quickPresetDialogs = useQuickPresetDialogs()
   const clipboard = useStore(s=>s.clipboard)
   const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
@@ -1276,6 +1278,15 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     setContextMenu(null)
   }, [contextMenu, removeNode, path])
 
+  const handleSaveQuickPreset = useCallback(() => {
+    if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
+    const node = project.nodes.find(n => n.id === contextMenu.targetId)
+    if (!node) return
+    const snapshot = JSON.parse(JSON.stringify(node)) as AnyNode
+    quickPresetDialogs.openCaptureDialog({ kind: 'node', node: snapshot })
+    setContextMenu(null)
+  }, [contextMenu, project, quickPresetDialogs])
+
   const handlePaste = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'pane' || !clipboard || clipboard.nodes.length === 0) return
     const template = clipboard.nodes[0]
@@ -1388,6 +1399,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     addNodeNested(path, placed)
   }, [addNodeNested, isTopmostEditor, path, quickPresets, screenToFlowPosition, setContextMenu])
 
+  const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && !!(contextMenu.targetId && project.nodes.some(n => n.id === contextMenu.targetId))
+
   return (
     <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)} onDragOver={handleDragOver} onDrop={handleDrop}>
       <ReactFlow
@@ -1414,6 +1427,12 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
           {contextMenu.type==='node' ? (
             <div className="py-1">
               <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
+              <button
+                className={`block w-full text-left px-3 py-1 ${canSaveQuickPresetFromContext ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`}
+                onClick={canSaveQuickPresetFromContext ? handleSaveQuickPreset : undefined}
+              >
+                Save as quick preset…
+              </button>
               <button className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
             </div>
           ) : (
