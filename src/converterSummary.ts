@@ -1,4 +1,4 @@
-import { ComputeResult, compute } from './calc'
+import { ComputeResult, compute, ComputeEdge } from './calc'
 import { AnyNode, ConverterNode, DualOutputConverterNode, Project, SubsystemNode } from './models'
 import { clamp } from './utils'
 
@@ -72,8 +72,83 @@ function resolveDualHandleId(branches: DualOutputConverterNode['outputs'], idx: 
 export function buildConverterSummary(project: Project, result?: ComputeResult): ConverterSummaryEntry[] {
   const res: ComputeResult = result ?? compute(project)
   const entries: ConverterSummaryEntry[] = []
+  const subsystemPortEdgeLoss = new Map<string, number>()
+  const subsystemPortIds = new Map<string, string[]>()
+
+  const buildEdgesFrom = (computeResult: ComputeResult): Map<string, ComputeEdge[]> => {
+    const map = new Map<string, ComputeEdge[]>()
+    for (const edge of Object.values(computeResult.edges)) {
+      const arr = map.get(edge.from)
+      if (arr) arr.push(edge)
+      else map.set(edge.from, [edge])
+    }
+    return map
+  }
+
+  const getSubsystemPortLoss = (subsystemId: string, handle?: string | null): number => {
+    const portIds = subsystemPortIds.get(subsystemId) || []
+    if (handle && portIds.includes(handle)) return subsystemPortEdgeLoss.get(`${subsystemId}::${handle}`) || 0
+    if (portIds.length === 1) return subsystemPortEdgeLoss.get(`${subsystemId}::${portIds[0]}`) || 0
+    let total = 0
+    for (const pid of portIds) total += subsystemPortEdgeLoss.get(`${subsystemId}::${pid}`) || 0
+    return total
+  }
+
+  const accumulateEdgeLossFromEdges = (
+    edges: ComputeEdge[] | undefined,
+    edgesFrom: Map<string, ComputeEdge[]>,
+    computeResult: ComputeResult,
+    visited: Set<string>
+  ): number => {
+    if (!edges || edges.length === 0) return 0
+    let total = 0
+    for (const edge of edges) {
+      if (!edge || visited.has(edge.id)) continue
+      visited.add(edge.id)
+      total += safePower(edge.P_loss_edge)
+      const child = computeResult.nodes[edge.to]
+      if (!child) continue
+      if (child.type === 'Bus') {
+        total += accumulateEdgeLossFromEdges(edgesFrom.get(child.id), edgesFrom, computeResult, visited)
+      } else if (child.type === 'Subsystem') {
+        const handle = (edge as any).toHandle as string | undefined
+        total += getSubsystemPortLoss(child.id, handle)
+      } else if (child.type === 'SubsystemInput' || child.type === 'Note') {
+        total += accumulateEdgeLossFromEdges(edgesFrom.get(child.id), edgesFrom, computeResult, visited)
+      }
+    }
+    return total
+  }
+
+  const collectPortEdgeLosses = (subsystemId: string, originalProject: Project, computeResult: ComputeResult) => {
+    const edgesFrom = buildEdgesFrom(computeResult)
+    const ports = (originalProject.nodes as AnyNode[]).filter(n => (n as any).type === 'SubsystemInput')
+    const portIds = ports.map(p => p.id)
+    subsystemPortIds.set(subsystemId, portIds)
+    for (const portId of portIds) {
+      const loss = accumulateEdgeLossFromEdges(edgesFrom.get(portId), edgesFrom, computeResult, new Set<string>())
+      subsystemPortEdgeLoss.set(`${subsystemId}::${portId}`, loss)
+    }
+  }
+
   const visit = (proj: Project, projResult: ComputeResult, pathNames: string[], pathIds: string[], multiplier: number) => {
-    const edges = Object.values(projResult.edges)
+    const edgesFrom = buildEdgesFrom(projResult)
+
+    for (const rawNode of proj.nodes as AnyNode[]) {
+      if (rawNode.type === 'Subsystem') {
+        const sub = rawNode as SubsystemNode
+        if (!sub.project || typeof sub.project !== 'object') continue
+        const innerOriginal: Project = JSON.parse(JSON.stringify(sub.project))
+        const inner: Project = JSON.parse(JSON.stringify(sub.project))
+        inner.currentScenario = proj.currentScenario
+        const innerResult = compute(inner)
+        const nextNames = [...pathNames, sub.name || 'Subsystem']
+        const nextIds = [...pathIds, sub.id]
+        visit(inner, innerResult, nextNames, nextIds, multiplier)
+        collectPortEdgeLosses(sub.id, innerOriginal, innerResult)
+      }
+    }
+
     for (const rawNode of proj.nodes as AnyNode[]) {
       if (rawNode.type === 'Converter') {
         const node = rawNode as ConverterNode
@@ -84,10 +159,7 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
         const baseLoss = Number.isFinite(lossRaw) ? (lossRaw as number) : (basePin - basePout)
         const baseIout = safeCurrent((computed as any).I_out)
         const phaseCount = resolvePhaseCount((node as any).phaseCount)
-        const baseEdgeLoss = edges.reduce((sum, edge)=>{
-          if (edge.from === node.id) return sum + safePower(edge.P_loss_edge)
-          return sum
-        }, 0)
+        const baseEdgeLoss = accumulateEdgeLossFromEdges(edgesFrom.get(node.id), edgesFrom, projResult, new Set<string>())
         const pin = basePin * multiplier
         const pout = basePout * multiplier
         const loss = baseLoss * multiplier
@@ -120,17 +192,13 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
       } else if (rawNode.type === 'DualOutputConverter') {
         const node = rawNode as DualOutputConverterNode
         const computed = projResult.nodes[node.id] || {}
-      
         const basePin = safePower((computed as any).P_in)
         const basePout = safePower((computed as any).P_out)
         const lossRaw = toNumber((computed as any).loss)
         const baseLoss = Number.isFinite(lossRaw) ? (lossRaw as number) : (basePin - basePout)
         const baseIout = safeCurrent((computed as any).I_out)
         const nodePhaseCount = resolvePhaseCount((node as any).phaseCount)
-        const baseEdgeLoss = edges.reduce((sum, edge)=>{
-          if (edge.from === node.id) return sum + safePower(edge.P_loss_edge)
-          return sum
-        }, 0)
+        const baseEdgeLoss = accumulateEdgeLossFromEdges(edgesFrom.get(node.id), edgesFrom, projResult, new Set<string>())
         const pin = basePin * multiplier
         const pout = basePout * multiplier
         const loss = baseLoss * multiplier
@@ -142,15 +210,9 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
         const metrics: Record<string, any> = ((computed as any).__outputs) || {}
         const outputs: ConverterSummaryBranch[] = []
         const vouts: Array<{ label: string; value?: number }> = []
+        const nodeEdges = edgesFrom.get(node.id) || []
         const branchIds = new Set((branches || []).map(b => b?.id).filter(Boolean) as string[])
         const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
-        const edgesByHandle: Record<string, typeof edges> = {}
-        edges.forEach(edge => {
-          if (edge.from !== node.id) return
-          const rawHandle = (edge as any).fromHandle as string | undefined
-          const resolved = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
-          ;(edgesByHandle[resolved] = edgesByHandle[resolved] || []).push(edge)
-        })
 
         branches.forEach((branch, idx) => {
           const handleId = resolveDualHandleId(branches, idx, branch)
@@ -160,6 +222,11 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
           const branchLossRaw = toNumber(metric.loss)
           const branchBaseLoss = Number.isFinite(branchLossRaw) ? (branchLossRaw as number) : (branchBasePin - branchBasePout)
           const branchBaseIout = safeCurrent(metric.I_out)
+          const branchEdges = nodeEdges.filter(edge => {
+            const rawHandle = (edge as any).fromHandle as string | undefined
+            const resolved = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
+            return resolved === handleId
+          })
           const branchPin = branchBasePin * multiplier
           const branchPout = branchBasePout * multiplier
           const branchLoss = branchBaseLoss * multiplier
@@ -169,7 +236,7 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
           const Vout = toNumber(branch?.Vout)
           const branchPhaseCount = resolvePhaseCount((branch as any)?.phaseCount)
           const branchLossPerPhase = branchPhaseCount > 1 ? branchLoss / branchPhaseCount : undefined
-          const branchEdgeLossBase = (edgesByHandle[handleId] || []).reduce((sum, edge)=> sum + safePower(edge.P_loss_edge), 0)
+          const branchEdgeLossBase = accumulateEdgeLossFromEdges(branchEdges, edgesFrom, projResult, new Set<string>())
           const branchEdgeLoss = branchEdgeLossBase * multiplier
           outputs.push({
             id: handleId,
@@ -210,17 +277,6 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
           location,
           outputs,
         })
-      } else if (rawNode.type === 'Subsystem') {
-        const sub = rawNode as SubsystemNode
-        const countRaw = (sub.numParalleledSystems ?? 1)
-        const count = Math.max(1, Math.round(Number.isFinite(countRaw as any) ? (countRaw as number) : 1))
-        if (!sub.project || typeof sub.project !== 'object') continue
-        const inner: Project = JSON.parse(JSON.stringify(sub.project))
-        inner.currentScenario = proj.currentScenario
-        const innerResult = compute(inner)
-        const nextNames = [...pathNames, sub.name || 'Subsystem']
-        const nextIds = [...pathIds, sub.id]
-        visit(inner, innerResult, nextNames, nextIds, multiplier)
       }
     }
   }

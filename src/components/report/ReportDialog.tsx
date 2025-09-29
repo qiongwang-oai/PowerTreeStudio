@@ -380,7 +380,7 @@ const renderSection = (proj: Project, res: ComputeResult, depth: number, path: s
             <th className="text-right px-2 py-2 font-bold">Loss (W)</th>
             <th className="text-right px-2 py-2 font-bold">Loss per phase (W)</th>
             <th className="text-right px-2 py-2 font-bold">Efficiency (%)</th>
-            <th className="text-right px-2 py-2 font-bold">Downstream edge loss (W)</th>
+            <th className="text-right px-2 py-2 font-bold">Downstream copper loss (W)</th>
             <th className="text-left px-2 py-2 font-bold">Details</th>
           </tr>
         </thead>
@@ -437,7 +437,7 @@ const renderSection = (proj: Project, res: ComputeResult, depth: number, path: s
                                   <th className="text-right px-2 py-2 font-bold">Loss (W)</th>
                                   <th className="text-right px-2 py-2 font-bold">Loss per phase (W)</th>
                                   <th className="text-right px-2 py-2 font-bold">Efficiency (%)</th>
-                                  <th className="text-right px-2 py-2 font-bold">Downstream edge loss (W)</th>
+                              <th className="text-right px-2 py-2 font-bold">Downstream copper loss (W)</th>
                                 </tr>
                               </thead>
                               <tbody>

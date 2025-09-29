@@ -156,7 +156,7 @@ function buildTableForProject(project: Project): any[][] {
 
 function buildConverterTableForProject(project: Project): any[][] {
   const rows: any[][] = []
-  const header = ['Name','Location','Type / topology','Vin (V)','Vout (V)','Iout (A)','Input power (W)','Output power (W)','Loss (W)','Loss per phase (W)','Efficiency (%)','Downstream edge loss (W)']
+  const header = ['Name','Location','Type / topology','Vin (V)','Vout (V)','Iout (A)','Input power (W)','Output power (W)','Loss (W)','Loss per phase (W)','Efficiency (%)','Downstream copper loss (W)']
   rows.push(header)
 
   const summary = buildConverterSummary(project)
