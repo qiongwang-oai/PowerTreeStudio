@@ -10,6 +10,7 @@ import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
+import { genId } from '../../utils'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
@@ -508,8 +509,8 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
-  const clipboardNode = useStore(s=>s.clipboardNode)
-  const setClipboardNode = useStore(s=>s.setClipboardNode)
+  const clipboard = useStore(s=>s.clipboard)
+  const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
   const { screenToFlowPosition } = useReactFlow()
 
@@ -1255,14 +1256,17 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
   }, [])
 
-  const handleCopy = useCallback(()=>{
+  const handleCopy = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
-    const node = project.nodes.find(n=>n.id===contextMenu.targetId)
+    const node = project.nodes.find(n => n.id === contextMenu.targetId)
     if (!node) return
-    const copied = JSON.parse(JSON.stringify(node)) as any
-    setClipboardNode(copied)
+    const copied = JSON.parse(JSON.stringify(node)) as AnyNode
+    const origin = typeof copied.x === 'number' && typeof copied.y === 'number'
+      ? { x: copied.x, y: copied.y }
+      : { x: 0, y: 0 }
+    setClipboard({ nodes: [copied], edges: [], markups: [], origin })
     setContextMenu(null)
-  }, [contextMenu, project.nodes, setClipboardNode])
+  }, [contextMenu, project.nodes, setClipboard])
 
   const handleDelete = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
@@ -1270,60 +1274,78 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     setContextMenu(null)
   }, [contextMenu, removeNode, path])
 
-  const handlePaste = useCallback(()=>{
-    if (!contextMenu || contextMenu.type !== 'pane' || !clipboardNode) return
+  const handlePaste = useCallback(() => {
+    if (!contextMenu || contextMenu.type !== 'pane' || !clipboard || clipboard.nodes.length === 0) return
+    const template = clipboard.nodes[0]
     const flowPos = screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y })
-    const newId = (Math.random().toString(36).slice(2,10))
-    const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y }
-    addNodeNested(path, newNode as any)
+    const baseOrigin = clipboard.origin ?? {
+      x: template.x ?? flowPos.x,
+      y: template.y ?? flowPos.y,
+    }
+    const clone = JSON.parse(JSON.stringify(template)) as AnyNode
+    clone.id = genId('node_')
+    clone.name = `${clone.name || clone.type || 'Node'} Copy`
+    clone.x = (clone.x ?? 0) + (flowPos.x - baseOrigin.x + 24)
+    clone.y = (clone.y ?? 0) + (flowPos.y - baseOrigin.y + 24)
+    addNodeNested(path, clone as AnyNode)
     setContextMenu(null)
-  }, [contextMenu, clipboardNode, screenToFlowPosition, addNodeNested, path])
+  }, [addNodeNested, clipboard, contextMenu, path, screenToFlowPosition])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isTopmostEditor) return
-      const active = document.activeElement;
-      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || (active as HTMLElement).isContentEditable);
-      if (isInput) return;
+      const active = document.activeElement as HTMLElement | null
+      const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
+      if (isInput) return
+      const isCopy = (e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)
+      const isPaste = (e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)
+      const isDelete = e.key === 'Delete' || e.key === 'Backspace'
+
       if (selectedNodeId) {
-        if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)) {
-          // Copy
-          const node = project.nodes.find(n => n.id === selectedNodeId);
+        if (isCopy) {
+          const node = project.nodes.find(n => n.id === selectedNodeId)
           if (node) {
-            const copied = JSON.parse(JSON.stringify(node));
-            setClipboardNode(copied);
+            const copied = JSON.parse(JSON.stringify(node)) as AnyNode
+            const origin = typeof copied.x === 'number' && typeof copied.y === 'number'
+              ? { x: copied.x, y: copied.y }
+              : { x: 0, y: 0 }
+            setClipboard({ nodes: [copied], edges: [], markups: [], origin })
           }
-          e.preventDefault();
-        } else if ((e.key === 'Delete' || e.key === 'Backspace')) {
-          // Delete
-          removeNode(path, selectedNodeId);
-          setSelectedNodeId(null);
-          onSelect(null);
-          e.preventDefault();
+          e.preventDefault()
+        } else if (isDelete) {
+          removeNode(path, selectedNodeId)
+          setSelectedNodeId(null)
+          onSelect(null)
+          e.preventDefault()
         }
       }
-      // Edge deletion via keyboard when an edge is selected and no node is selected
-      if (!selectedNodeId && selectedEdgeId && (e.key === 'Delete' || e.key === 'Backspace')){
+
+      if (!selectedNodeId && selectedEdgeId && isDelete) {
         removeEdge(path, selectedEdgeId)
         setSelectedEdgeId(null)
         onSelect(null)
         e.preventDefault()
       }
-      if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)) {
-        // Paste
-        if (clipboardNode) {
-          // Paste at center of viewport
-          const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
-          const newId = (Math.random().toString(36).slice(2,10));
-          const newNode = { ...clipboardNode, id: newId, name: `${clipboardNode.name} Copy`, x: flowPos.x, y: flowPos.y };
-          addNodeNested(path, newNode as any);
+
+      if (isPaste && clipboard && clipboard.nodes.length) {
+        const template = clipboard.nodes[0]
+        const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+        const baseOrigin = clipboard.origin ?? {
+          x: template.x ?? flowPos.x,
+          y: template.y ?? flowPos.y,
         }
-        e.preventDefault();
+        const clone = JSON.parse(JSON.stringify(template)) as AnyNode
+        clone.id = genId('node_')
+        clone.name = `${clone.name || clone.type || 'Node'} Copy`
+        clone.x = (clone.x ?? 0) + (flowPos.x - baseOrigin.x + 24)
+        clone.y = (clone.y ?? 0) + (flowPos.y - baseOrigin.y + 24)
+        addNodeNested(path, clone as AnyNode)
+        e.preventDefault()
       }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodeId, selectedEdgeId, clipboardNode, project.nodes, removeNode, removeEdge, setClipboardNode, screenToFlowPosition, addNodeNested, path, onSelect, isTopmostEditor]);
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [addNodeNested, clipboard, isTopmostEditor, onSelect, path, project.nodes, removeEdge, removeNode, screenToFlowPosition, selectedEdgeId, selectedNodeId, setClipboard])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer)) return
@@ -1378,7 +1400,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
             </div>
           ) : (
             <div className="py-1">
-              <button className={`block w-full text-left px-3 py-1 ${clipboardNode? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboardNode? handlePaste : undefined}>Paste</button>
+              <button className={`block w-full text-left px-3 py-1 ${clipboard && clipboard.nodes.length ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboard && clipboard.nodes.length ? handlePaste : undefined}>Paste</button>
             </div>
           )}
         </div>

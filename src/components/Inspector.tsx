@@ -34,6 +34,62 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
   const quickPresetDialogs = useQuickPresetDialogs()
   const [tab, setTab] = React.useState('props')
   if (!selection) return <div className="p-3 text-sm text-slate-500">Select a node, edge, or markup to edit properties.</div>
+  if (selection.kind === 'multi') {
+    const total = selection.nodes.length + selection.edges.length + selection.markups.length
+    const resolveNodeLabel = (id: string) => project.nodes.find(n => n.id === id)?.name || id
+    const resolveEdgeLabel = (id: string) => {
+      const match = project.edges.find(e => e.id === id)
+      if (!match) return id
+      const from = project.nodes.find(n => n.id === match.from)?.name || match.from
+      const to = project.nodes.find(n => n.id === match.to)?.name || match.to
+      return `${from} → ${to}`
+    }
+    const resolveMarkupLabel = (id: string) => {
+      const m = markups.find(x => x.id === id)
+      if (!m) return id
+      if (m.type === 'text') return `Text: ${(m.text || '').slice(0, 24) || 'Untitled'}`
+      if (m.type === 'line') return 'Line / Arrow'
+      if (m.type === 'rectangle') return 'Box'
+      return id
+    }
+    const listPreview = <T,>(items: T[], formatter: (item: T) => string) => {
+      if (!items.length) return 'None'
+      if (items.length > 4) {
+        const preview = items.slice(0, 3).map(formatter)
+        return `${preview.join(', ')} … (+${items.length - 3} more)`
+      }
+      return items.map(formatter).join(', ')
+    }
+    return (
+      <div className="p-4 space-y-3 text-sm text-slate-600">
+        <div className="text-base font-semibold text-slate-800">Multiple items selected</div>
+        <div className="grid grid-cols-1 gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Total</span>
+            <span className="font-medium">{total}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Nodes</span>
+            <span className="font-medium">{selection.nodes.length}</span>
+          </div>
+          <div className="text-xs text-slate-500">{listPreview(selection.nodes, resolveNodeLabel)}</div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Edges</span>
+            <span className="font-medium">{selection.edges.length}</span>
+          </div>
+          <div className="text-xs text-slate-500">{listPreview(selection.edges, resolveEdgeLabel)}</div>
+          <div className="flex items-center justify-between">
+            <span className="text-slate-500">Markups</span>
+            <span className="font-medium">{selection.markups.length}</span>
+          </div>
+          <div className="text-xs text-slate-500">{listPreview(selection.markups, resolveMarkupLabel)}</div>
+        </div>
+        <div className="text-xs text-slate-500">
+          Copy, delete, or paste to duplicate the selection. Press Esc to clear.
+        </div>
+      </div>
+    )
+  }
   if (selection.kind === 'nested-node' || selection.kind === 'nested-edge') {
     const nestedProject = resolveProjectAtPath(project, selection.subsystemPath)
     if (!nestedProject) {

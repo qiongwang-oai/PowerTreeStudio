@@ -1,9 +1,19 @@
+export type SelectionMode = 'single' | 'multi'
+
+export type MultiSelection = {
+  kind: 'multi'
+  nodes: string[]
+  edges: string[]
+  markups: string[]
+}
+
 export type InspectorSelection =
   | { kind: 'node'; id: string }
   | { kind: 'edge'; id: string }
   | { kind: 'markup'; id: string }
   | { kind: 'nested-node'; subsystemPath: string[]; nodeId: string }
   | { kind: 'nested-edge'; subsystemPath: string[]; edgeId: string }
+  | MultiSelection
 
 export const isNestedSelection = (
   selection: InspectorSelection | null

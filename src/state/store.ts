@@ -15,10 +15,17 @@ import {
   sanitizeNodeForPreset,
 } from '../utils/quickPresets'
 
+export type ClipboardPayload = {
+  nodes: AnyNode[]
+  edges: Edge[]
+  markups: CanvasMarkup[]
+  origin: { x: number; y: number } | null
+}
+
 type State = {
   project: Project
   importedFileName: string | null
-  clipboardNode: AnyNode | null
+  clipboard: ClipboardPayload | null
   past: Project[]
   future: Project[]
   setProject: (p: Project) => void
@@ -35,7 +42,7 @@ type State = {
   updateMarkup: (id: string, updater: (markup: CanvasMarkup) => CanvasMarkup) => void
   removeMarkup: (id: string) => void
   reorderMarkups: (updater: (markups: CanvasMarkup[]) => CanvasMarkup[]) => void
-  setClipboardNode: (n: AnyNode | null) => void
+  setClipboard: (payload: ClipboardPayload | null) => void
   undo: () => void
   redo: () => void
   autoAlign: (options?: { columnSpacing?: number; rowSpacing?: number }) => void
@@ -226,7 +233,7 @@ const saved = (() => {
 export const useStore = create<State>((set,get)=>({
   project: saved ?? normalizeProject(sampleProject),
   importedFileName: null,
-  clipboardNode: null,
+  clipboard: null,
   past: [],
   future: [],
   quickPresets: storedQuickPresets,
@@ -329,7 +336,7 @@ export const useStore = create<State>((set,get)=>({
     set({ project: nextProject })
     autosave(nextProject)
   }
-  ,setClipboardNode: (n) => { set({ clipboardNode: n }) }
+  ,setClipboard: (payload) => { set({ clipboard: payload }) }
   ,undo: () => {
     const { past, project, future } = get()
     if (past.length === 0) return

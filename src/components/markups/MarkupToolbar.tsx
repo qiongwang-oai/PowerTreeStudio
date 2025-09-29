@@ -1,10 +1,13 @@
 import React from 'react'
 import { MarkupTool } from './MarkupLayer'
 import { Button } from '../ui/button'
+import type { SelectionMode } from '../../types/selection'
 
 type MarkupToolbarProps = {
   activeTool: MarkupTool | null
+  selectionMode: SelectionMode
   onSelectTool: (tool: MarkupTool | null) => void
+  onSelectionModeChange: (mode: SelectionMode) => void
 }
 
 const TOOL_DEFINITIONS: { type: MarkupTool; label: string }[] = [
@@ -13,22 +16,47 @@ const TOOL_DEFINITIONS: { type: MarkupTool; label: string }[] = [
   { type: 'rectangle', label: 'Box' },
 ]
 
-const MarkupToolbar: React.FC<MarkupToolbarProps> = ({ activeTool, onSelectTool }) => {
+const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
+  activeTool,
+  selectionMode,
+  onSelectTool,
+  onSelectionModeChange,
+}) => {
   return (
     <div className="flex items-center gap-2">
       <Button
-        variant={activeTool === null ? 'default' : 'outline'}
+        variant={selectionMode === 'single' && activeTool === null ? 'default' : 'outline'}
         size="sm"
-        onClick={() => onSelectTool(null)}
+        onClick={() => {
+          onSelectionModeChange('single')
+          onSelectTool(null)
+        }}
       >
         Select
       </Button>
+      <Button
+        variant={selectionMode === 'multi' ? 'default' : 'outline'}
+        size="sm"
+        onClick={() => {
+          const nextMode = selectionMode === 'multi' ? 'single' : 'multi'
+          onSelectionModeChange(nextMode)
+          if (nextMode === 'multi') {
+            onSelectTool(null)
+          }
+        }}
+      >
+        Multi-Select
+      </Button>
+      <span className="h-6 w-px bg-slate-300 mx-2" aria-hidden="true" />
       {TOOL_DEFINITIONS.map(tool => (
         <Button
           key={tool.type}
           variant={activeTool === tool.type ? 'default' : 'outline'}
           size="sm"
-          onClick={() => onSelectTool(activeTool === tool.type ? null : tool.type)}
+          onClick={() => {
+            onSelectTool(activeTool === tool.type ? null : tool.type)
+            onSelectionModeChange(activeTool === tool.type ? selectionMode : 'single')
+          }}
         >
           {tool.label}
         </Button>

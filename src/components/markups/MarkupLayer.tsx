@@ -220,7 +220,8 @@ const computeDragUpdate = (state: DragState, pointer: { x: number; y: number }):
 
 export type MarkupLayerProps = {
   markups: CanvasMarkup[]
-  selectedId: string | null
+  primarySelectedId: string | null
+  multiSelectedIds: string[]
   activeTool: MarkupTool | null
   onSelect: (id: string | null) => void
   onCreateMarkup: (markup: CanvasMarkup) => void
@@ -230,7 +231,8 @@ export type MarkupLayerProps = {
 
 const MarkupLayer: React.FC<MarkupLayerProps> = ({
   markups,
-  selectedId,
+  primarySelectedId,
+  multiSelectedIds,
   activeTool,
   onSelect,
   onCreateMarkup,
@@ -407,7 +409,8 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
           <MarkupItem
             key={creationDraft.markup.id}
             markup={creationDraft.markup}
-            selected={false}
+            isPrimarySelected={false}
+            isMultiSelected={false}
             onSelect={() => {}}
             startDrag={() => {}}
             onPointerMove={() => {}}
@@ -419,7 +422,8 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
           <MarkupItem
             key={markup.id}
             markup={markup}
-            selected={markup.id === selectedId}
+            isPrimarySelected={primarySelectedId === markup.id}
+            isMultiSelected={multiSelectedIds.includes(markup.id)}
             onSelect={onSelect}
             startDrag={startDrag}
             onPointerMove={handlePointerMove}
@@ -438,7 +442,8 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
 
 type MarkupItemProps = {
   markup: CanvasMarkup
-  selected: boolean
+  isPrimarySelected: boolean
+  isMultiSelected: boolean
   onSelect: (id: string) => void
   startDrag: (markup: CanvasMarkup, mode: DragMode, event: React.PointerEvent) => void
   onPointerMove: (event: React.PointerEvent) => void
@@ -446,10 +451,16 @@ type MarkupItemProps = {
   readOnly?: boolean
 }
 
-const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, startDrag, onPointerMove, onPointerUp, readOnly }) => {
+const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMultiSelected, onSelect, startDrag, onPointerMove, onPointerUp, readOnly }) => {
   const interactive = !readOnly
+  const multiAccent = 'rgba(2, 132, 199, 0.35)'
 
   if (markup.type === 'text') {
+    const borderStyle = isPrimarySelected
+      ? '1px dashed #0284c7'
+      : isMultiSelected
+      ? `1px dashed ${multiAccent}`
+      : '1px solid transparent'
     return (
       <div
         style={{
@@ -474,7 +485,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
             fontWeight: markup.isBold ? 600 : 400,
             whiteSpace: 'pre-wrap',
             padding: '2px 4px',
-            border: selected ? '1px dashed #0284c7' : '1px solid transparent',
+            border: borderStyle,
             borderRadius: 4,
             backgroundColor: markup.backgroundColor || 'transparent',
           }}
@@ -500,6 +511,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
       top: markup.end.y - minY - HANDLE_SIZE / 2,
     }
     const lineStroke = markup.color || '#0f172a'
+    const overlayStroke = isPrimarySelected ? '#0284c7' : multiAccent
 
     return (
       <div
@@ -526,7 +538,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
             y1={markup.start.y - minY}
             x2={markup.end.x - minX}
             y2={markup.end.y - minY}
-            stroke={lineStroke}
+            stroke={isMultiSelected ? overlayStroke : lineStroke}
             strokeWidth={markup.thickness}
             strokeDasharray={markup.isDashed ? `${markup.thickness * 2}, ${markup.thickness * 1.5}` : undefined}
             strokeLinecap="round"
@@ -543,7 +555,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
             pointerEvents="stroke"
           />
         </svg>
-        {interactive && selected && (
+        {interactive && isPrimarySelected && (
           <>
             <div
               style={{
@@ -594,6 +606,11 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
   if (markup.type === 'rectangle') {
     const fillColor = markup.fillColor ? hexToRgba(markup.fillColor, markup.fillOpacity ?? 0.18) : 'transparent'
     const borderStyle = markup.isDashed ? 'dashed' : 'solid'
+    const highlightShadow = isPrimarySelected
+      ? '0 0 0 1px rgba(2,132,199,0.6)'
+      : isMultiSelected
+      ? `0 0 0 1px ${multiAccent}`
+      : 'none'
     const handles: RectHandle[] = ['nw', 'ne', 'sw', 'se', 'n', 's', 'e', 'w']
     const handlePositions: Record<RectHandle, { left: number; top: number; cursor: string }> = {
       nw: { left: -HANDLE_SIZE / 2, top: -HANDLE_SIZE / 2, cursor: 'nwse-resize' },
@@ -629,13 +646,13 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, selected, onSelect, sta
             width: '100%',
             height: '100%',
             borderRadius: markup.cornerRadius ?? 0,
-            border: `${markup.thickness}px ${borderStyle} ${markup.strokeColor || '#0f172a'}`,
+            border: `${markup.thickness}px ${borderStyle} ${isMultiSelected ? multiAccent : markup.strokeColor || '#0f172a'}`,
             background: fillColor,
             cursor: interactive ? 'move' : 'default',
-            boxShadow: selected ? '0 0 0 1px rgba(2,132,199,0.6)' : 'none',
+            boxShadow: highlightShadow,
           }}
         />
-        {interactive && selected && handles.map(handle => {
+        {interactive && isPrimarySelected && handles.map(handle => {
           const pos = handlePositions[handle]
           return (
             <div

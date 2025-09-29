@@ -15,6 +15,7 @@ import AutoAlignPrompt from './components/AutoAlignPrompt'
 import type { InspectorSelection } from './types/selection'
 import { QuickPresetDialogsProvider } from './components/quick-presets/QuickPresetDialogsContext'
 import MarkupToolbar from './components/markups/MarkupToolbar'
+import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -63,6 +64,19 @@ export default function App(){
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const quickPresets = useStore(s => s.quickPresets)
   const [markupTool, setMarkupTool] = React.useState<MarkupTool | null>(null)
+  const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
+  const handleMarkupToolChange = React.useCallback((tool: MarkupTool | null) => {
+    setMarkupTool(tool)
+    if (tool !== null) {
+      setSelectionMode('single')
+    }
+  }, [setSelectionMode, setMarkupTool])
+  const handleSelectionModeChange = React.useCallback((mode: SelectionMode) => {
+    setSelectionMode(mode)
+    if (mode === 'multi') {
+      setMarkupTool(null)
+    }
+  }, [setMarkupTool, setSelectionMode])
   const minRight = 220, maxRight = 640
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
   const canvasRef = React.useRef<CanvasHandle | null>(null)
@@ -227,7 +241,12 @@ export default function App(){
                   <Button size="sm" variant="success" onClick={onReport}>Report</Button>
                   <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
                 <div className="h-6 w-px bg-slate-300 mx-2" aria-hidden="true" />
-                <MarkupToolbar activeTool={markupTool} onSelectTool={setMarkupTool} />
+                <MarkupToolbar
+                  activeTool={markupTool}
+                  selectionMode={selectionMode}
+                  onSelectTool={handleMarkupToolChange}
+                  onSelectionModeChange={handleSelectionModeChange}
+                />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -237,7 +256,15 @@ export default function App(){
           </div>
         </div>
         <aside className="border-r bg-white overflow-auto pt-6"><Palette /></aside>
-        <main className="overflow-hidden"><ReactFlowProvider><Canvas ref={canvasRef} onSelect={setSelected} onOpenSubsystem={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])} markupTool={markupTool} onMarkupToolChange={setMarkupTool} /></ReactFlowProvider></main>
+        <main className="overflow-hidden"><ReactFlowProvider><Canvas
+          ref={canvasRef}
+          onSelect={setSelected}
+          onOpenSubsystem={(id)=>setOpenSubsystemIds([...openSubsystemIds, id])}
+          markupTool={markupTool}
+          onMarkupToolChange={handleMarkupToolChange}
+          selectionMode={selectionMode}
+          onSelectionModeChange={handleSelectionModeChange}
+        /></ReactFlowProvider></main>
         <aside className="relative border-l bg-white overflow-auto">
           <div
             role="separator"
