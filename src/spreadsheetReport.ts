@@ -278,6 +278,18 @@ export async function exportSpreadsheetReport(project: Project, imagesBySheet?: 
   wsByName.set(rootWs.name, rootWs)
   usedNames.add(rootWs.name)
 
+  const allConvertersBase = 'All Converters'
+  let allConvertersName = sanitizeSheetName(allConvertersBase)
+  let allConvSuffix = 1
+  while (usedNames.has(allConvertersName) || wsByName.has(allConvertersName)) {
+    allConvertersName = sanitizeSheetName(`${allConvertersBase} ${++allConvSuffix}`)
+  }
+  const allConvertersRows = buildConverterTableForProject(project)
+  const allConvertersWs = addSheetWithRows(allConvertersName, allConvertersRows)
+  setConverterFormats(allConvertersWs)
+  wsByName.set(allConvertersWs.name, allConvertersWs)
+  usedNames.add(allConvertersWs.name)
+
   const rootConverterBase = 'Current Canvas Converters'
   let rootConverterName = sanitizeSheetName(rootConverterBase)
   let rootConvSuffix = 1
