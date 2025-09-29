@@ -228,6 +228,8 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
   visit(project, res, [], [], 1)
 
   entries.sort((a, b) => {
+    const locationDiff = a.location.localeCompare(b.location)
+    if (locationDiff !== 0) return locationDiff
     const diff = (b.pout || 0) - (a.pout || 0)
     if (Math.abs(diff) > 1e-9) return diff
     return a.name.localeCompare(b.name)

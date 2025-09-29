@@ -165,7 +165,12 @@ function buildConverterTableForProject(project: Project): any[][] {
     return rows
   }
 
+  let lastLocation: string | null = null
   for (const entry of summary) {
+    if (entry.location !== lastLocation) {
+      rows.push([`Location: ${entry.location}`,'','','','','','','','','','',''])
+      lastLocation = entry.location
+    }
     rows.push([
       entry.name,
       entry.location,

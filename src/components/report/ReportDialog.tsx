@@ -83,6 +83,15 @@ export default function ReportDialog({ project, result, onClose }:{ project: Pro
   }
 const allSubsystems = React.useMemo(()=> collectSubsystems(project), [project])
 const converterSummary = React.useMemo(()=> buildConverterSummary(project, result), [project, result])
+const converterSummaryGroups = React.useMemo(()=>{
+  const groups = new Map<string, ConverterSummaryEntry[]>()
+  for (const entry of converterSummary){
+    const list = groups.get(entry.location)
+    if (list) list.push(entry)
+    else groups.set(entry.location, [entry])
+  }
+  return Array.from(groups.entries()).sort((a,b)=> a[0].localeCompare(b[0]))
+}, [converterSummary])
 
 const renderSection = (proj: Project, res: ComputeResult, depth: number, path: string[], pathNames: string[] = [], collectedPies: React.ReactNode[]): React.ReactNode[] => {
     const nodes = proj.nodes as any[]
@@ -380,75 +389,82 @@ const renderSection = (proj: Project, res: ComputeResult, depth: number, path: s
             <tr>
               <td colSpan={13} className="px-2 py-3 text-center text-slate-500">No converters in this system.</td>
             </tr>
-          ) : converterSummary.map(entry => {
-            const isDual = entry.nodeType === 'DualOutputConverter'
-            const hasOutputs = !!(entry.outputs && entry.outputs.length)
-            const entryKey = entry.key
-            const isExpanded = isDual && hasOutputs && converterExpanded.has(entryKey)
-            return (
-              <React.Fragment key={entryKey}>
-                <tr className="border-b">
-                  <td className="px-2 py-2 text-left whitespace-nowrap">{entry.name}</td>
-                  <td className="px-2 py-2 text-left whitespace-nowrap">{entry.location}</td>
-                  <td className="px-2 py-2 text-left whitespace-nowrap">{formatTypeTopology(entry)}</td>
-                  <td className="px-2 py-2 text-right">{formatVinRange(entry.vinMin, entry.vinMax)}</td>
-                  <td className="px-2 py-2 text-right">{formatVoutSummary(entry)}</td>
-                  <td className="px-2 py-2 text-right">{formatNumber(entry.iout)}</td>
-                  <td className="px-2 py-2 text-right">{formatNumber(entry.pin)}</td>
-                  <td className="px-2 py-2 text-right">{formatNumber(entry.pout)}</td>
-                  <td className="px-2 py-2 text-right">{formatNumber(entry.loss)}</td>
-                  <td className="px-2 py-2 text-right">{entry.phaseCount && entry.phaseCount > 1 ? formatNumber(entry.lossPerPhase ?? entry.loss / entry.phaseCount) : '—'}</td>
-                  <td className="px-2 py-2 text-right">{formatPct(entry.efficiency)}</td>
-                  <td className="px-2 py-2 text-right">{formatNumber(entry.edgeLoss)}</td>
-                  <td className="px-2 py-2 text-left whitespace-nowrap">
-                    {isDual && hasOutputs ? (
-                      <Button size="sm" variant="outline" onClick={()=>toggleConverter(entryKey)}>
-                        {converterExpanded.has(entryKey) ? 'Hide outputs' : 'Show outputs'}
-                      </Button>
-                    ) : '—'}
-                  </td>
-                </tr>
-                {isExpanded ? (
-                  <tr key={`${entryKey}-details`}>
-                    <td colSpan={13} className="px-0 py-0">
-                      <div className="p-3 bg-slate-50 border border-slate-200 rounded-md">
-                        <table className="w-full text-sm border-collapse">
-                          <thead>
-                            <tr className="border-b text-slate-700">
-                              <th className="text-left px-2 py-2 font-bold">Output</th>
-                              <th className="text-right px-2 py-2 font-bold">Vout (V)</th>
-                              <th className="text-right px-2 py-2 font-bold">Iout (A)</th>
-                              <th className="text-right px-2 py-2 font-bold">Input power (W)</th>
-                              <th className="text-right px-2 py-2 font-bold">Output power (W)</th>
-                              <th className="text-right px-2 py-2 font-bold">Loss (W)</th>
-                              <th className="text-right px-2 py-2 font-bold">Loss per phase (W)</th>
-                              <th className="text-right px-2 py-2 font-bold">Efficiency (%)</th>
-                              <th className="text-right px-2 py-2 font-bold">Downstream edge loss (W)</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {entry.outputs!.map(output => (
-                              <tr key={output.id} className="border-b last:border-b-0">
-                                <td className="px-2 py-2 text-left whitespace-nowrap">{output.label}</td>
-                                <td className="px-2 py-2 text-right">{formatVoltage(output.vout)}</td>
-                                <td className="px-2 py-2 text-right">{formatNumber(output.iout)}</td>
-                                <td className="px-2 py-2 text-right">{formatNumber(output.pin)}</td>
-                                <td className="px-2 py-2 text-right">{formatNumber(output.pout)}</td>
-                                <td className="px-2 py-2 text-right">{formatNumber(output.loss)}</td>
-                                <td className="px-2 py-2 text-right">{output.phaseCount && output.phaseCount > 1 ? formatNumber(output.lossPerPhase ?? output.loss / output.phaseCount) : '—'}</td>
-                                <td className="px-2 py-2 text-right">{formatPct(output.efficiency)}</td>
-                                <td className="px-2 py-2 text-right">{formatNumber(output.edgeLoss)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </td>
-                  </tr>
-                ) : null}
-              </React.Fragment>
-            )
-          })}
+          ) : converterSummaryGroups.map(([location, entries]) => (
+            <React.Fragment key={location}>
+              <tr className="bg-slate-100">
+                <td colSpan={13} className="px-2 py-2 font-semibold text-left text-slate-700">{location}</td>
+              </tr>
+              {entries.map(entry => {
+                const isDual = entry.nodeType === 'DualOutputConverter'
+                const hasOutputs = !!(entry.outputs && entry.outputs.length)
+                const entryKey = entry.key
+                const isExpanded = isDual && hasOutputs && converterExpanded.has(entryKey)
+                return (
+                  <React.Fragment key={entryKey}>
+                    <tr className="border-b">
+                      <td className="px-2 py-2 text-left whitespace-nowrap">{entry.name}</td>
+                      <td className="px-2 py-2 text-left whitespace-nowrap">{entry.location}</td>
+                      <td className="px-2 py-2 text-left whitespace-nowrap">{formatTypeTopology(entry)}</td>
+                      <td className="px-2 py-2 text-right">{formatVinRange(entry.vinMin, entry.vinMax)}</td>
+                      <td className="px-2 py-2 text-right">{formatVoutSummary(entry)}</td>
+                      <td className="px-2 py-2 text-right">{formatNumber(entry.iout)}</td>
+                      <td className="px-2 py-2 text-right">{formatNumber(entry.pin)}</td>
+                      <td className="px-2 py-2 text-right">{formatNumber(entry.pout)}</td>
+                      <td className="px-2 py-2 text-right">{formatNumber(entry.loss)}</td>
+                      <td className="px-2 py-2 text-right">{entry.phaseCount && entry.phaseCount > 1 ? formatNumber(entry.lossPerPhase ?? entry.loss / entry.phaseCount) : '—'}</td>
+                      <td className="px-2 py-2 text-right">{formatPct(entry.efficiency)}</td>
+                      <td className="px-2 py-2 text-right">{formatNumber(entry.edgeLoss)}</td>
+                      <td className="px-2 py-2 text-left whitespace-nowrap">
+                        {isDual && hasOutputs ? (
+                          <Button size="sm" variant="outline" onClick={()=>toggleConverter(entryKey)}>
+                            {converterExpanded.has(entryKey) ? 'Hide outputs' : 'Show outputs'}
+                          </Button>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                    {isExpanded ? (
+                      <tr key={`${entryKey}-details`}>
+                        <td colSpan={13} className="px-0 py-0">
+                          <div className="p-3 bg-slate-50 border border-slate-200 rounded-md">
+                            <table className="w-full text-sm border-collapse">
+                              <thead>
+                                <tr className="border-b text-slate-700">
+                                  <th className="text-left px-2 py-2 font-bold">Output</th>
+                                  <th className="text-right px-2 py-2 font-bold">Vout (V)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Iout (A)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Input power (W)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Output power (W)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Loss (W)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Loss per phase (W)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Efficiency (%)</th>
+                                  <th className="text-right px-2 py-2 font-bold">Downstream edge loss (W)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {entry.outputs!.map(output => (
+                                  <tr key={output.id} className="border-b last:border-b-0">
+                                    <td className="px-2 py-2 text-left whitespace-nowrap">{output.label}</td>
+                                    <td className="px-2 py-2 text-right">{formatVoltage(output.vout)}</td>
+                                    <td className="px-2 py-2 text-right">{formatNumber(output.iout)}</td>
+                                    <td className="px-2 py-2 text-right">{formatNumber(output.pin)}</td>
+                                    <td className="px-2 py-2 text-right">{formatNumber(output.pout)}</td>
+                                    <td className="px-2 py-2 text-right">{formatNumber(output.loss)}</td>
+                                    <td className="px-2 py-2 text-right">{output.phaseCount && output.phaseCount > 1 ? formatNumber(output.lossPerPhase ?? output.loss / output.phaseCount) : '—'}</td>
+                                    <td className="px-2 py-2 text-right">{formatPct(output.efficiency)}</td>
+                                    <td className="px-2 py-2 text-right">{formatNumber(output.edgeLoss)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </React.Fragment>
+                )
+              })}
+            </React.Fragment>
+          ))}
         </tbody>
       </table>
     </div>
