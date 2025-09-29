@@ -13,6 +13,7 @@ import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDesc
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
 import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 import { genId } from '../../utils'
+import { computeSubsystemNodeMinHeight, getSubsystemPortPosition } from '../SubsystemNodeLayout'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
@@ -94,10 +95,8 @@ function CustomNode(props: NodeProps) {
     ? (data as any).inputPorts
     : []
   const subsystemPortCount = subsystemPorts.length
-  const baseSubsystemHeight = 80
-  const perPortHeight = 28
   const dynamicMinHeight = nodeType === 'Subsystem'
-    ? baseSubsystemHeight + (subsystemPortCount * perPortHeight)
+    ? computeSubsystemNodeMinHeight(subsystemPortCount)
     : undefined
   const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
   const formatVoltage = (value: unknown) => {
@@ -131,8 +130,10 @@ function CustomNode(props: NodeProps) {
         minHeight: dynamicMinHeight,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
+        alignItems: nodeType === 'Subsystem' ? 'stretch' : 'center',
+        justifyContent: nodeType === 'Subsystem' ? 'flex-start' : 'center',
+        paddingTop: nodeType === 'Subsystem' ? 3 : undefined,
+        paddingBottom: nodeType === 'Subsystem' ? 3 : undefined,
       }}
     >
       {isSelected && (
@@ -150,7 +151,7 @@ function CustomNode(props: NodeProps) {
             style={{
               position: 'absolute',
               left: -8,
-              top: 'calc(50% + 8px)',
+              top: 'calc(50% + 3px)',
               transform: 'translate(-100%, 0)',
               fontSize: '10px',
               color: '#666',
@@ -182,7 +183,7 @@ function CustomNode(props: NodeProps) {
             style={{
               position: 'absolute',
               left: -8,
-              top: 'calc(50% + 8px)',
+              top: 'calc(50% + 3px)',
               transform: 'translate(-100%, 0)',
               fontSize: '10px',
               color: '#666',
@@ -206,7 +207,7 @@ function CustomNode(props: NodeProps) {
                 style={{
                   position: 'absolute',
                   left: -8,
-                  top: 'calc(50% + 8px)',
+                  top: 'calc(50% + 3px)',
                   transform: 'translate(-100%, 0)',
                   fontSize: '10px',
                   color: '#666',
@@ -215,18 +216,24 @@ function CustomNode(props: NodeProps) {
                   textAlign: 'right',
                 }}
               >
-                input
+                {(() => {
+                  const connections = Number((data as any)?.inputConnectionCount) || 0
+                  const voltageText = formatVoltage((data as any)?.inputVoltage)
+                  if (connections > 0 && voltageText) return voltageText
+                  return voltageText ?? 'input'
+                })()}
               </div>
             </>
           )
           return (
             <>
               {ports.map((p:any, idx:number) => {
-                const pct = ((idx+1)/(count+1))*100
+                const pct = getSubsystemPortPosition(idx, count)
                 const connectionCount = Number((p as any)?.connectionCount) || 0
                 const portInputVoltageText = formatVoltage((p as any)?.inputVoltage)
                 const definedVoltageText = portInputVoltageText ?? formatVoltage(p.Vout)
                 const label = connectionCount > 0 && portInputVoltageText ? portInputVoltageText : (definedVoltageText ?? 'input')
+                const labelOffset = 3
                 return (
                   <React.Fragment key={p.id}>
                     <Handle
@@ -239,7 +246,7 @@ function CustomNode(props: NodeProps) {
                       style={{
                         position: 'absolute',
                         left: -8,
-                        top: `calc(${pct}% + 8px)`,
+                        top: `calc(${pct}% + ${labelOffset}px)`,
                         transform: 'translate(-100%, 0)',
                         fontSize: '10px',
                         color: '#334155',
@@ -318,7 +325,7 @@ function CustomNode(props: NodeProps) {
               style={{
                 position: 'absolute',
                 right: -8,
-                top: 'calc(50% + 8px)',
+                top: 'calc(50% + 3px)',
                 transform: 'translate(100%, 0)',
                 fontSize: '10px',
                 color: '#666',

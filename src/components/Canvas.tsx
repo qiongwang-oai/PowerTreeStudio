@@ -20,9 +20,8 @@ import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuic
 import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 import MarkupLayer, { MarkupTool } from './markups/MarkupLayer'
 import { genId } from '../utils'
+import { SUBSYSTEM_BASE_HEIGHT, SUBSYSTEM_PORT_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
 
-const SUBSYSTEM_BASE_HEIGHT = 64
-const SUBSYSTEM_PORT_HEIGHT = 24
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
 const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
@@ -130,16 +129,8 @@ function CustomNode(props: NodeProps) {
     ? (data as any).inputPorts
     : []
   const subsystemPortCount = subsystemPorts.length
-  const extraPortRows = Math.max(subsystemPortCount - 1, 0)
-  const getSubsystemPortPosition = (index: number, total: number) => {
-    if (total <= 1) return 50
-    const baseMargin = Math.min(25, 60 / total)
-    const margin = Math.max(baseMargin, 12)
-    const span = 100 - margin * 2
-    return margin + (span * index) / (total - 1)
-  }
   const dynamicMinHeight = nodeType === 'Subsystem'
-    ? SUBSYSTEM_BASE_HEIGHT + (extraPortRows * SUBSYSTEM_PORT_HEIGHT)
+    ? computeSubsystemNodeMinHeight(subsystemPortCount)
     : undefined
   const outputs = Array.isArray((data as any)?.outputs) ? (data as any).outputs : []
   const formatVoltage = (value: unknown) => {
