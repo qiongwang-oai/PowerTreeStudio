@@ -2,6 +2,7 @@ import ExcelJS from 'exceljs'
 import { Project, AnyNode } from './models'
 import { compute, computeDeepAggregates } from './calc'
 import { download } from './io'
+import { buildConverterSummary, ConverterSummaryEntry } from './converterSummary'
 
 function sanitizeSheetName(name: string): string {
   const cleaned = name.replace(/[\\/?*\[\]:]/g, ' ').slice(0, 31).trim() || 'Sheet'
@@ -9,6 +10,54 @@ function sanitizeSheetName(name: string): string {
 }
 
 function pct(frac: number): number { return Number.isFinite(frac) ? frac : 0 }
+
+function topologyLabel(value?: string | null): string {
+  if (!value) return ''
+  if (value.toLowerCase() === 'llc') return 'LLC'
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
+
+function converterTypeLabel(entry: ConverterSummaryEntry): string {
+  const base = entry.nodeType === 'Converter' ? 'Converter' : 'Dual-output converter'
+  const topo = topologyLabel(entry.topology as string | undefined)
+  return topo ? `${base} / ${topo}` : base
+}
+
+function voltageText(value?: number): string {
+  return Number.isFinite(value) ? (value as number).toFixed(2) : ''
+}
+
+function vinRangeLabel(min?: number, max?: number): string {
+  const hasMin = Number.isFinite(min)
+  const hasMax = Number.isFinite(max)
+  if (hasMin && hasMax) {
+    const minVal = min as number
+    const maxVal = max as number
+    if (Math.abs(minVal - maxVal) < 1e-6) return voltageText(minVal)
+    return `${voltageText(minVal)} – ${voltageText(maxVal)}`
+  }
+  if (hasMin) return voltageText(min)
+  if (hasMax) return voltageText(max)
+  return ''
+}
+
+function voutLabel(entry: ConverterSummaryEntry): string {
+  if (entry.nodeType === 'Converter') return voltageText(entry.vout)
+  if (!entry.vouts || entry.vouts.length === 0) return ''
+  return entry.vouts
+    .map(v => {
+      const value = voltageText(v.value)
+      const label = (v.label || '').trim()
+      if (!value) return label
+      return label ? `${label}: ${value}` : value
+    })
+    .filter(Boolean)
+    .join(', ')
+}
+
+function branchVoutLabel(value?: number): string {
+  return voltageText(value)
+}
 
 function buildTableForProject(project: Project): any[][] {
   const rows: any[][] = []
@@ -105,6 +154,56 @@ function buildTableForProject(project: Project): any[][] {
   return rows
 }
 
+function buildConverterTableForProject(project: Project): any[][] {
+  const rows: any[][] = []
+  const header = ['Name','Location','Type / topology','Vin (V)','Vout (V)','Iout (A)','Input power (W)','Output power (W)','Loss (W)','Loss per phase (W)','Efficiency (%)','Downstream edge loss (W)']
+  rows.push(header)
+
+  const summary = buildConverterSummary(project)
+  if (summary.length === 0) {
+    rows.push(['No converters','','','','','','','','','','',''])
+    return rows
+  }
+
+  for (const entry of summary) {
+    rows.push([
+      entry.name,
+      entry.location,
+      converterTypeLabel(entry),
+      vinRangeLabel(entry.vinMin, entry.vinMax),
+      voutLabel(entry),
+      entry.iout,
+      entry.pin,
+      entry.pout,
+      entry.loss,
+      entry.phaseCount && entry.phaseCount > 1 ? (entry.lossPerPhase ?? entry.loss / entry.phaseCount) : '',
+      pct(entry.efficiency),
+      entry.edgeLoss,
+    ])
+    if (entry.outputs && entry.outputs.length) {
+      for (const output of entry.outputs) {
+        const label = output.label || 'Output'
+        rows.push([
+          `  - ${label}`,
+          '',
+          'Output',
+          '',
+          branchVoutLabel(output.vout),
+          output.iout,
+          output.pin,
+          output.pout,
+          output.loss,
+          output.phaseCount && output.phaseCount > 1 ? (output.lossPerPhase ?? output.loss / output.phaseCount) : '',
+          pct(output.efficiency),
+          output.edgeLoss,
+        ])
+      }
+    }
+  }
+
+  return rows
+}
+
 function collectSubsystems(project: Project, path: string[] = []): Array<{ title: string, project: Project }>{
   const subs: Array<{ title: string, project: Project }> = []
   for (const n of project.nodes as AnyNode[]){
@@ -145,10 +244,7 @@ export async function exportSpreadsheetReport(project: Project, imagesBySheet?: 
     return ws
   }
 
-  const rootRows = buildTableForProject(project)
-  const rootWs = addSheetWithRows('Current Canvas', rootRows)
-  // Apply number formats: cols 2..7 numeric with 2 decimals, col 8 percentage
-  const setFormats = (ws: ExcelJS.Worksheet)=>{
+  const setBreakdownFormats = (ws: ExcelJS.Worksheet)=>{
     const lastRow = ws.rowCount
     for (let r=2; r<=lastRow; r++){
       for (let c=2; c<=7; c++){
@@ -159,21 +255,62 @@ export async function exportSpreadsheetReport(project: Project, imagesBySheet?: 
       if (typeof effCell.value === 'number') effCell.numFmt = '0.00%'
     }
   }
-  setFormats(rootWs)
+
+  const setConverterFormats = (ws: ExcelJS.Worksheet)=>{
+    const lastRow = ws.rowCount
+    for (let r=2; r<=lastRow; r++){
+      for (const c of [4, 5, 6, 7, 8, 9, 10, 12]){
+        const cell = ws.getRow(r).getCell(c)
+        if (typeof cell.value === 'number') cell.numFmt = '0.00'
+      }
+      const effCell = ws.getRow(r).getCell(11)
+      if (typeof effCell.value === 'number') effCell.numFmt = '0.00%'
+    }
+  }
+
+  const rootRows = buildTableForProject(project)
+  const rootWs = addSheetWithRows('Current Canvas', rootRows)
+  setBreakdownFormats(rootWs)
+
+  const rootConverterRows = buildConverterTableForProject(project)
+  const wsByName = new Map<string, ExcelJS.Worksheet>()
+  const usedNames = new Set<string>()
+  wsByName.set(rootWs.name, rootWs)
+  usedNames.add(rootWs.name)
+
+  const rootConverterBase = 'Current Canvas Converters'
+  let rootConverterName = sanitizeSheetName(rootConverterBase)
+  let rootConvSuffix = 1
+  while (usedNames.has(rootConverterName) || wsByName.has(rootConverterName)) {
+    rootConverterName = sanitizeSheetName(`${rootConverterBase} ${++rootConvSuffix}`)
+  }
+  const rootConverterWs = addSheetWithRows(rootConverterName, rootConverterRows)
+  setConverterFormats(rootConverterWs)
+  wsByName.set(rootConverterWs.name, rootConverterWs)
+  usedNames.add(rootConverterWs.name)
 
   const subs = collectSubsystems(project)
-  const usedNames = new Set<string>()
-  const wsByName = new Map<string, ExcelJS.Worksheet>()
-  wsByName.set(rootWs.name, rootWs)
   for (const { title, project: p } of subs){
     let name = sanitizeSheetName(title)
     let suffix = 1
     while (usedNames.has(name) || wsByName.has(name)) { name = sanitizeSheetName(`${title} ${++suffix}`) }
-    usedNames.add(name)
     const rows = buildTableForProject(p)
     const ws = addSheetWithRows(name, rows)
-    wsByName.set(name, ws)
-    setFormats(ws)
+    wsByName.set(ws.name, ws)
+    usedNames.add(ws.name)
+    setBreakdownFormats(ws)
+
+    const converterBase = `${title} Converters`
+    let converterName = sanitizeSheetName(converterBase)
+    let convSuffix = 1
+    while (usedNames.has(converterName) || wsByName.has(converterName)) {
+      converterName = sanitizeSheetName(`${converterBase} ${++convSuffix}`)
+    }
+    const convRows = buildConverterTableForProject(p)
+    const convWs = addSheetWithRows(converterName, convRows)
+    wsByName.set(convWs.name, convWs)
+    usedNames.add(convWs.name)
+    setConverterFormats(convWs)
   }
 
   if (imagesBySheet){
