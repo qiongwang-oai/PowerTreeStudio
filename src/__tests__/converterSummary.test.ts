@@ -120,10 +120,10 @@ describe('buildConverterSummary', () => {
     expect(dual!.key).toBe('dual')
     expect(dual!.outputs).toBeDefined()
     expect(dual!.outputs!.length).toBe(2)
-    expect(dual!.pin).toBeCloseTo(23.742, 3)
+    expect(dual!.pin).toBeCloseTo(23.74269, 5)
     expect(dual!.pout).toBeCloseTo(22, 5)
-    expect(dual!.loss).toBeCloseTo(1.742, 3)
-    expect(dual!.efficiency).toBeCloseTo(0.926, 3)
+    expect(dual!.loss).toBeCloseTo(1.74269, 5)
+    expect(dual!.efficiency).toBeCloseTo(0.926601, 6)
     expect(dual!.iout).toBeCloseTo(3, 5)
     expect(dual!.edgeLoss).toBeCloseTo(0, 5)
 

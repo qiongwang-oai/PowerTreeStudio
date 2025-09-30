@@ -771,59 +771,118 @@ export function compute(project: Project): ComputeResult {
       if (parent && child && 'V_upstream' in child===false){ if (upV!==undefined) (child as any).V_upstream = upV - V_drop }
     }
   }
-  // Finalize converter output current strictly from directly connected output edges
+  // Finalize converter metrics using the latest edge currents
   for (const nodeId of order){
     const node = nmap[nodeId]; if (!node) continue
     if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
+      const outEdges = (outgoing[conv.id] || []).filter(edge => {
+        const fromH = (edge as any).fromHandle
+        return fromH === undefined || fromH === 'output'
+      })
       let I_out_sum = 0
-      for (const e of Object.values(emap)){
-        if (e.from === conv.id){
-          const fromH = (e as any).fromHandle
-          if (fromH !== undefined && fromH !== 'output') continue
-          I_out_sum += (e.I_edge || 0)
+      let edgeLossSum = 0
+      let childInputSum = 0
+      for (const edge of outEdges){
+        const em = emap[edge.id]
+        if (em){
+          I_out_sum += em.I_edge || 0
+          edgeLossSum += em.P_loss_edge || 0
+        }
+        const child = nmap[edge.to]
+        if (child){
+          if (child.type === 'Subsystem'){
+            const toHandle = (edge as any).toHandle as string | undefined
+            const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+            const vals = Object.values(perPort)
+            if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+            else if (vals.length === 1) childInputSum += vals[0] || 0
+          } else {
+            childInputSum += (child.P_in || 0)
+          }
         }
       }
+      const P_out = childInputSum + edgeLossSum
+      const eta = etaFromModel(conv.efficiency, P_out, I_out_sum, conv)
+      const P_in = P_out / Math.max(eta, 1e-9)
       conv.I_out = I_out_sum
+      conv.P_out = P_out
+      conv.P_in = P_in
+      conv.loss = P_in - P_out
     } else if (node.type === 'DualOutputConverter'){
       const dual = node as any as DualOutputConverterNode & ComputeNode
       const branches = Array.isArray(dual.outputs) ? dual.outputs : []
-      const existing: Record<string, any> = ((dual as any).__outputs) || {}
+      const edgesForNode = outgoing[dual.id] || []
       const branchIds = new Set((branches || []).map(b => b?.id).filter(Boolean) as string[])
       const fallbackHandle = (branches && branches.length > 0 && branches[0]?.id) ? (branches[0]!.id || 'outputA') : 'outputA'
-      const totals: Record<string, number> = {}
-      for (const e of Object.values(emap)){
-        if (e.from !== dual.id) continue
-        const rawHandle = (e as any).fromHandle as string | undefined
-        const handleId = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
-        totals[handleId] = (totals[handleId] || 0) + (e.I_edge || 0)
-      }
-      let sum = 0
+      const edgesByHandle: Record<string, ComputeEdge[]> = {}
+      edgesForNode.forEach(edge => {
+        const rawHandle = (edge as any).fromHandle as string | undefined
+        const resolved = rawHandle && branchIds.has(rawHandle) ? rawHandle : fallbackHandle
+        ;(edgesByHandle[resolved] = edgesByHandle[resolved] || []).push(edge)
+      })
+      let totalPin = 0
+      let totalPout = 0
+      let totalIout = 0
       const metrics: Record<string, any> = {}
       branches.forEach((branch, idx) => {
         const handleId = branch?.id || (idx === 0 ? fallbackHandle : `${fallbackHandle}-${idx}`)
-        const I_out = totals[handleId] || 0
-        sum += I_out
-        const prev = existing[handleId] || {}
+        const branchEdges = edgesByHandle[handleId] || []
+        let childInputSum = 0
+        let edgeLossSum = 0
+        let I_out = 0
+        for (const edge of branchEdges){
+          const em = emap[edge.id]
+          if (em){
+            I_out += em.I_edge || 0
+            edgeLossSum += em.P_loss_edge || 0
+          }
+          const child = nmap[edge.to]
+          if (child){
+            if (child.type === 'Subsystem'){
+              const toHandle = (edge as any).toHandle as string | undefined
+              const perPort: Record<string, number> = ((child as any).__portPowerMap_includeEdgeLoss) || {}
+              const vals = Object.values(perPort)
+              if (toHandle && (toHandle in perPort)) childInputSum += perPort[toHandle] || 0
+              else if (vals.length === 1) childInputSum += vals[0] || 0
+            } else {
+              childInputSum += (child.P_in || 0)
+            }
+          }
+        }
+        const P_out = childInputSum + edgeLossSum
+        const effModel = branch?.efficiency || { type: 'fixed', value: 0.9 }
+        const eta = etaFromModel(effModel, P_out, I_out, branch as any)
+        const P_in = P_out / Math.max(eta, 1e-9)
         metrics[handleId] = {
-          ...prev,
           id: handleId,
           label: branch?.label,
           Vout: branch?.Vout,
           I_out,
+          P_out,
+          P_in,
+          eta,
+          loss: P_in - P_out,
         }
+        totalPin += P_in
+        totalPout += P_out
+        totalIout += I_out
       })
-      dual.I_out = sum
+      dual.P_out = totalPout
+      dual.P_in = totalPin
+      dual.I_out = totalIout
+      dual.loss = totalPin - totalPout
       ;(dual as any).__outputs = metrics
     } else if (node.type === 'Bus'){
       const bus = node as any as ComputeNode
+      const outEdges = (outgoing[bus.id] || []).filter(edge => {
+        const fromH = (edge as any).fromHandle
+        return fromH === undefined || fromH === 'output'
+      })
       let I_out_sum = 0
-      for (const e of Object.values(emap)){
-        if (e.from === bus.id){
-          const fromH = (e as any).fromHandle
-          if (fromH !== undefined && fromH !== 'output') continue
-          I_out_sum += (e.I_edge || 0)
-        }
+      for (const edge of outEdges){
+        const em = emap[edge.id]
+        if (em) I_out_sum += em.I_edge || 0
       }
       bus.I_out = I_out_sum
       bus.I_in = I_out_sum
