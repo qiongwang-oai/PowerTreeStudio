@@ -212,7 +212,7 @@ export default function App(){
                   </div>
                   <div className="mt-0.5 h-px w-16 bg-gradient-to-r from-emerald-400 via-sky-400 to-transparent" />
                 </div>
-                <div className="flex flex-wrap items-center gap-2" style={{marginBottom: '3px'}}>
+                <div className="flex flex-wrap items-center gap-2 toolbar-buttons" style={{marginBottom: '3px'}}>
                   <input
                     ref={fileInputRef}
                     aria-hidden="true"
@@ -255,7 +255,7 @@ export default function App(){
             </div>
           </div>
         </div>
-        <aside className="border-r bg-white overflow-auto pt-6"><Palette /></aside>
+        <aside className="border-r bg-white overflow-auto pt-6 side-panel"><Palette /></aside>
         <main className="overflow-hidden"><ReactFlowProvider><Canvas
           ref={canvasRef}
           onSelect={setSelected}
@@ -265,7 +265,7 @@ export default function App(){
           selectionMode={selectionMode}
           onSelectionModeChange={handleSelectionModeChange}
         /></ReactFlowProvider></main>
-        <aside className="relative border-l bg-white overflow-auto">
+        <aside className="relative border-l bg-white overflow-auto side-panel">
           <div
             role="separator"
             aria-orientation="vertical"

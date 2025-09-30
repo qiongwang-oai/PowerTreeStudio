@@ -40,8 +40,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
       const rect = containerRef.current?.getBoundingClientRect()
       const totalWidth = rect?.width ?? 1200
       const minMain = 400
-      // palette(260) + resizer(6) + main(minMain) + inspector(next) <= totalWidth
-      const max = Math.max(240, totalWidth - 260 - 6 - minMain)
+      // palette(250) + resizer(6) + main(minMain) + inspector(next) <= totalWidth
+      const max = Math.max(240, totalWidth - 250 - 6 - minMain)
       if (Number.isFinite(max)) next = Math.min(next, max)
       next = Math.max(min, next)
       setInspectorWidth(next)
@@ -141,13 +141,13 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
-      <div ref={containerRef} className="relative bg-white shadow-xl border w-[95vw] h-[90vh] mt-[5vh] rounded-lg overflow-hidden grid" style={{gridTemplateRows:'48px 1fr', gridTemplateColumns:`260px 1fr 6px ${inspectorWidth}px`}}>
+      <div ref={containerRef} className="relative bg-white shadow-xl border w-[95vw] h-[90vh] mt-[5vh] rounded-lg overflow-hidden grid" style={{gridTemplateRows:'48px 1fr', gridTemplateColumns:`250px 1fr 6px ${inspectorWidth}px`}}>
         <div className="col-span-4 flex items-center justify-between px-3 border-b bg-white">
           <div className="flex items-center gap-3">
             <div className="font-semibold">Subsystem: {subsystem.name}</div>
             <div className={"text-xs px-2 py-0.5 rounded-full " + (inputCount===1? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{inputCount===1? '1 input ok' : `${inputCount} inputs`}</div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 toolbar-buttons">
             <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
             <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
             <Button
@@ -162,7 +162,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           </div>
         </div>
-        <aside className="border-r bg-white overflow-auto"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
+        <aside className="border-r bg-white overflow-auto side-panel"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
         <main className="overflow-hidden">
           <ReactFlowProvider>
             <SubsystemCanvas subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} onSelect={setSelected} onOpenNested={onOpenSubsystem} />
@@ -174,7 +174,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
           aria-label="Resize inspector"
           role="separator"
         />
-        <aside className="border-l bg-white overflow-auto">
+        <aside className="border-l bg-white overflow-auto side-panel">
           <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={selected} onDeleted={()=>setSelected(null)} />
         </aside>
       </div>
