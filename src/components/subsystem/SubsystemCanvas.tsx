@@ -232,7 +232,14 @@ function CustomNode(props: NodeProps) {
                 const connectionCount = Number((p as any)?.connectionCount) || 0
                 const portInputVoltageText = formatVoltage((p as any)?.inputVoltage)
                 const definedVoltageText = portInputVoltageText ?? formatVoltage(p.Vout)
-                const label = connectionCount > 0 && portInputVoltageText ? portInputVoltageText : (definedVoltageText ?? 'input')
+                const voltageText = connectionCount > 0 && portInputVoltageText ? portInputVoltageText : (definedVoltageText ?? 'input')
+                const portName = (() => {
+                  const pick = (value: unknown) => typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+                  const fallbackId = p?.id != null ? String(p.id).trim() : ''
+                  return pick((p as any)?.name) ?? pick((p as any)?.label) ?? (fallbackId || 'input')
+                })()
+                const labelParts = [portName, voltageText].filter(Boolean)
+                const label = labelParts.join(' | ')
                 const labelOffset = 3
                 return (
                   <React.Fragment key={p.id}>
