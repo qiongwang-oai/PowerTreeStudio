@@ -5,7 +5,7 @@ export function voltageToEdgeColor(voltage?: number): string {
   const quantised = Math.round(voltage * 10)
 
   // Use a large hue jump per bucket to ensure adjacent voltages differ clearly.
-  const hue = ((quantised * 97.979) % 360 + 360) % 360
+  const hue = ((quantised * 124.89) % 360 + 360) % 360
 
   const saturation = 46
   const lightnessPalette = [40, 46, 52, 58]
