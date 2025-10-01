@@ -72,26 +72,292 @@ const coerceInt = (value: string, { min = 1 }: { min?: number } = {}): number | 
   return Math.max(min, intVal)
 }
 
-const ParameterField = ({ label, children }: { label: string; children: React.ReactNode }) => (
-  <label className="flex flex-col gap-1 text-xs text-slate-600">
-    <span className="font-semibold text-slate-700">{label}</span>
-    <div className="w-[500px] max-w-full">
-      {children}
-    </div>
-  </label>
-)
+type NodeFieldInputType = 'text' | 'number' | 'select' | 'checkbox' | 'textarea'
 
-const CheckboxField = ({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) => (
-  <label className="flex items-center gap-2 text-xs text-slate-600">
-    <input
-      type="checkbox"
-      className="h-4 w-4"
-      checked={checked}
-      onChange={e => onChange(e.target.checked)}
-    />
-    <span className="font-semibold text-slate-700">{label}</span>
-  </label>
-)
+type NodeFieldConfig = {
+  key: string
+  label: string
+  input: NodeFieldInputType
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label: string }[]
+  placeholder?: string
+  widthClass?: string
+  coerce?: (value: string | boolean) => unknown
+  getValue?: (node: AnyNode) => unknown
+  setValue?: (node: AnyNode, value: unknown) => AnyNode
+}
+
+const coerceTrimmedString = (value: string | boolean): string | undefined => {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed === '' ? undefined : trimmed
+}
+
+const coerceOptionalNumber = (value: string | boolean): number | undefined => {
+  if (typeof value !== 'string') return undefined
+  return coerceNumber(value)
+}
+
+const coerceOptionalInt = (value: string | boolean, options?: { min?: number }): number | undefined => {
+  if (typeof value !== 'string') return undefined
+  return coerceInt(value, options)
+}
+
+const NODE_PARAMETER_CONFIG: Partial<Record<NodeType, NodeFieldConfig[]>> = {
+  Source: [
+    { key: 'Vout', label: 'Vout (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'I_max', label: 'I_max (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'P_max', label: 'P_max (W)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[120px]' },
+    { key: 'count', label: 'Count', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[90px]' },
+    {
+      key: 'redundancy',
+      label: 'Redundancy',
+      input: 'select',
+      options: [
+        { value: '', label: 'Not specified' },
+        { value: 'N', label: 'N' },
+        { value: 'N+1', label: 'N+1' },
+      ],
+      coerce: value => {
+        const str = typeof value === 'string' ? value : ''
+        return str === '' ? undefined : str
+      },
+      widthClass: 'min-w-[140px]'
+    },
+  ],
+  Converter: [
+    { key: 'Vin_min', label: 'Vin_min (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'Vin_max', label: 'Vin_max (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'Vout', label: 'Vout (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'Iout_max', label: 'Iout_max (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[120px]' },
+    { key: 'Pout_max', label: 'Pout_max (W)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[120px]' },
+    { key: 'phaseCount', label: 'Phase count', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[110px]' },
+    {
+      key: 'topology',
+      label: 'Topology',
+      input: 'select',
+      options: [
+        { value: '', label: 'Not specified' },
+        { value: 'buck', label: 'Buck' },
+        { value: 'llc', label: 'LLC' },
+        { value: 'ldo', label: 'LDO' },
+        { value: 'other', label: 'Other' },
+      ],
+      coerce: coerceTrimmedString,
+      widthClass: 'min-w-[140px]'
+    },
+    { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
+    { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
+  ],
+  DualOutputConverter: [
+    { key: 'Vin_min', label: 'Vin_min (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'Vin_max', label: 'Vin_max (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    {
+      key: 'topology',
+      label: 'Topology',
+      input: 'select',
+      options: [
+        { value: '', label: 'Not specified' },
+        { value: 'buck', label: 'Buck' },
+        { value: 'llc', label: 'LLC' },
+        { value: 'ldo', label: 'LDO' },
+        { value: 'other', label: 'Other' },
+      ],
+      coerce: coerceTrimmedString,
+      widthClass: 'min-w-[140px]'
+    },
+    { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
+    { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
+  ],
+  Load: [
+    { key: 'Vreq', label: 'Vreq (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'I_typ', label: 'I_typ (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'I_max', label: 'I_max (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'I_idle', label: 'I_idle (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'Utilization_typ', label: 'Utilization_typ (%)', input: 'number', min: 0, max: 100, step: 1, coerce: coerceOptionalNumber, widthClass: 'min-w-[140px]' },
+    { key: 'Utilization_max', label: 'Utilization_max (%)', input: 'number', min: 0, max: 100, step: 1, coerce: coerceOptionalNumber, widthClass: 'min-w-[150px]' },
+    { key: 'numParalleledDevices', label: 'Parallel devices', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[140px]' },
+    {
+      key: 'critical',
+      label: 'Critical load',
+      input: 'checkbox',
+      getValue: node => (node as any).critical !== false,
+      coerce: value => Boolean(value),
+      setValue: (node, value) => ({ ...(node as AnyNode), critical: Boolean(value) }),
+      widthClass: 'min-w-[120px]'
+    },
+  ],
+  Bus: [
+    { key: 'V_bus', label: 'V_bus (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+  ],
+  SubsystemInput: [
+    { key: 'Vout', label: 'Vout (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+  ],
+  Subsystem: [
+    { key: 'numParalleledSystems', label: 'Paralleled systems', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[150px]' },
+  ],
+  Note: [
+    {
+      key: 'text',
+      label: 'Content',
+      input: 'textarea',
+      coerce: value => (typeof value === 'string' ? value : ''),
+      widthClass: 'min-w-[320px]'
+    },
+  ],
+}
+
+const getFieldValue = (field: NodeFieldConfig, node: AnyNode): unknown => {
+  if (field.getValue) return field.getValue(node)
+  return (node as any)[field.key]
+}
+
+const formatFieldValue = (field: NodeFieldConfig, value: unknown): string | boolean => {
+  switch (field.input) {
+    case 'checkbox':
+      return Boolean(value)
+    case 'number':
+      return numberToInput(value)
+    case 'textarea':
+      if (typeof value === 'string') return value
+      if (value === null || value === undefined) return ''
+      return String(value)
+    case 'select':
+    case 'text':
+    default:
+      if (typeof value === 'string') return value
+      if (value === null || value === undefined) return ''
+      return String(value)
+  }
+}
+
+const updateNodeFieldValue = (
+  field: NodeFieldConfig,
+  rawValue: string | boolean,
+  updateFn: (updater: (draft: AnyNode) => AnyNode) => void,
+) => {
+  updateFn(previous => {
+    const base = cloneNode(previous)
+    const next = base as any
+    const coerced = field.coerce ? field.coerce(rawValue) : rawValue
+    if (field.setValue) {
+      return field.setValue(base, coerced)
+    }
+    if (field.input === 'checkbox') {
+      next[field.key] = coerced
+      return base
+    }
+    if (coerced === undefined) {
+      delete next[field.key]
+      return base
+    }
+    next[field.key] = coerced
+    return base
+  })
+}
+
+const renderFieldTable = (
+  fieldConfigs: NodeFieldConfig[],
+  node: AnyNode,
+  updateFn: (updater: (draft: AnyNode) => AnyNode) => void,
+) => {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[620px] border border-slate-200 text-xs">
+        <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-500">
+          <tr>
+            {fieldConfigs.map(field => (
+              <th
+                key={`header-${field.key}`}
+                className={`border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap ${field.widthClass ?? ''}`}
+              >
+                {field.label}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            {fieldConfigs.map(field => {
+              const rawValue = getFieldValue(field, node)
+              const displayValue = formatFieldValue(field, rawValue)
+              const cellClass = `border-t border-slate-200 px-2 py-1 align-top ${field.widthClass ?? ''}`
+              switch (field.input) {
+                case 'checkbox':
+                  return (
+                    <td key={`cell-${field.key}`} className={`${cellClass} text-center`}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4"
+                        checked={Boolean(displayValue)}
+                        onChange={e => updateNodeFieldValue(field, e.target.checked, updateFn)}
+                        aria-label={field.label}
+                      />
+                    </td>
+                  )
+                case 'select':
+                  return (
+                    <td key={`cell-${field.key}`} className={cellClass}>
+                      <select
+                        className="input w-full"
+                        value={displayValue as string}
+                        onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
+                      >
+                        {(field.options ?? []).map(option => (
+                          <option key={option.value} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </td>
+                  )
+                case 'textarea':
+                  return (
+                    <td key={`cell-${field.key}`} className={cellClass}>
+                      <textarea
+                        className="input w-full"
+                        rows={3}
+                        value={displayValue as string}
+                        placeholder={field.placeholder}
+                        onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
+                      />
+                    </td>
+                  )
+                case 'number':
+                  return (
+                    <td key={`cell-${field.key}`} className={cellClass}>
+                      <input
+                        className="input w-full"
+                        type="number"
+                        value={displayValue as string}
+                        min={field.min}
+                        max={field.max}
+                        step={field.step}
+                        placeholder={field.placeholder}
+                        onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
+                      />
+                    </td>
+                  )
+                case 'text':
+                default:
+                  return (
+                    <td key={`cell-${field.key}`} className={cellClass}>
+                      <input
+                        className="input w-full"
+                        value={displayValue as string}
+                        placeholder={field.placeholder}
+                        onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
+                      />
+                    </td>
+                  )
+              }
+            })}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  )
+}
 
 const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
   const patch: Partial<AnyNode> = {}
@@ -560,416 +826,104 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
   const navigationGroups = React.useMemo(() => groups, [groups])
 
   const renderParameters = React.useCallback((key: string, draftNode: AnyNode, updateFn: (updater: (draft: AnyNode) => AnyNode) => void) => {
-    switch (draftNode.type) {
-      case 'Source': {
-        const node = draftNode as AnyNode & { Vout?: number; I_max?: number; P_max?: number; count?: number; redundancy?: string }
-        return (
-          <div className="grid gap-3 lg:grid-cols-3">
-            <ParameterField label="Vout (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vout)}
-                onChange={e => updateFn(draft => ({ ...draft, Vout: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="I_max (A)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.I_max)}
-                onChange={e => updateFn(draft => ({ ...draft, I_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="P_max (W)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.P_max)}
-                onChange={e => updateFn(draft => ({ ...draft, P_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Count">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.count)}
-                min={1}
-                onChange={e => updateFn(draft => ({ ...draft, count: coerceInt(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Redundancy">
-              <select
-                className="input"
-                value={node.redundancy ?? ''}
-                onChange={e => updateFn(draft => ({ ...draft, redundancy: e.target.value || undefined }) as AnyNode)}
-              >
-                <option value="">Not specified</option>
-                <option value="N">N</option>
-                <option value="N+1">N+1</option>
-              </select>
-            </ParameterField>
+    if (draftNode.type === 'DualOutputConverter') {
+      const node = draftNode as DualOutputConverterNode
+      const baseFields = NODE_PARAMETER_CONFIG.DualOutputConverter ?? []
+      const outputs = Array.isArray(node.outputs) ? node.outputs : []
+      const updateBranch = (idx: number, updater: (branch: DualOutputConverterBranch) => DualOutputConverterBranch) => {
+        updateFn(draft => {
+          const current = draft as DualOutputConverterNode
+          const existing = Array.isArray(current.outputs) ? [...current.outputs] : []
+          const baseline: DualOutputConverterBranch = existing[idx]
+            ? { ...existing[idx] }
+            : {
+                id: genId('branch_'),
+                label: `Output ${String.fromCharCode(65 + idx)}`,
+                Vout: 5,
+                Iout_max: 1,
+                Pout_max: 5,
+                phaseCount: 1,
+                efficiency: { type: 'fixed', value: 0.9 },
+              }
+          existing[idx] = updater(baseline)
+          return { ...current, outputs: existing } as AnyNode
+        })
+      }
+
+      return (
+        <div className="space-y-3">
+          {baseFields.length > 0 && renderFieldTable(baseFields, node as AnyNode, updateFn)}
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] border border-slate-200 text-xs">
+              <thead className="bg-slate-100 text-[11px] uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap">Output</th>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap min-w-[150px]">Label</th>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap min-w-[120px]">Vout (V)</th>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap min-w-[140px]">Iout_max (A)</th>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap min-w-[140px]">Pout_max (W)</th>
+                  <th className="border-b border-slate-200 px-2 py-1 text-left font-semibold whitespace-nowrap min-w-[130px]">Phase count</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outputs.map((branch, idx) => (
+                  <tr key={branch.id || idx}>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top text-xs text-slate-500">{branch.label || branch.id || `Output ${idx + 1}`}</td>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top">
+                      <input
+                        className="input w-full"
+                        value={branch.label ?? ''}
+                        onChange={e => updateBranch(idx, current => ({ ...current, label: e.target.value || undefined }))}
+                      />
+                    </td>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top">
+                      <input
+                        className="input w-full"
+                        type="number"
+                        value={numberToInput(branch.Vout)}
+                        onChange={e => updateBranch(idx, current => ({ ...current, Vout: coerceNumber(e.target.value) ?? 0 }))}
+                      />
+                    </td>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top">
+                      <input
+                        className="input w-full"
+                        type="number"
+                        value={numberToInput(branch.Iout_max)}
+                        onChange={e => updateBranch(idx, current => ({ ...current, Iout_max: coerceNumber(e.target.value) }))}
+                      />
+                    </td>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top">
+                      <input
+                        className="input w-full"
+                        type="number"
+                        value={numberToInput(branch.Pout_max)}
+                        onChange={e => updateBranch(idx, current => ({ ...current, Pout_max: coerceNumber(e.target.value) }))}
+                      />
+                    </td>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top">
+                      <input
+                        className="input w-full"
+                        type="number"
+                        min={1}
+                        value={numberToInput(branch.phaseCount)}
+                        onChange={e => updateBranch(idx, current => ({ ...current, phaseCount: coerceInt(e.target.value) }))}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        )
-      }
-      case 'Converter': {
-        const node = draftNode as AnyNode & {
-          Vin_min?: number
-          Vin_max?: number
-          Vout?: number
-          Iout_max?: number
-          Pout_max?: number
-          phaseCount?: number
-          topology?: string
-          controllerPartNumber?: string
-          powerStagePartNumber?: string
-        }
-        return (
-          <div className="grid gap-3 lg:grid-cols-3">
-            <ParameterField label="Vin_min (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vin_min)}
-                onChange={e => updateFn(draft => ({ ...draft, Vin_min: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Vin_max (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vin_max)}
-                onChange={e => updateFn(draft => ({ ...draft, Vin_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Vout (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vout)}
-                onChange={e => updateFn(draft => ({ ...draft, Vout: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Iout_max (A)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Iout_max)}
-                onChange={e => updateFn(draft => ({ ...draft, Iout_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Pout_max (W)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Pout_max)}
-                onChange={e => updateFn(draft => ({ ...draft, Pout_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Phase count">
-              <input
-                className="input"
-                type="number"
-                min={1}
-                value={numberToInput(node.phaseCount)}
-                onChange={e => updateFn(draft => ({ ...draft, phaseCount: coerceInt(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Topology">
-              <select
-                className="input"
-                value={node.topology ?? ''}
-                onChange={e => updateFn(draft => ({ ...draft, topology: e.target.value || undefined }) as AnyNode)}
-              >
-                <option value="">Not specified</option>
-                <option value="buck">Buck</option>
-                <option value="llc">LLC</option>
-                <option value="ldo">LDO</option>
-                <option value="other">Other</option>
-              </select>
-            </ParameterField>
-            <ParameterField label="Controller part number">
-              <input
-                className="input"
-                value={node.controllerPartNumber ?? ''}
-                onChange={e => updateFn(draft => ({ ...draft, controllerPartNumber: e.target.value || undefined }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Power stage part number">
-              <input
-                className="input"
-                value={node.powerStagePartNumber ?? ''}
-                onChange={e => updateFn(draft => ({ ...draft, powerStagePartNumber: e.target.value || undefined }) as AnyNode)}
-              />
-            </ParameterField>
-          </div>
-        )
-      }
-      case 'DualOutputConverter': {
-        const node = draftNode as DualOutputConverterNode
-        const outputs = Array.isArray(node.outputs) ? node.outputs : []
-        const updateBranch = (idx: number, updater: (branch: DualOutputConverterBranch) => DualOutputConverterBranch) => {
-          updateFn(draft => {
-            const current = draft as DualOutputConverterNode
-            const existing = Array.isArray(current.outputs) ? [...current.outputs] : []
-            const baseline: DualOutputConverterBranch = existing[idx]
-              ? { ...existing[idx] }
-              : {
-                  id: genId('branch_'),
-                  label: `Output ${String.fromCharCode(65 + idx)}`,
-                  Vout: 5,
-                  Iout_max: 1,
-                  Pout_max: 5,
-                  phaseCount: 1,
-                  efficiency: { type: 'fixed', value: 0.9 },
-                }
-            existing[idx] = updater(baseline)
-            return { ...current, outputs: existing } as AnyNode
-          })
-        }
-        return (
-          <div className="space-y-3">
-            <div className="grid gap-3 lg:grid-cols-3">
-              <ParameterField label="Vin_min (V)">
-                <input
-                  className="input"
-                  type="number"
-                  value={numberToInput(node.Vin_min)}
-                  onChange={e => updateFn(draft => ({ ...draft, Vin_min: coerceNumber(e.target.value) }) as AnyNode)}
-                />
-              </ParameterField>
-              <ParameterField label="Vin_max (V)">
-                <input
-                  className="input"
-                  type="number"
-                  value={numberToInput(node.Vin_max)}
-                  onChange={e => updateFn(draft => ({ ...draft, Vin_max: coerceNumber(e.target.value) }) as AnyNode)}
-                />
-              </ParameterField>
-              <ParameterField label="Topology">
-                <select
-                  className="input"
-                  value={node.topology ?? ''}
-                  onChange={e => updateFn(draft => ({ ...draft, topology: e.target.value || undefined }) as AnyNode)}
-                >
-                  <option value="">Not specified</option>
-                  <option value="buck">Buck</option>
-                  <option value="llc">LLC</option>
-                  <option value="ldo">LDO</option>
-                  <option value="other">Other</option>
-                </select>
-              </ParameterField>
-              <ParameterField label="Controller part number">
-                <input
-                  className="input"
-                  value={node.controllerPartNumber ?? ''}
-                  onChange={e => updateFn(draft => ({ ...draft, controllerPartNumber: e.target.value || undefined }) as AnyNode)}
-                />
-              </ParameterField>
-              <ParameterField label="Power stage part number">
-                <input
-                  className="input"
-                  value={node.powerStagePartNumber ?? ''}
-                  onChange={e => updateFn(draft => ({ ...draft, powerStagePartNumber: e.target.value || undefined }) as AnyNode)}
-                />
-              </ParameterField>
-            </div>
-            {outputs.map((branch, idx) => (
-              <div key={branch.id || idx} className="rounded-md border border-slate-200 p-3 space-y-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Output {branch.label || branch.id || idx + 1}</div>
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-                  <ParameterField label="Label">
-                    <input
-                      className="input"
-                      value={branch.label ?? ''}
-                      onChange={e => updateBranch(idx, current => ({ ...current, label: e.target.value || undefined }))}
-                    />
-                  </ParameterField>
-                  <ParameterField label="Vout (V)">
-                    <input
-                      className="input"
-                      type="number"
-                      value={numberToInput(branch.Vout)}
-                      onChange={e => updateBranch(idx, current => ({ ...current, Vout: coerceNumber(e.target.value) ?? 0 }))}
-                    />
-                  </ParameterField>
-                  <ParameterField label="Iout_max (A)">
-                    <input
-                      className="input"
-                      type="number"
-                      value={numberToInput(branch.Iout_max)}
-                      onChange={e => updateBranch(idx, current => ({ ...current, Iout_max: coerceNumber(e.target.value) }))}
-                    />
-                  </ParameterField>
-                  <ParameterField label="Pout_max (W)">
-                    <input
-                      className="input"
-                      type="number"
-                      value={numberToInput(branch.Pout_max)}
-                      onChange={e => updateBranch(idx, current => ({ ...current, Pout_max: coerceNumber(e.target.value) }))}
-                    />
-                  </ParameterField>
-                  <ParameterField label="Phase count">
-                    <input
-                      className="input"
-                      type="number"
-                      min={1}
-                      value={numberToInput(branch.phaseCount)}
-                      onChange={e => updateBranch(idx, current => ({ ...current, phaseCount: coerceInt(e.target.value) }))}
-                    />
-                  </ParameterField>
-                </div>
-              </div>
-            ))}
-          </div>
-        )
-      }
-      case 'Load': {
-        const node = draftNode as AnyNode & {
-          Vreq?: number
-          I_typ?: number
-          I_max?: number
-          I_idle?: number
-          Utilization_typ?: number
-          Utilization_max?: number
-          numParalleledDevices?: number
-          critical?: boolean
-        }
-        return (
-          <div className="grid gap-3 lg:grid-cols-3">
-            <ParameterField label="Vreq (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vreq)}
-                onChange={e => updateFn(draft => ({ ...draft, Vreq: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="I_typ (A)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.I_typ)}
-                onChange={e => updateFn(draft => ({ ...draft, I_typ: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="I_max (A)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.I_max)}
-                onChange={e => updateFn(draft => ({ ...draft, I_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="I_idle (A)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.I_idle)}
-                onChange={e => updateFn(draft => ({ ...draft, I_idle: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Utilization_typ (%)">
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={100}
-                value={numberToInput(node.Utilization_typ)}
-                onChange={e => updateFn(draft => ({ ...draft, Utilization_typ: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Utilization_max (%)">
-              <input
-                className="input"
-                type="number"
-                min={0}
-                max={100}
-                value={numberToInput(node.Utilization_max)}
-                onChange={e => updateFn(draft => ({ ...draft, Utilization_max: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <ParameterField label="Parallel devices">
-              <input
-                className="input"
-                type="number"
-                min={1}
-                value={numberToInput(node.numParalleledDevices)}
-                onChange={e => updateFn(draft => ({ ...draft, numParalleledDevices: coerceInt(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-            <div className="flex items-end">
-              <CheckboxField
-                label="Critical load"
-                checked={node.critical !== false}
-                onChange={value => updateFn(draft => ({ ...draft, critical: value }) as AnyNode)}
-              />
-            </div>
-          </div>
-        )
-      }
-      case 'Bus': {
-        const node = draftNode as AnyNode & { V_bus?: number }
-        return (
-          <div className="grid gap-3">
-            <ParameterField label="V_bus (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.V_bus)}
-                onChange={e => updateFn(draft => ({ ...draft, V_bus: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-          </div>
-        )
-      }
-      case 'SubsystemInput': {
-        const node = draftNode as AnyNode & { Vout?: number }
-        return (
-          <div className="grid gap-3">
-            <ParameterField label="Vout (V)">
-              <input
-                className="input"
-                type="number"
-                value={numberToInput(node.Vout)}
-                onChange={e => updateFn(draft => ({ ...draft, Vout: coerceNumber(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-          </div>
-        )
-      }
-      case 'Subsystem': {
-        const node = draftNode as AnyNode & { numParalleledSystems?: number }
-        return (
-          <div className="grid gap-3 lg:grid-cols-2">
-            <ParameterField label="Paralleled systems">
-              <input
-                className="input"
-                type="number"
-                min={1}
-                value={numberToInput(node.numParalleledSystems)}
-                onChange={e => updateFn(draft => ({ ...draft, numParalleledSystems: coerceInt(e.target.value) }) as AnyNode)}
-              />
-            </ParameterField>
-          </div>
-        )
-      }
-      case 'Note': {
-        const node = draftNode as AnyNode & { text?: string }
-        return (
-          <ParameterField label="Content">
-            <textarea
-              className="input"
-              rows={3}
-              value={node.text ?? ''}
-              onChange={e => updateFn(draft => ({ ...draft, text: e.target.value }) as AnyNode)}
-            />
-          </ParameterField>
-        )
-      }
-      default:
-        return <div className="text-xs text-slate-500">No editable parameters available.</div>
+        </div>
+      )
     }
+
+    const fieldConfigs = NODE_PARAMETER_CONFIG[draftNode.type as NodeType]
+    if (fieldConfigs && fieldConfigs.length > 0) {
+      return renderFieldTable(fieldConfigs, draftNode, updateFn)
+    }
+
+    return <div className="text-xs text-slate-500">No editable parameters available.</div>
   }, [])
 
   if (!isOpen) return null
