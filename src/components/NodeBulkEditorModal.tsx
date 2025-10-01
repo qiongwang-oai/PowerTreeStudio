@@ -932,7 +932,7 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="flex max-h-[90vh] w-full max-w-[1452px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
+        <div className="flex max-h-[90vh] w-full max-w-[1952px] flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-xl">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <div>
               <div className="text-lg font-semibold text-slate-900">Bulk Edit Nodes</div>
@@ -1325,7 +1325,7 @@ function GroupSection({
                 <td className="px-3 py-3 align-top">
                   <div className="flex flex-wrap items-center gap-2">
                     <input
-                      className="input bg-sky-50 w-[300px] max-w-full"
+                      className="input bg-sky-50 w-[200px] max-w-full"
                       value={draft.node.name ?? ''}
                       onChange={e => updateNewNode(draft.tempId, current => ({ ...current, name: e.target.value } as AnyNode))}
                     />
@@ -1364,7 +1364,7 @@ function GroupSection({
                 <tr key={key} className="border-b last:border-b-0 align-top">
                   <td className="px-3 py-3 align-top">
                     <input
-                      className="input bg-sky-50 w-[300px] max-w-full"
+                      className="input bg-sky-50 w-[200px] max-w-full"
                       value={draftNode.name ?? ''}
                       onChange={e => updateDraft(key, draft => ({ ...draft, name: e.target.value }))}
                     />
