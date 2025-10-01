@@ -274,6 +274,7 @@ const renderFieldTable = (
                     <td key={`cell-${field.key}`} className={cellClass}>
                       <select
                         className="input w-full"
+                        aria-label={field.label}
                         value={displayValue as string}
                         onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
                       >
@@ -289,6 +290,7 @@ const renderFieldTable = (
                       <textarea
                         className="input w-full"
                         rows={3}
+                        aria-label={field.label}
                         value={displayValue as string}
                         placeholder={field.placeholder}
                         onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
@@ -301,6 +303,7 @@ const renderFieldTable = (
                       <input
                         className="input w-full"
                         type="number"
+                        aria-label={field.label}
                         value={displayValue as string}
                         min={field.min}
                         max={field.max}
@@ -316,6 +319,7 @@ const renderFieldTable = (
                     <td key={`cell-${field.key}`} className={cellClass}>
                       <input
                         className="input w-full"
+                        aria-label={field.label}
                         value={displayValue as string}
                         placeholder={field.placeholder}
                         onChange={e => updateNodeFieldValue(field, e.target.value, updateFn)}
@@ -836,13 +840,16 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
                 </tr>
               </thead>
               <tbody>
-                {outputs.map((branch, idx) => (
-                  <tr key={branch.id || idx}>
-                    <td className="border-t border-slate-200 px-2 py-1 align-top text-xs text-slate-500">{branch.label || branch.id || `Output ${idx + 1}`}</td>
+                {outputs.map((branch, idx) => {
+                  const branchLabel = branch?.label || branch?.id || `Output ${idx + 1}`
+                  return (
+                    <tr key={branch.id || idx}>
+                    <td className="border-t border-slate-200 px-2 py-1 align-top text-xs text-slate-500">{branchLabel}</td>
                     <td className="border-t border-slate-200 px-2 py-1 align-top">
                       <input
                         className="input w-full"
                         value={branch.label ?? ''}
+                        aria-label={`${branchLabel} label`}
                         onChange={e => updateBranch(idx, current => ({ ...current, label: e.target.value || undefined }))}
                       />
                     </td>
@@ -850,6 +857,7 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
                       <input
                         className="input w-full"
                         type="number"
+                        aria-label={`${branchLabel} Vout (V)`}
                         value={numberToInput(branch.Vout)}
                         onChange={e => updateBranch(idx, current => ({ ...current, Vout: coerceNumber(e.target.value) ?? 0 }))}
                       />
@@ -858,6 +866,7 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
                       <input
                         className="input w-full"
                         type="number"
+                        aria-label={`${branchLabel} Iout_max (A)`}
                         value={numberToInput(branch.Iout_max)}
                         onChange={e => updateBranch(idx, current => ({ ...current, Iout_max: coerceNumber(e.target.value) }))}
                       />
@@ -866,6 +875,7 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
                       <input
                         className="input w-full"
                         type="number"
+                        aria-label={`${branchLabel} Pout_max (W)`}
                         value={numberToInput(branch.Pout_max)}
                         onChange={e => updateBranch(idx, current => ({ ...current, Pout_max: coerceNumber(e.target.value) }))}
                       />
@@ -875,12 +885,14 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
                         className="input w-full"
                         type="number"
                         min={1}
+                        aria-label={`${branchLabel} phase count`}
                         value={numberToInput(branch.phaseCount)}
                         onChange={e => updateBranch(idx, current => ({ ...current, phaseCount: coerceInt(e.target.value) }))}
                       />
                     </td>
-                  </tr>
-                ))}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

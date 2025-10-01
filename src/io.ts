@@ -46,13 +46,35 @@ function sanitizeProject(project: Project): Project {
   return JSON.parse(JSON.stringify(project)) as Project
 }
 
+const getStorage = (): Storage | null => {
+  if (typeof globalThis === 'undefined') return null
+  const storage = (globalThis as any).localStorage
+  if (!storage || typeof storage.setItem !== 'function' || typeof storage.getItem !== 'function') {
+    return null
+  }
+  return storage as Storage
+}
+
 export function autosave(project: Project){
-  localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(project))
+  const storage = getStorage()
+  if (!storage) return
+  try {
+    storage.setItem(AUTOSAVE_KEY, JSON.stringify(project))
+  } catch (err) {
+    console.warn('Failed to write autosave snapshot', err)
+  }
 }
 
 export function loadAutosave(): Project | null {
-  const s = localStorage.getItem(AUTOSAVE_KEY)
-  return s ? JSON.parse(s) : null
+  const storage = getStorage()
+  if (!storage) return null
+  try {
+    const s = storage.getItem(AUTOSAVE_KEY)
+    return s ? JSON.parse(s) : null
+  } catch (err) {
+    console.warn('Failed to read autosave snapshot', err)
+    return null
+  }
 }
 
 export function download(filename: string, content: BlobPart, options?: DownloadOptions | string){

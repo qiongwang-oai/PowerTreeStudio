@@ -33,6 +33,8 @@ type State = {
   addNode: (n: AnyNode) => void
   addEdge: (e: Edge) => void
   updateNode: (id: string, patch: Partial<AnyNode>) => void
+  bulkUpdateNodes: (updates: { nodeId: string; patch: Partial<AnyNode>; subsystemPath?: string[] }) => void
+  bulkAddNodes: (adds: { node: AnyNode; subsystemPath?: string[] }[]) => void
   updateEdge?: (id: string, patch: Partial<Edge>) => void
   setScenario: (s: Scenario) => void
   updateNodePos: (id: string, x: number, y: number) => void
@@ -259,6 +261,167 @@ export const useStore = create<State>((set,get)=>({
   addNode: (n) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
   addEdge: (e) => { const p=get().project; ensureMarkupsInitialized(p); if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
   updateNode: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
+  bulkUpdateNodes: (updates) => {
+    if (!Array.isArray(updates) || updates.length === 0) return
+    const project = get().project
+    ensureMarkupsInitialized(project)
+
+    type NodeUpdate = { nodeId: string; patch: Partial<AnyNode> }
+    const updatesByPath = new Map<string, NodeUpdate[]>()
+
+    for (const entry of updates) {
+      if (!entry || typeof entry !== 'object') continue
+      const { nodeId, patch } = entry
+      if (typeof nodeId !== 'string' || !nodeId) continue
+      if (!patch || Object.keys(patch).length === 0) continue
+      const pathArray = Array.isArray(entry.subsystemPath)
+        ? entry.subsystemPath.filter(id => typeof id === 'string' && id.length > 0)
+        : []
+      const pathKey = pathArray.join('>')
+      const list = updatesByPath.get(pathKey) ?? []
+      list.push({ nodeId, patch })
+      updatesByPath.set(pathKey, list)
+    }
+
+    if (updatesByPath.size === 0) return
+
+    const pathKeys = Array.from(updatesByPath.keys())
+    const hasUpdatesFor = (pathKey: string): boolean => {
+      if (updatesByPath.has(pathKey)) return true
+      const prefix = pathKey ? `${pathKey}>` : ''
+      return pathKeys.some(key => key.startsWith(prefix) && key !== pathKey)
+    }
+
+    const applyUpdates = (target: Project, currentPathKey: string, currentPath: string[]): Project => {
+      let nodes = target.nodes as AnyNode[]
+      let mutated = false
+
+      const directUpdates = updatesByPath.get(currentPathKey)
+      if (directUpdates && directUpdates.length) {
+        const patchMap = new Map<string, Partial<AnyNode>>()
+        for (const { nodeId, patch } of directUpdates) {
+          const existingPatch = patchMap.get(nodeId)
+          patchMap.set(nodeId, existingPatch ? { ...existingPatch, ...patch } : patch)
+        }
+        let changed = false
+        const nextNodes = nodes.map(node => {
+          const patch = patchMap.get(node.id)
+          if (!patch) return node
+          changed = true
+          return { ...node, ...patch } as AnyNode
+        }) as AnyNode[]
+        if (changed) {
+          nodes = nextNodes
+          mutated = true
+        }
+      }
+
+      const processedNodes = nodes.map(node => {
+        if ((node as AnyNode).type !== 'Subsystem') return node
+        const subsystem = node as AnyNode & { project?: Project }
+        if (!subsystem.project) return node
+        const childPath = [...currentPath, node.id]
+        const childKey = childPath.join('>')
+        if (!hasUpdatesFor(childKey)) return node
+        const updatedProject = applyUpdates(subsystem.project, childKey, childPath)
+        if (updatedProject === subsystem.project) return node
+        mutated = true
+        return { ...subsystem, project: updatedProject } as AnyNode
+      }) as AnyNode[]
+
+      if (!mutated) {
+        return target
+      }
+      return { ...target, nodes: processedNodes }
+    }
+
+    const nextProject = applyUpdates(project, '', [])
+    if (nextProject === project) return
+
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    set({ project: nextProject })
+    autosave(nextProject)
+  },
+  bulkAddNodes: (adds) => {
+    if (!Array.isArray(adds) || adds.length === 0) return
+    const project = get().project
+    ensureMarkupsInitialized(project)
+
+    const validAdds = adds
+      .filter(entry => entry && typeof entry === 'object' && entry.node && typeof (entry.node as AnyNode).id === 'string' && ((entry.node as AnyNode).id as string).length > 0)
+      .map(entry => ({
+        node: JSON.parse(JSON.stringify(entry.node)) as AnyNode,
+        path: Array.isArray(entry.subsystemPath)
+          ? entry.subsystemPath.filter(id => typeof id === 'string' && id.length > 0)
+          : [],
+      }))
+
+    if (validAdds.length === 0) return
+
+    const addsByPath = new Map<string, AnyNode[]>()
+    for (const entry of validAdds) {
+      const pathKey = entry.path.join('>')
+      const list = addsByPath.get(pathKey) ?? []
+      list.push(entry.node)
+      addsByPath.set(pathKey, list)
+    }
+
+    if (addsByPath.size === 0) return
+
+    const pathKeys = Array.from(addsByPath.keys())
+    const hasAddsFor = (pathKey: string): boolean => {
+      if (addsByPath.has(pathKey)) return true
+      const prefix = pathKey.length ? `${pathKey}>` : ''
+      return pathKeys.some(key => key !== pathKey && key.startsWith(prefix))
+    }
+
+    const applyAdds = (target: Project, currentPathKey: string, currentPath: string[]): Project => {
+      let nodes = target.nodes as AnyNode[]
+      let mutated = false
+
+      const toAdd = addsByPath.get(currentPathKey)
+      if (toAdd && toAdd.length) {
+        const existingIds = new Set(nodes.map(node => node.id))
+        const uniqueAdds = toAdd.filter(node => {
+          if (!node || typeof node.id !== 'string') return false
+          if (existingIds.has(node.id)) return false
+          existingIds.add(node.id)
+          return true
+        })
+        if (uniqueAdds.length) {
+          nodes = [...nodes, ...uniqueAdds]
+          mutated = true
+        }
+      }
+
+      const processedNodes = nodes.map(node => {
+        if ((node as AnyNode).type !== 'Subsystem') return node
+        const subsystem = node as AnyNode & { project?: Project }
+        if (!subsystem.project) return node
+        const childPath = [...currentPath, node.id]
+        const childKey = childPath.join('>')
+        if (!hasAddsFor(childKey)) return node
+        const updatedProject = applyAdds(subsystem.project as Project, childKey, childPath)
+        if (updatedProject === subsystem.project) return node
+        mutated = true
+        return { ...subsystem, project: updatedProject } as AnyNode
+      }) as AnyNode[]
+
+      if (!mutated) {
+        return target
+      }
+      return { ...target, nodes: processedNodes }
+    }
+
+    const nextProject = applyAdds(project, '', [])
+    if (nextProject === project) return
+
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    set({ project: nextProject })
+    autosave(nextProject)
+  },
   updateEdge: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
   setScenario: (s) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
   updateNodePos: (id, x, y) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
