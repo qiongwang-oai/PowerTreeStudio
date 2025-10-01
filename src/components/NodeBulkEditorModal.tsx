@@ -134,40 +134,12 @@ const NODE_PARAMETER_CONFIG: Partial<Record<NodeType, NodeFieldConfig[]>> = {
     { key: 'Iout_max', label: 'Iout_max (A)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[120px]' },
     { key: 'Pout_max', label: 'Pout_max (W)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[120px]' },
     { key: 'phaseCount', label: 'Phase count', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[110px]' },
-    {
-      key: 'topology',
-      label: 'Topology',
-      input: 'select',
-      options: [
-        { value: '', label: 'Not specified' },
-        { value: 'buck', label: 'Buck' },
-        { value: 'llc', label: 'LLC' },
-        { value: 'ldo', label: 'LDO' },
-        { value: 'other', label: 'Other' },
-      ],
-      coerce: coerceTrimmedString,
-      widthClass: 'min-w-[140px]'
-    },
     { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
     { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
   ],
   DualOutputConverter: [
     { key: 'Vin_min', label: 'Vin_min (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
     { key: 'Vin_max', label: 'Vin_max (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
-    {
-      key: 'topology',
-      label: 'Topology',
-      input: 'select',
-      options: [
-        { value: '', label: 'Not specified' },
-        { value: 'buck', label: 'Buck' },
-        { value: 'llc', label: 'LLC' },
-        { value: 'ldo', label: 'LDO' },
-        { value: 'other', label: 'Other' },
-      ],
-      coerce: coerceTrimmedString,
-      widthClass: 'min-w-[140px]'
-    },
     { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
     { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
   ],
@@ -395,7 +367,6 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
       if (next.Iout_max !== prev.Iout_max) patch.Iout_max = next.Iout_max
       if (next.Pout_max !== prev.Pout_max) patch.Pout_max = next.Pout_max
       if (next.phaseCount !== prev.phaseCount) patch.phaseCount = next.phaseCount
-      if ((next.topology || '') !== (prev.topology || '')) patch.topology = next.topology
       if ((next.controllerPartNumber || '') !== (prev.controllerPartNumber || '')) patch.controllerPartNumber = next.controllerPartNumber
       if ((next.powerStagePartNumber || '') !== (prev.powerStagePartNumber || '')) patch.powerStagePartNumber = next.powerStagePartNumber
       break
@@ -405,7 +376,6 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
       const prev = original as DualOutputConverterNode
       if (next.Vin_min !== prev.Vin_min) patch.Vin_min = next.Vin_min
       if (next.Vin_max !== prev.Vin_max) patch.Vin_max = next.Vin_max
-      if ((next.topology || '') !== (prev.topology || '')) patch.topology = next.topology
       if ((next.controllerPartNumber || '') !== (prev.controllerPartNumber || '')) patch.controllerPartNumber = next.controllerPartNumber
       if ((next.powerStagePartNumber || '') !== (prev.powerStagePartNumber || '')) patch.powerStagePartNumber = next.powerStagePartNumber
       const nextOutputs = Array.isArray(next.outputs) ? next.outputs : []
