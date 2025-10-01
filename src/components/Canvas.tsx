@@ -1669,7 +1669,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const key = edgeGroupKey({ from: e.from, fromHandle: e.fromHandle })
       const info = groupMidpointInfo.get(key)
       const midpointOffset = getGroupOffset({ from: e.from, to: e.to, fromHandle: e.fromHandle })
-      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(1)
+      const resistanceLabel = (e.interconnect?.R_milliohm ?? 0).toFixed(2)
       const currentLabel = I.toFixed(1)
       const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
       const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
