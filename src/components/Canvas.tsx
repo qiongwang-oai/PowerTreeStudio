@@ -20,6 +20,15 @@ import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuic
 import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 import MarkupLayer, { MarkupTool } from './markups/MarkupLayer'
 import { genId } from '../utils'
+import {
+  mergeMultiSelections,
+  normalizeBounds,
+  boundsIntersects,
+  pointsToBounds,
+  selectionHasItems,
+} from '../utils/multiSelection'
+import type { Bounds } from '../utils/multiSelection'
+import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../utils/selectionClipboard'
 import { SUBSYSTEM_BASE_HEIGHT, SUBSYSTEM_PORT_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
@@ -933,46 +942,6 @@ const parseNestedEdgeId = (id: string) => {
   return { subsystemId, edgeId }
 }
 
-type Bounds = {
-  minX: number
-  maxX: number
-  minY: number
-  maxY: number
-}
-
-const pointsToBounds = (points: { x: number; y: number }[]): Bounds => {
-  let minX = Infinity
-  let minY = Infinity
-  let maxX = -Infinity
-  let maxY = -Infinity
-  for (const point of points) {
-    if (point.x < minX) minX = point.x
-    if (point.x > maxX) maxX = point.x
-    if (point.y < minY) minY = point.y
-    if (point.y > maxY) maxY = point.y
-  }
-  return {
-    minX,
-    maxX,
-    minY,
-    maxY,
-  }
-}
-
-const boundsIntersects = (a: Bounds, b: Bounds): boolean => {
-  if (a.maxX < b.minX || a.minX > b.maxX) return false
-  if (a.maxY < b.minY || a.minY > b.maxY) return false
-  return true
-}
-
-const normalizeBounds = (a: { x: number; y: number }, b: { x: number; y: number }): Bounds => ({
-  minX: Math.min(a.x, b.x),
-  maxX: Math.max(a.x, b.x),
-  minY: Math.min(a.y, b.y),
-  maxY: Math.max(a.y, b.y),
-})
-
-
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   { onSelect, onOpenSubsystem, markupTool, onMarkupToolChange, selectionMode, onSelectionModeChange },
   ref
@@ -1034,15 +1003,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setMarqueeRect(null)
   }, [])
 
-  const mergeSelections = useCallback((base: MultiSelection | null, addition: MultiSelection): MultiSelection => {
-    const union = (a: string[], b: string[]) => Array.from(new Set([...a, ...b]))
-    return {
-      kind: 'multi',
-      nodes: union(base?.nodes ?? [], addition.nodes),
-      edges: union(base?.edges ?? [], addition.edges),
-      markups: union(base?.markups ?? [], addition.markups),
-    }
-  }, [])
+  const mergeSelections = useCallback(
+    (base: MultiSelection | null, addition: MultiSelection): MultiSelection =>
+      mergeMultiSelections(base, addition),
+    []
+  )
 
   const applyMultiSelection = useCallback((selection: MultiSelection | null) => {
     setSelectedNodeId(null)
@@ -1437,8 +1402,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }
       setMarqueeRect(null)
       setMultiSelectionPreview(null)
-      const hasItems = result.nodes.length + result.edges.length + result.markups.length > 0
-      if (hasItems) {
+      if (selectionHasItems(result)) {
         applyMultiSelection(result)
       } else if (!state.additive) {
         applyMultiSelection(null)
@@ -2031,69 +1995,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     return markup ? (JSON.parse(JSON.stringify(markup)) as CanvasMarkup) : null
   }, [markups])
 
-  const collectClipboardPayload = useCallback((selection: MultiSelection): ClipboardPayload | null => {
-    const nodeSnapshots: AnyNode[] = []
-    for (const nodeId of selection.nodes) {
-      if (nodeId.includes('::')) continue
-      const snapshot = resolveNodeSnapshotById(nodeId)
-      if (snapshot) {
-        nodeSnapshots.push(snapshot)
-      }
-    }
-
-    const nodeIdSet = new Set(nodeSnapshots.map(n => n.id))
-    const edgeSnapshots: Edge[] = []
-    for (const edgeId of selection.edges) {
-      if (edgeId.includes('::edge::')) continue
-      const snapshot = resolveEdgeSnapshotById(edgeId)
-      if (!snapshot) continue
-      if (nodeIdSet.has(snapshot.from) && nodeIdSet.has(snapshot.to)) {
-        edgeSnapshots.push(snapshot)
-      }
-    }
-
-    const markupSnapshots: CanvasMarkup[] = []
-    for (const markupId of selection.markups) {
-      const snapshot = resolveMarkupSnapshotById(markupId)
-      if (snapshot) {
-        markupSnapshots.push(snapshot)
-      }
-    }
-
-    if (!nodeSnapshots.length && !markupSnapshots.length) {
-      return null
-    }
-
-    const originPoints: { x: number; y: number }[] = []
-    for (const node of nodeSnapshots) {
-      if (typeof node.x === 'number' && typeof node.y === 'number') {
-        originPoints.push({ x: node.x, y: node.y })
-      }
-    }
-    for (const markup of markupSnapshots) {
-      if (markup.type === 'text') {
-        originPoints.push({ x: markup.position.x, y: markup.position.y })
-      } else if (markup.type === 'rectangle') {
-        originPoints.push({ x: markup.position.x, y: markup.position.y })
-      } else if (markup.type === 'line') {
-        originPoints.push({ x: Math.min(markup.start.x, markup.end.x), y: Math.min(markup.start.y, markup.end.y) })
-      }
-    }
-    let origin: { x: number; y: number } | null = null
-    if (originPoints.length) {
-      origin = originPoints.reduce((acc, point) => ({
-        x: Math.min(acc.x, point.x),
-        y: Math.min(acc.y, point.y),
-      }), { x: originPoints[0].x, y: originPoints[0].y })
-    }
-
-    return {
-      nodes: nodeSnapshots,
-      edges: edgeSnapshots,
-      markups: markupSnapshots,
-      origin,
-    }
-  }, [resolveEdgeSnapshotById, resolveMarkupSnapshotById, resolveNodeSnapshotById])
+  const collectClipboardPayload = useCallback(
+    (selection: MultiSelection): ClipboardPayload | null =>
+      collectClipboardPayloadShared(
+        selection,
+        {
+          resolveNodeSnapshot: (nodeId: string) => {
+            if (nodeId.includes('::')) return null
+            return resolveNodeSnapshotById(nodeId)
+          },
+          resolveEdgeSnapshot: (edgeId: string) => {
+            if (edgeId.includes('::edge::')) return null
+            return resolveEdgeSnapshotById(edgeId)
+          },
+          resolveMarkupSnapshot: resolveMarkupSnapshotById,
+        }
+      ),
+    [resolveEdgeSnapshotById, resolveMarkupSnapshotById, resolveNodeSnapshotById]
+  )
 
   const handleCopy = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
@@ -2143,73 +2062,31 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     setContextMenu(null)
   }, [contextMenu, quickPresetDialogs, resolveNodeSnapshotById, setContextMenu])
 
-  const performPaste = useCallback((target: { x: number; y: number }) => {
-    const payload = clipboard
-    if (!payload) return false
-    if (!payload.nodes.length && !payload.markups.length) return false
-    const baseOrigin = payload.origin ?? {
-      x: payload.nodes[0]?.x ?? target.x,
-      y: payload.nodes[0]?.y ?? target.y,
-    }
-    const OFFSET = 32
-    const translation = {
-      x: target.x - baseOrigin.x + OFFSET,
-      y: target.y - baseOrigin.y + OFFSET,
-    }
-    const idMap = new Map<string, string>()
-    const newNodeIds: string[] = []
-    for (const node of payload.nodes) {
-      const clone = JSON.parse(JSON.stringify(node)) as AnyNode
-      const newId = genId('node_')
-      idMap.set(node.id, newId)
-      clone.id = newId
-      if (typeof clone.x === 'number') clone.x += translation.x
-      else clone.x = translation.x
-      if (typeof clone.y === 'number') clone.y += translation.y
-      else clone.y = translation.y
-      if (clone.name) {
-        clone.name = `${clone.name} Copy`
+  const performPaste = useCallback(
+    (target: { x: number; y: number }) => {
+      const payload = clipboard
+      if (!payload) return false
+      if (!payload.nodes.length && !payload.markups.length) return false
+
+      const { newNodeIds, newEdgeIds, newMarkupIds } = applyClipboardPayload({
+        payload,
+        target,
+        generateNodeId: () => genId('node_'),
+        generateEdgeId: () => genId('edge_'),
+        generateMarkupId: () => genId('markup_'),
+        addNode: addNodeStore,
+        addEdge: addEdgeStore,
+        addMarkup: addMarkupStore,
+      })
+
+      if (newNodeIds.length || newEdgeIds.length || newMarkupIds.length) {
+        applyMultiSelection({ kind: 'multi', nodes: newNodeIds, edges: newEdgeIds, markups: newMarkupIds })
+        return true
       }
-      addNodeStore(clone)
-      newNodeIds.push(newId)
-    }
-    const newEdgeIds: string[] = []
-    for (const edge of payload.edges) {
-      const source = idMap.get(edge.from)
-      const target = idMap.get(edge.to)
-      if (!source || !target) continue
-      const clone = JSON.parse(JSON.stringify(edge)) as Edge
-      clone.id = genId('edge_')
-      clone.from = source
-      clone.to = target
-      if (typeof clone.midpointX === 'number' && Number.isFinite(clone.midpointX)) {
-        clone.midpointX += translation.x
-      }
-      addEdgeStore(clone)
-      newEdgeIds.push(clone.id)
-    }
-    const newMarkupIds: string[] = []
-    for (const markup of payload.markups) {
-      const clone = JSON.parse(JSON.stringify(markup)) as CanvasMarkup
-      clone.id = genId('markup_')
-      if (clone.type === 'text' || clone.type === 'rectangle') {
-        clone.position = {
-          x: clone.position.x + translation.x,
-          y: clone.position.y + translation.y,
-        }
-      } else if (clone.type === 'line') {
-        clone.start = { x: clone.start.x + translation.x, y: clone.start.y + translation.y }
-        clone.end = { x: clone.end.x + translation.x, y: clone.end.y + translation.y }
-      }
-      addMarkupStore(clone)
-      newMarkupIds.push(clone.id)
-    }
-    if (newNodeIds.length || newEdgeIds.length || newMarkupIds.length) {
-      applyMultiSelection({ kind: 'multi', nodes: newNodeIds, edges: newEdgeIds, markups: newMarkupIds })
-      return true
-    }
-    return false
-  }, [addEdgeStore, addMarkupStore, addNodeStore, applyMultiSelection, clipboard])
+      return false
+    },
+    [addEdgeStore, addMarkupStore, addNodeStore, applyMultiSelection, clipboard]
+  )
 
   const handlePaste = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'pane') return

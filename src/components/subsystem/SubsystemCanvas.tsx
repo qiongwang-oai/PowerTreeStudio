@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
-import { Project, AnyNode, Edge } from '../../models'
+import { Project, AnyNode, Edge, CanvasMarkup } from '../../models'
 import { compute, etaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { useStore } from '../../state/store'
+import type { ClipboardPayload } from '../../state/store'
 import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
@@ -13,11 +14,22 @@ import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDesc
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
 import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 import { genId } from '../../utils'
+import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
+import {
+  mergeMultiSelections,
+  normalizeBounds,
+  boundsIntersects,
+  pointsToBounds,
+  selectionHasItems,
+  type Bounds,
+} from '../../utils/multiSelection'
+import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../../utils/selectionClipboard'
 import { computeSubsystemNodeMinHeight, getSubsystemPortPosition } from '../SubsystemNodeLayout'
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
-  const isSelected = !!selected
+  const isMultiSelected = Boolean((data as any)?.__multiSelected)
+  const isSelected = !!selected || isMultiSelected
   const accentColor = '#0284c7'
   const nodeType = (data as any).type
   const rawParallel = typeof (data as any)?.parallelCount === 'number' ? (data as any).parallelCount : 1
@@ -518,7 +530,23 @@ const parallelCountForNode = (node: any): number => {
   return 1
 }
 
-export default function SubsystemCanvas({ subsystemId, subsystemPath, project, onSelect, onOpenNested }:{ subsystemId:string, subsystemPath?: string[], project: Project, onSelect:(id:string|null)=>void, onOpenNested?:(id:string)=>void }){
+export default function SubsystemCanvas({
+  subsystemId,
+  subsystemPath,
+  project,
+  onSelect,
+  onOpenNested,
+  selectionMode,
+  onSelectionModeChange,
+}:{
+  subsystemId: string
+  subsystemPath?: string[]
+  project: Project
+  onSelect: (selection: InspectorSelection | MultiSelection | null) => void
+  onOpenNested?: (id: string) => void
+  selectionMode: SelectionMode
+  onSelectionModeChange: (mode: SelectionMode) => void
+}) {
   const addEdgeStore = useStore(s=>s.nestedSubsystemAddEdge)
   const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
   const removeNode = useStore(s=>s.nestedSubsystemRemoveNode)
@@ -530,12 +558,14 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const clipboard = useStore(s=>s.clipboard)
   const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
-  const { screenToFlowPosition } = useReactFlow()
+  const reactFlowInstance = useReactFlow()
+  const { screenToFlowPosition } = reactFlowInstance
 
   const path = useMemo(()=> (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId], [subsystemPath, subsystemId])
   const groupMidpointInfo = useMemo(() => computeEdgeGroupInfo(project.edges), [project.edges])
   const liveMidpointDraft = useRef(new Map<string, { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }>())
   const setEdgesRef = useRef<React.Dispatch<React.SetStateAction<RFEdge[]>> | null>(null)
+  const multiDragStateRef = useRef<{ originId: string; positions: Map<string, { x: number; y: number }> } | null>(null)
   useEffect(() => {
     liveMidpointDraft.current.clear()
   }, [project.edges])
@@ -547,6 +577,18 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   const [contextMenu, setContextMenu] = useState<{ type: 'node'|'pane'; x:number; y:number; targetId?: string }|null>(null)
   const [selectedNodeId, setSelectedNodeId] = useState<string|null>(null)
   const [selectedEdgeId, setSelectedEdgeId] = useState<string|null>(null)
+  const [selectedMarkupId, setSelectedMarkupId] = useState<string | null>(null)
+  const [multiSelection, setMultiSelection] = useState<MultiSelection | null>(null)
+  const [multiSelectionPreview, setMultiSelectionPreview] = useState<MultiSelection | null>(null)
+  const activeMultiSelection = multiSelectionPreview ?? multiSelection
+  const [marqueeRect, setMarqueeRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const marqueeStateRef = useRef<{
+    originClient: { x: number; y: number }
+    originFlow: { x: number; y: number }
+    additive: boolean
+  } | null>(null)
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const markups = Array.isArray(project.markups) ? project.markups : []
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -664,6 +706,253 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
+  const clearMultiSelection = useCallback(() => {
+    setMultiSelection(null)
+    setMultiSelectionPreview(null)
+    setMarqueeRect(null)
+    marqueeStateRef.current = null
+  }, [])
+
+  const mergeSelections = useCallback(
+    (base: MultiSelection | null, addition: MultiSelection): MultiSelection =>
+      mergeMultiSelections(base, addition),
+    []
+  )
+
+  const applyMultiSelection = useCallback(
+    (selection: MultiSelection | null) => {
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+      setSelectedMarkupId(null)
+      setMultiSelectionPreview(null)
+      setMultiSelection(selection)
+      if (selection) {
+        if (selectionMode !== 'multi') {
+          onSelectionModeChange('multi')
+        }
+        onSelect(selection)
+      } else {
+        onSelect(null)
+      }
+    },
+    [onSelect, onSelectionModeChange, selectionMode]
+  )
+
+  const computeSelectionWithinBounds = useCallback(
+    (bounds: Bounds): MultiSelection => {
+      const rfNodes = reactFlowInstance.getNodes()
+      const nodeIds: string[] = []
+      const nodeBoundsMap = new Map<string, Bounds>()
+      for (const node of rfNodes) {
+        const position = node.positionAbsolute ?? node.position
+        const width = Number.isFinite(node.width) ? (node.width as number) : 200
+        const height = Number.isFinite(node.height) ? (node.height as number) : 120
+        const rect: Bounds = {
+          minX: position.x,
+          maxX: position.x + width,
+          minY: position.y,
+          maxY: position.y + height,
+        }
+        nodeBoundsMap.set(node.id, rect)
+        if (boundsIntersects(rect, bounds)) {
+          nodeIds.push(node.id)
+        }
+      }
+
+      const nodeIdSet = new Set(nodeIds)
+      const edgeIds: string[] = []
+      const rfEdges = reactFlowInstance.getEdges()
+      for (const edge of rfEdges) {
+        const sourceRect = nodeBoundsMap.get(edge.source)
+        const targetRect = nodeBoundsMap.get(edge.target)
+        if (!sourceRect || !targetRect) continue
+        const combined: Bounds = {
+          minX: Math.min(sourceRect.minX, sourceRect.maxX, targetRect.minX, targetRect.maxX),
+          maxX: Math.max(sourceRect.minX, sourceRect.maxX, targetRect.minX, targetRect.maxX),
+          minY: Math.min(sourceRect.minY, sourceRect.maxY, targetRect.minY, targetRect.maxY),
+          maxY: Math.max(sourceRect.minY, sourceRect.maxY, targetRect.minY, targetRect.maxY),
+        }
+        if (boundsIntersects(combined, bounds) || (nodeIdSet.has(edge.source) && nodeIdSet.has(edge.target))) {
+          edgeIds.push(edge.id)
+        }
+      }
+
+      const markupIds: string[] = []
+      for (const markup of markups) {
+        let rect: Bounds | null = null
+        if (markup.type === 'text' || markup.type === 'rectangle') {
+          const width = markup.type === 'rectangle' ? markup.size.width : markup.size?.width ?? 220
+          const height = markup.type === 'rectangle'
+            ? markup.size.height
+            : Math.max(18, (markup.fontSize ?? 16) * 1.4)
+          rect = {
+            minX: markup.position.x,
+            maxX: markup.position.x + width,
+            minY: markup.position.y,
+            maxY: markup.position.y + height,
+          }
+        } else if (markup.type === 'line') {
+          rect = pointsToBounds([
+            { x: markup.start.x, y: markup.start.y },
+            { x: markup.end.x, y: markup.end.y },
+          ])
+        }
+        if (rect && boundsIntersects(rect, bounds)) {
+          markupIds.push(markup.id)
+        }
+      }
+
+      return {
+        kind: 'multi',
+        nodes: nodeIds,
+        edges: edgeIds,
+        markups: markupIds,
+      }
+    },
+    [markups, reactFlowInstance]
+  )
+
+  const startMarqueeSelection = useCallback(
+    (originClient: { x: number; y: number }, additive: boolean) => {
+      if (!wrapperRef.current) return
+      const bounds = wrapperRef.current.getBoundingClientRect()
+      const originFlow = screenToFlowPosition(originClient)
+      marqueeStateRef.current = { originClient, originFlow, additive }
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+      setSelectedMarkupId(null)
+      setMultiSelectionPreview(null)
+      setMarqueeRect({
+        left: originClient.x - bounds.left,
+        top: originClient.y - bounds.top,
+        width: 0,
+        height: 0,
+      })
+
+      const handlePointerMove = (moveEvent: PointerEvent) => {
+        const state = marqueeStateRef.current
+        if (!state || selectionMode !== 'multi') return
+        const current = { x: moveEvent.clientX, y: moveEvent.clientY }
+        const rectLeft = Math.min(state.originClient.x, current.x) - bounds.left
+        const rectTop = Math.min(state.originClient.y, current.y) - bounds.top
+        const rectWidth = Math.abs(current.x - state.originClient.x)
+        const rectHeight = Math.abs(current.y - state.originClient.y)
+        setMarqueeRect({ left: rectLeft, top: rectTop, width: rectWidth, height: rectHeight })
+        const currentFlow = screenToFlowPosition(current)
+        const flowBounds = normalizeBounds(state.originFlow, currentFlow)
+        const draft = computeSelectionWithinBounds(flowBounds)
+        const preview = state.additive ? mergeSelections(multiSelection, draft) : draft
+        setMultiSelectionPreview(preview)
+      }
+
+      const handlePointerUp = (upEvent: PointerEvent) => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        window.removeEventListener('pointercancel', handlePointerCancel)
+        const state = marqueeStateRef.current
+        marqueeStateRef.current = null
+        if (!state) return
+        const current = { x: upEvent.clientX, y: upEvent.clientY }
+        const flowBounds = normalizeBounds(state.originFlow, screenToFlowPosition(current))
+        let result = computeSelectionWithinBounds(flowBounds)
+        if (state.additive) {
+          result = mergeSelections(multiSelection, result)
+        }
+        setMarqueeRect(null)
+        setMultiSelectionPreview(null)
+        if (selectionHasItems(result)) {
+          applyMultiSelection(result)
+        } else if (!state.additive) {
+          applyMultiSelection(null)
+        }
+      }
+
+      const handlePointerCancel = () => {
+        window.removeEventListener('pointermove', handlePointerMove)
+        window.removeEventListener('pointerup', handlePointerUp)
+        window.removeEventListener('pointercancel', handlePointerCancel)
+        marqueeStateRef.current = null
+        setMarqueeRect(null)
+        setMultiSelectionPreview(null)
+      }
+
+      window.addEventListener('pointermove', handlePointerMove)
+      window.addEventListener('pointerup', handlePointerUp)
+      window.addEventListener('pointercancel', handlePointerCancel)
+    },
+    [applyMultiSelection, computeSelectionWithinBounds, mergeSelections, multiSelection, screenToFlowPosition, selectionMode]
+  )
+
+  const resolveNodeSnapshotById = useCallback(
+    (nodeId: string): AnyNode | null => {
+      const node = project.nodes.find(n => n.id === nodeId)
+      return node ? (JSON.parse(JSON.stringify(node)) as AnyNode) : null
+    },
+    [project.nodes]
+  )
+
+  const resolveEdgeSnapshotById = useCallback(
+    (edgeId: string): Edge | null => {
+      const edge = project.edges.find(e => e.id === edgeId)
+      return edge ? (JSON.parse(JSON.stringify(edge)) as Edge) : null
+    },
+    [project.edges]
+  )
+
+  const resolveMarkupSnapshotById = useCallback(
+    (markupId: string): CanvasMarkup | null => {
+      const markup = markups.find(m => m.id === markupId)
+      return markup ? (JSON.parse(JSON.stringify(markup)) as CanvasMarkup) : null
+    },
+    [markups]
+  )
+
+  const collectClipboardPayload = useCallback(
+    (selection: MultiSelection): ClipboardPayload | null =>
+      collectClipboardPayloadShared(selection, {
+        resolveNodeSnapshot: resolveNodeSnapshotById,
+        resolveEdgeSnapshot: resolveEdgeSnapshotById,
+        resolveMarkupSnapshot: resolveMarkupSnapshotById,
+      }),
+    [resolveEdgeSnapshotById, resolveMarkupSnapshotById, resolveNodeSnapshotById]
+  )
+
+  const performPaste = useCallback(
+    (target: { x: number; y: number }) => {
+      const payload = clipboard
+      if (!payload) return false
+      if (!payload.nodes.length && !payload.markups.length) return false
+      const { newNodeIds, newEdgeIds, newMarkupIds } = applyClipboardPayload({
+        payload,
+        target,
+        generateNodeId: () => genId('node_'),
+        generateEdgeId: () => genId('edge_'),
+        addNode: node => addNodeNested(path, node),
+        addEdge: edge => addEdgeStore(path, edge),
+      })
+      if (newNodeIds.length || newEdgeIds.length || newMarkupIds.length) {
+        applyMultiSelection({ kind: 'multi', nodes: newNodeIds, edges: newEdgeIds, markups: newMarkupIds })
+        return true
+      }
+      return false
+    },
+    [addEdgeStore, addNodeNested, applyMultiSelection, clipboard, path]
+  )
+
+  const deleteSelection = useCallback(
+    (selection: MultiSelection) => {
+      for (const nodeId of selection.nodes) {
+        removeNode(path, nodeId)
+      }
+      for (const edgeId of selection.edges) {
+        removeEdge(path, edgeId)
+      }
+      // Markup deletion not yet supported inside subsystem canvas
+      applyMultiSelection(null)
+    },
+    [applyMultiSelection, path, removeEdge, removeNode]
+  )
+
   const nodePositions = useMemo(() => {
     const map = new Map<string, { x: number; y: number }>()
     for (const node of nodes) {
@@ -689,6 +978,15 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     }
     return offset
   }, [groupMidpointInfo, nodePositions])
+
+  useEffect(() => {
+    if (selectionMode !== 'multi') {
+      setMultiSelection(null)
+      setMultiSelectionPreview(null)
+      setMarqueeRect(null)
+      marqueeStateRef.current = null
+    }
+  }, [selectionMode])
 
   const handleMidpointChange = useCallback((edgeId: string, payload: { offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' }) => {
     const setter = setEdgesRef.current
@@ -1082,11 +1380,15 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   useEffect(() => {
     setNodes(prev => prev.map(rn => {
-      const shouldSelect = selectedNodeId === rn.id
-      if (rn.selected === shouldSelect) return rn
-      return { ...rn, selected: shouldSelect }
+      const inMulti = activeMultiSelection?.nodes.includes(rn.id) ?? false
+      const shouldSelect = selectedNodeId === rn.id || inMulti
+      const nextData = inMulti !== Boolean((rn.data as any)?.__multiSelected)
+        ? { ...rn.data, __multiSelected: inMulti }
+        : rn.data
+      if (rn.selected === shouldSelect && nextData === rn.data) return rn
+      return { ...rn, selected: shouldSelect, data: nextData }
     }))
-  }, [selectedNodeId, setNodes])
+  }, [activeMultiSelection, selectedNodeId, setNodes])
 
   useEffect(() => {
     setEdges(prev => {
@@ -1162,11 +1464,15 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   useEffect(() => {
     setEdges(prev => prev.map(edge => {
-      const shouldSelect = selectedEdgeId === edge.id
-      if (edge.selected === shouldSelect) return edge
-      return { ...edge, selected: shouldSelect }
+      const inMulti = activeMultiSelection?.edges.includes(edge.id) ?? false
+      const shouldSelect = selectedEdgeId === edge.id || inMulti
+      const nextData = inMulti !== Boolean((edge.data as any)?.isMultiSelected)
+        ? { ...edge.data, isMultiSelected: inMulti }
+        : edge.data
+      if (edge.selected === shouldSelect && nextData === edge.data) return edge
+      return { ...edge, selected: shouldSelect, data: nextData }
     }))
-  }, [selectedEdgeId, setEdges])
+  }, [activeMultiSelection, selectedEdgeId, setEdges])
 
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
@@ -1276,21 +1582,29 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
 
   const handleCopy = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
-    const node = project.nodes.find(n => n.id === contextMenu.targetId)
-    if (!node) return
-    const copied = JSON.parse(JSON.stringify(node)) as AnyNode
-    const origin = typeof copied.x === 'number' && typeof copied.y === 'number'
-      ? { x: copied.x, y: copied.y }
-      : { x: 0, y: 0 }
-    setClipboard({ nodes: [copied], edges: [], markups: [], origin })
+    const selection: MultiSelection = {
+      kind: 'multi',
+      nodes: [contextMenu.targetId],
+      edges: [],
+      markups: [],
+    }
+    const payload = collectClipboardPayload(selection)
+    if (payload) {
+      setClipboard(payload)
+    }
     setContextMenu(null)
-  }, [contextMenu, project.nodes, setClipboard])
+  }, [collectClipboardPayload, contextMenu, setClipboard])
 
   const handleDelete = useCallback(()=>{
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
     removeNode(path, contextMenu.targetId)
+    if (selectedNodeId === contextMenu.targetId) {
+      setSelectedNodeId(null)
+      onSelect(null)
+    }
+    applyMultiSelection(null)
     setContextMenu(null)
-  }, [contextMenu, removeNode, path])
+  }, [applyMultiSelection, contextMenu, onSelect, path, removeNode, selectedNodeId])
 
   const handleSaveQuickPreset = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
@@ -1302,21 +1616,11 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
   }, [contextMenu, project, quickPresetDialogs])
 
   const handlePaste = useCallback(() => {
-    if (!contextMenu || contextMenu.type !== 'pane' || !clipboard || clipboard.nodes.length === 0) return
-    const template = clipboard.nodes[0]
+    if (!contextMenu || contextMenu.type !== 'pane') return
     const flowPos = screenToFlowPosition({ x: contextMenu.x, y: contextMenu.y })
-    const baseOrigin = clipboard.origin ?? {
-      x: template.x ?? flowPos.x,
-      y: template.y ?? flowPos.y,
-    }
-    const clone = JSON.parse(JSON.stringify(template)) as AnyNode
-    clone.id = genId('node_')
-    clone.name = `${clone.name || clone.type || 'Node'} Copy`
-    clone.x = (clone.x ?? 0) + (flowPos.x - baseOrigin.x + 24)
-    clone.y = (clone.y ?? 0) + (flowPos.y - baseOrigin.y + 24)
-    addNodeNested(path, clone as AnyNode)
+    performPaste(flowPos)
     setContextMenu(null)
-  }, [addNodeNested, clipboard, contextMenu, path, screenToFlowPosition])
+  }, [contextMenu, performPaste, screenToFlowPosition])
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1324,55 +1628,57 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
       const active = document.activeElement as HTMLElement | null
       const isInput = active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.isContentEditable)
       if (isInput) return
-      const isCopy = (e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey)
-      const isPaste = (e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey)
-      const isDelete = e.key === 'Delete' || e.key === 'Backspace'
 
-      if (selectedNodeId) {
-        if (isCopy) {
-          const node = project.nodes.find(n => n.id === selectedNodeId)
-          if (node) {
-            const copied = JSON.parse(JSON.stringify(node)) as AnyNode
-            const origin = typeof copied.x === 'number' && typeof copied.y === 'number'
-              ? { x: copied.x, y: copied.y }
-              : { x: 0, y: 0 }
-            setClipboard({ nodes: [copied], edges: [], markups: [], origin })
-          }
-          e.preventDefault()
-        } else if (isDelete) {
-          removeNode(path, selectedNodeId)
-          setSelectedNodeId(null)
-          onSelect(null)
-          e.preventDefault()
-        }
-      }
+      const key = e.key
+      const isDelete = key === 'Delete' || key === 'Backspace'
+      const isCopy = (key === 'c' || key === 'C') && (e.ctrlKey || e.metaKey)
+      const isPaste = (key === 'v' || key === 'V') && (e.ctrlKey || e.metaKey)
 
-      if (!selectedNodeId && selectedEdgeId && isDelete) {
-        removeEdge(path, selectedEdgeId)
+      if (key === 'Escape') {
+        clearMultiSelection()
+        setSelectedNodeId(null)
         setSelectedEdgeId(null)
+        setSelectedMarkupId(null)
+        onSelectionModeChange('single')
         onSelect(null)
         e.preventDefault()
+        return
       }
 
-      if (isPaste && clipboard && clipboard.nodes.length) {
-        const template = clipboard.nodes[0]
-        const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
-        const baseOrigin = clipboard.origin ?? {
-          x: template.x ?? flowPos.x,
-          y: template.y ?? flowPos.y,
+      const currentSelection: MultiSelection | null = (() => {
+        if (activeMultiSelection) return activeMultiSelection
+        if (selectedNodeId) return { kind: 'multi', nodes: [selectedNodeId], edges: [], markups: [] }
+        if (selectedEdgeId) return { kind: 'multi', nodes: [], edges: [selectedEdgeId], markups: [] }
+        if (selectedMarkupId) return { kind: 'multi', nodes: [], edges: [], markups: [selectedMarkupId] }
+        return null
+      })()
+
+      if (isCopy && currentSelection) {
+        const payload = collectClipboardPayload(currentSelection)
+        if (payload) {
+          setClipboard(payload)
         }
-        const clone = JSON.parse(JSON.stringify(template)) as AnyNode
-        clone.id = genId('node_')
-        clone.name = `${clone.name || clone.type || 'Node'} Copy`
-        clone.x = (clone.x ?? 0) + (flowPos.x - baseOrigin.x + 24)
-        clone.y = (clone.y ?? 0) + (flowPos.y - baseOrigin.y + 24)
-        addNodeNested(path, clone as AnyNode)
         e.preventDefault()
+        return
+      }
+
+      if (isDelete && currentSelection) {
+        deleteSelection(currentSelection)
+        onSelect(null)
+        e.preventDefault()
+        return
+      }
+
+      if (isPaste) {
+        const flowPos = screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 })
+        if (performPaste(flowPos)) {
+          e.preventDefault()
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [addNodeNested, clipboard, isTopmostEditor, onSelect, path, project.nodes, removeEdge, removeNode, screenToFlowPosition, selectedEdgeId, selectedNodeId, setClipboard])
+  }, [activeMultiSelection, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, performPaste, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
@@ -1413,10 +1719,34 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
     addNodeNested(path, placed)
   }, [addNodeNested, isTopmostEditor, path, quickPresets, screenToFlowPosition, setContextMenu])
 
+  const handleWrapperPointerDownCapture = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (selectionMode !== 'multi') return
+    if (event.button !== 0) return
+    const target = event.target as HTMLElement | null
+    if (!target) return
+    if (target.closest('.react-flow__node') || target.closest('.react-flow__handle') || target.closest('.react-flow__edge-path')) {
+      return
+    }
+    const paneEl = target.closest('.react-flow__pane')
+    if (!paneEl) return
+    event.stopPropagation()
+    event.preventDefault()
+    setContextMenu(null)
+    startMarqueeSelection({ x: event.clientX, y: event.clientY }, event.shiftKey)
+  }, [selectionMode, setContextMenu, startMarqueeSelection])
+
   const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && !!(contextMenu.targetId && project.nodes.some(n => n.id === contextMenu.targetId))
 
   return (
-    <div className="h-full" aria-label="subsystem-canvas" onClick={()=>setContextMenu(null)} onDragOver={handleDragOver} onDrop={handleDrop}>
+    <div
+      ref={wrapperRef}
+      className="h-full relative"
+      aria-label="subsystem-canvas"
+      onPointerDownCapture={handleWrapperPointerDownCapture}
+      onClick={()=>setContextMenu(null)}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -1424,18 +1754,145 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
         edgeTypes={edgeTypes}
         fitView
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
-        onNodeClick={(_,n)=>{onSelect(n.id); setSelectedNodeId(n.id); setSelectedEdgeId(null)}}
-        onEdgeClick={(_,e)=>{ onSelect(e.id); setSelectedEdgeId(e.id); setSelectedNodeId(null) }}
+        panOnDrag={selectionMode !== 'multi'}
+        selectionOnDrag={selectionMode !== 'multi'}
+        onNodeClick={(_,n)=>{
+          const nodeId = n.id
+          const inMulti = selectionMode === 'multi' && (activeMultiSelection?.nodes.includes(nodeId) ?? false)
+          if (inMulti) {
+            setSelectedNodeId(nodeId)
+            setSelectedEdgeId(null)
+            setSelectedMarkupId(null)
+            onSelect(activeMultiSelection)
+            return
+          }
+          if (selectionMode !== 'multi') {
+            clearMultiSelection()
+          }
+          onSelect({ kind: 'node', id: nodeId })
+          setSelectedNodeId(nodeId)
+          setSelectedEdgeId(null)
+          setSelectedMarkupId(null)
+        }}
+        onNodeDragStart={(_,n) => {
+          const nodeId = n.id
+          const inMulti = selectionMode === 'multi' && (activeMultiSelection?.nodes.includes(nodeId) ?? false)
+          if (inMulti && activeMultiSelection) {
+            setSelectedNodeId(nodeId)
+            setSelectedEdgeId(null)
+            setSelectedMarkupId(null)
+            onSelect(activeMultiSelection)
+            const snapshot = new Map<string, { x: number; y: number }>()
+            const currentNodes = reactFlowInstance.getNodes()
+            for (const id of activeMultiSelection.nodes) {
+              const rfNode = currentNodes.find(node => node.id === id)
+              if (rfNode) {
+                snapshot.set(id, { x: rfNode.position.x, y: rfNode.position.y })
+              }
+            }
+            multiDragStateRef.current = { originId: nodeId, positions: snapshot }
+            return
+          }
+          multiDragStateRef.current = null
+          if (selectionMode !== 'multi') {
+            clearMultiSelection()
+          }
+          setSelectedNodeId(nodeId)
+          setSelectedEdgeId(null)
+          setSelectedMarkupId(null)
+          onSelect({ kind: 'node', id: nodeId })
+        }}
+        onNodeDrag={(_,n) => {
+          const state = multiDragStateRef.current
+          if (!state || selectionMode !== 'multi' || !activeMultiSelection) return
+          const origin = state.positions.get(n.id)
+          if (!origin) return
+          const dx = n.position.x - origin.x
+          const dy = n.position.y - origin.y
+          if (!Number.isFinite(dx) || !Number.isFinite(dy)) return
+          setNodes(prev => prev.map(rn => {
+            if (!activeMultiSelection.nodes.includes(rn.id) || rn.id === n.id) return rn
+            const initial = state.positions.get(rn.id)
+            if (!initial) return rn
+            const next = { x: initial.x + dx, y: initial.y + dy }
+            return { ...rn, position: next, positionAbsolute: next }
+          }))
+        }}
+        onNodeDragStop={(_,n) => {
+          const state = multiDragStateRef.current
+          if (state && selectionMode === 'multi' && activeMultiSelection) {
+            const origin = state.positions.get(n.id)
+            const dx = origin ? n.position.x - origin.x : 0
+            const dy = origin ? n.position.y - origin.y : 0
+            for (const id of activeMultiSelection.nodes) {
+              const initial = state.positions.get(id)
+              if (!initial) continue
+              const nextX = id === n.id ? n.position.x : initial.x + dx
+              const nextY = id === n.id ? n.position.y : initial.y + dy
+              updatePos(path, id, nextX, nextY)
+            }
+          } else {
+            updatePos(path, n.id, n.position.x, n.position.y)
+          }
+          multiDragStateRef.current = null
+        }}
+        onEdgeClick={(_,e)=>{
+          const edgeId = e.id
+          const inMulti = selectionMode === 'multi' && (activeMultiSelection?.edges.includes(edgeId) ?? false)
+          if (inMulti) {
+            setSelectedEdgeId(edgeId)
+            setSelectedNodeId(null)
+            setSelectedMarkupId(null)
+            onSelect(activeMultiSelection)
+            return
+          }
+          if (selectionMode !== 'multi') {
+            clearMultiSelection()
+          }
+          onSelect({ kind: 'edge', id: edgeId })
+          setSelectedEdgeId(edgeId)
+          setSelectedNodeId(null)
+          setSelectedMarkupId(null)
+        }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onNodeDoubleClick={(_,n)=>{ const t=(n as any).data?.type; if (t==='Subsystem' && onOpenNested) onOpenNested(n.id) }}
+        onPaneClick={() => {
+          setSelectedNodeId(null)
+          setSelectedEdgeId(null)
+          setSelectedMarkupId(null)
+          if (selectionMode !== 'multi' || !selectionHasItems(activeMultiSelection)) {
+            onSelect(null)
+          }
+        }}
+        onNodeDoubleClick={(_,n)=>{ clearMultiSelection(); const t=(n as any).data?.type; if (t==='Subsystem' && onOpenNested) onOpenNested(n.id) }}
       >
         <MiniMap /><Controls /><Background gap={16} />
       </ReactFlow>
+      {marqueeRect && (
+        <div
+          className="pointer-events-none absolute z-40 border border-sky-400 bg-sky-300/20"
+          style={{
+            left: marqueeRect.left,
+            top: marqueeRect.top,
+            width: marqueeRect.width,
+            height: marqueeRect.height,
+          }}
+        />
+      )}
+      {multiSelection && !marqueeRect && selectionHasItems(multiSelection) && (
+        <div className="absolute top-16 left-1/2 z-40 -translate-x-1/2">
+          <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white/95 px-4 py-2 text-sm text-slate-600 shadow-md">
+            <span><span className="font-semibold text-slate-800">{multiSelection.nodes.length}</span> nodes</span>
+            <span><span className="font-semibold text-slate-800">{multiSelection.edges.length}</span> edges</span>
+            <span><span className="font-semibold text-slate-800">{multiSelection.markups.length}</span> markups</span>
+            <span className="text-xs text-slate-400">Copy ⌘C / Delete ⌫ / Paste ⌘V</span>
+          </div>
+        </div>
+      )}
       {contextMenu && (
         <div className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
           {contextMenu.type==='node' ? (
@@ -1451,7 +1908,7 @@ export default function SubsystemCanvas({ subsystemId, subsystemPath, project, o
             </div>
           ) : (
             <div className="py-1">
-              <button className={`block w-full text-left px-3 py-1 ${clipboard && clipboard.nodes.length ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboard && clipboard.nodes.length ? handlePaste : undefined}>Paste</button>
+              <button className={`block w-full text-left px-3 py-1 ${clipboard && (clipboard.nodes.length || clipboard.markups.length) ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboard && (clipboard.nodes.length || clipboard.markups.length) ? handlePaste : undefined}>Paste</button>
             </div>
           )}
         </div>

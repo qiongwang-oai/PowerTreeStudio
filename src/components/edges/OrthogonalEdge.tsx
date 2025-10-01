@@ -161,7 +161,8 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   }, [data, id])
 
   const defaultColor = (data as any)?.defaultColor
-  const isActive = selected || pointerIdRef.current !== null
+  const isMultiSelected = Boolean((data as any)?.isMultiSelected)
+  const isActive = selected || isMultiSelected || pointerIdRef.current !== null
   const strokeColor = isActive ? '#6b7280' : (style?.stroke ?? defaultColor ?? '#64748b')
   const labelBaseColor = (labelStyle as any)?.color || (labelStyle as any)?.fill || defaultColor || '#334155'
   const textColor = isActive ? '#374151' : labelBaseColor

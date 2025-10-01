@@ -7,10 +7,12 @@ import { Button } from '../ui/button'
 import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
+import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
-  const [selected, setSelected] = React.useState<string|null>(null)
+  const [selection, setSelection] = React.useState<InspectorSelection | MultiSelection | null>(null)
+  const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
   const [inspectorWidth, setInspectorWidth] = React.useState<number>(320)
   const [isResizing, setIsResizing] = React.useState<boolean>(false)
   const startXRef = React.useRef<number>(0)
@@ -135,8 +137,15 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const handleClear = () => {
     if (!window.confirm('Clear this subsystem canvas? This will remove all nodes except inputs.')) return
     clearNested(subsystemPath)
-    setSelected(null)
+    setSelection(null)
   }
+
+  const inspectorTargetId = React.useMemo(() => {
+    if (!selection) return null
+    if (selection.kind === 'node') return selection.id
+    if (selection.kind === 'edge') return selection.id
+    return null
+  }, [selection])
 
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
@@ -150,6 +159,20 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
           <div className="flex items-center gap-2 toolbar-buttons">
             <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
             <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
+            <Button
+              variant={selectionMode === 'single' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectionMode('single')}
+            >
+              Select
+            </Button>
+            <Button
+              variant={selectionMode === 'multi' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setSelectionMode('multi')}
+            >
+              Multi-Select
+            </Button>
             <Button
               ref={autoAlignButtonRef}
               variant="outline"
@@ -165,7 +188,15 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
         <aside className="border-r bg-white overflow-auto side-panel"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
         <main className="overflow-hidden">
           <ReactFlowProvider>
-            <SubsystemCanvas subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} onSelect={setSelected} onOpenNested={onOpenSubsystem} />
+            <SubsystemCanvas
+              subsystemId={subsystemId}
+              subsystemPath={subsystemPath}
+              project={embedded}
+              onSelect={setSelection}
+              onOpenNested={onOpenSubsystem}
+              selectionMode={selectionMode}
+              onSelectionModeChange={setSelectionMode}
+            />
           </ReactFlowProvider>
         </main>
         <div
@@ -175,7 +206,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
           role="separator"
         />
         <aside className="border-l bg-white overflow-auto side-panel">
-          <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={selected} onDeleted={()=>setSelected(null)} />
+          <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={inspectorTargetId} onDeleted={()=>setSelection(null)} />
         </aside>
       </div>
       {autoAlignPromptOpen && (
