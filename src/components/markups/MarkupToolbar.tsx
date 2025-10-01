@@ -23,10 +23,10 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
   onSelectionModeChange,
 }) => {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
       <Button
         variant={selectionMode === 'single' && activeTool === null ? 'default' : 'outline'}
-        size="sm"
+        size="xs"
         onClick={() => {
           onSelectionModeChange('single')
           onSelectTool(null)
@@ -36,7 +36,7 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
       </Button>
       <Button
         variant={selectionMode === 'multi' ? 'default' : 'outline'}
-        size="sm"
+        size="xs"
         onClick={() => {
           const nextMode = selectionMode === 'multi' ? 'single' : 'multi'
           onSelectionModeChange(nextMode)
@@ -47,12 +47,12 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
       >
         Multi-Select
       </Button>
-      <span className="h-6 w-px bg-slate-300 mx-2" aria-hidden="true" />
+      <span className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
       {TOOL_DEFINITIONS.map(tool => (
         <Button
           key={tool.type}
           variant={activeTool === tool.type ? 'default' : 'outline'}
-          size="sm"
+          size="xs"
           onClick={() => {
             onSelectTool(activeTool === tool.type ? null : tool.type)
             onSelectionModeChange(activeTool === tool.type ? selectionMode : 'single')

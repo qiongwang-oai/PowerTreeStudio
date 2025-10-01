@@ -17,6 +17,7 @@ import { QuickPresetDialogsProvider } from './components/quick-presets/QuickPres
 import MarkupToolbar from './components/markups/MarkupToolbar'
 import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
+import NodeBulkEditorModal from './components/NodeBulkEditorModal'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -60,6 +61,7 @@ export default function App(){
   const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
+  const [bulkEditorOpen, setBulkEditorOpen] = React.useState(false)
   const openSubsystemIds = useStore(s => s.openSubsystemIds);
   const setOpenSubsystemIds = useStore(s => s.setOpenSubsystemIds);
   const quickPresets = useStore(s => s.quickPresets)
@@ -212,7 +214,7 @@ export default function App(){
                   </div>
                   <div className="mt-0.5 h-px w-16 bg-gradient-to-r from-emerald-400 via-sky-400 to-transparent" />
                 </div>
-                <div className="flex flex-wrap items-center gap-2 toolbar-buttons" style={{marginBottom: '3px'}}>
+                <div className="flex flex-wrap items-center gap-1.5 toolbar-buttons" style={{marginBottom: '3px'}}>
                   <input
                     ref={fileInputRef}
                     aria-hidden="true"
@@ -225,22 +227,30 @@ export default function App(){
                       e.currentTarget.value = ''
                     }}
                   />
-                  <Button variant="outline" size="sm" onClick={()=>fileInputRef.current?.click()}>Open</Button>
-                  <Button variant="outline" size="sm" onClick={onExport}>Save</Button>
-                  <Button variant="outline" size="sm" onClick={onExportPdf}>Export PDF</Button>
-                  <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
-                  <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
+                  <Button variant="outline" size="xs" onClick={()=>fileInputRef.current?.click()}>Open</Button>
+                  <Button variant="outline" size="xs" onClick={onExport}>Save</Button>
+                  <Button variant="outline" size="xs" onClick={onExportPdf}>Export PDF</Button>
+                  <Button variant="outline" size="xs" onClick={undo} disabled={pastLen===0}>Undo</Button>
+                  <Button variant="outline" size="xs" onClick={redo} disabled={futureLen===0}>Redo</Button>
+                  <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
                   <Button
                     ref={autoAlignButtonRef}
                     variant="outline"
-                    size="sm"
+                    size="xs"
                     onClick={openAutoAlignPrompt}
                   >
                     Auto Alignment
                   </Button>
-                  <Button size="sm" variant="success" onClick={onReport}>Report</Button>
-                  <Button size="sm" variant="danger" onClick={onClear}>Clear</Button>
-                <div className="h-6 w-px bg-slate-300 mx-2" aria-hidden="true" />
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    onClick={() => setBulkEditorOpen(true)}
+                  >
+                    Edit Nodes
+                  </Button>
+                  <Button size="xs" variant="success" onClick={onReport}>Report</Button>
+                  <Button size="xs" variant="danger" onClick={onClear}>Clear</Button>
+                <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
                 <MarkupToolbar
                   activeTool={markupTool}
                   selectionMode={selectionMode}
@@ -312,6 +322,7 @@ export default function App(){
             error={autoAlignError}
           />
         )}
+        <NodeBulkEditorModal isOpen={bulkEditorOpen} onClose={() => setBulkEditorOpen(false)} />
         </div>
       </QuickPresetDialogsProvider>
     </ErrorBoundary>

@@ -8,5 +8,5 @@ html, body, #root { height: 100%; }
 .react-flow__edges { z-index: 18 !important; }
 .react-flow__edge-labels { z-index: 19 !important; }
 .react-flow__nodes { z-index: 10 !important; }
-.toolbar-buttons button { @apply text-sm; }
+.toolbar-buttons button { @apply text-xs; }
 .side-panel button { @apply text-sm; }
