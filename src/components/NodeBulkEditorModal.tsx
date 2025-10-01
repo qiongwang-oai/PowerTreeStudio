@@ -1153,7 +1153,7 @@ function GroupSection({
             aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${group.label}`}
             className="flex h-7 w-7 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500"
           >
-            <span className={`text-sm transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>▾</span>
+            <span className={`text-lg leading-none transition-transform ${isCollapsed ? '-rotate-90' : 'rotate-0'}`}>▾</span>
           </button>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold text-slate-700">{group.label}</span>
@@ -1183,7 +1183,7 @@ function GroupSection({
               onClick={() => setMenuOpen(prev => !prev)}
               className="rounded-l-none px-2"
             >
-              <span className="text-xs">▾</span>
+              <span className="text-lg leading-none">▾</span>
             </Button>
             {menuOpen && (
               <div className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl">
@@ -1247,7 +1247,7 @@ function GroupSection({
               className="flex items-center gap-1"
             >
               <span>Add</span>
-              <span className="text-xs">▾</span>
+              <span className="text-lg leading-none">▾</span>
             </Button>
             {menuOpen && (
               <div className="absolute right-0 z-20 mt-2 w-72 overflow-hidden rounded-md border border-slate-200 bg-white shadow-xl">
