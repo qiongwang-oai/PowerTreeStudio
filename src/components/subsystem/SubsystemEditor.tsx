@@ -9,7 +9,7 @@ import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
-import { BoxSelect, PanelsTopLeft, Pointer, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { BoxSelect, PanelsTopLeft, MousePointer, Redo2, Trash2, Undo2 } from 'lucide-react'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
@@ -206,7 +206,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 title="Select nodes"
                 aria-pressed={isSelectActive}
               >
-                <Pointer className="h-5 w-5" />
+              <MousePointer className="h-5 w-5" />
               </Button>
             </Tooltip>
             <Tooltip label="Toggle multi-select">

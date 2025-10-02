@@ -4,7 +4,7 @@ import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import type { SelectionMode } from '../../types/selection'
 import type { LucideIcon } from 'lucide-react'
-import { BoxSelect, Minus, Square, Type, Pointer } from 'lucide-react'
+import { BoxSelect, Minus, Square, Type, MousePointer } from 'lucide-react'
 
 type MarkupToolbarProps = {
   activeTool: MarkupTool | null
@@ -53,7 +53,7 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
           title="Select nodes"
           aria-pressed={isSelectActive}
         >
-          <Pointer className="h-5 w-5" />
+          <MousePointer className="h-5 w-5" />
         </Button>
       </Tooltip>
       <Tooltip label="Toggle multi-select">
