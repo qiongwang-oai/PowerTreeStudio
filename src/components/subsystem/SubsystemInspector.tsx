@@ -3,6 +3,7 @@ import { useStore } from '../../state/store'
 import { DualOutputConverterBranch, DualOutputConverterNode, Edge, Project } from '../../models'
 import { Tabs, TabsContent, TabsList } from '../ui/tabs'
 import { Button } from '../ui/button'
+import { Trash2 } from 'lucide-react'
 import { compute, etaFromModel } from '../../calc'
 import { fmt } from '../../utils'
 import { download, importProjectFile, serializeProject } from '../../io'
@@ -43,7 +44,11 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
         <InspectorHeader
           title="Edge"
           subtitle={`ID ${edge.id}`}
-          actions={<Button variant="outline" size="sm" onClick={()=>{ nestedRemoveEdge(path, edge.id); onDeleted && onDeleted() }}>Delete</Button>}
+          actions={(
+            <Button variant="outline" size="icon" aria-label="Delete edge" onClick={()=>{ nestedRemoveEdge(path, edge.id); onDeleted && onDeleted() }}>
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          )}
         />
         <InspectorContent>
           <InspectorSection title="Interconnect">
@@ -443,7 +448,11 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
       <InspectorHeader
         title={node.name || 'Untitled'}
         subtitle={`ID ${node.id}`}
-        actions={<Button variant="outline" size="sm" onClick={()=>{ nestedRemoveNode(path, node.id); onDeleted && onDeleted() }}>Delete</Button>}
+        actions={(
+          <Button variant="outline" size="icon" aria-label="Delete node" onClick={()=>{ nestedRemoveNode(path, node.id); onDeleted && onDeleted() }}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       />
       <InspectorContent>
         <Tabs value={tab} onValueChange={setTab}>
