@@ -20,29 +20,20 @@ import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 import NodeBulkEditorModal from './components/NodeBulkEditorModal'
 import {
-  AlignCenter,
-  Archive,
   BoxSelect,
-  Broom,
-  Circle,
-  ClipboardPaste,
-  Copy,
   FileBarChart2,
-  FileJson,
-  FileUp,
-  Github,
-  LayoutList,
-  LayoutPanelLeft,
-  MousePointer,
+  FileDown,
+  FolderOpen,
   PanelsTopLeft,
   PencilRuler,
-  Plus,
-  Printer,
-  RotateCcw,
-  Settings2,
-  Upload,
-  Wand2,
-  X,
+  Pointer,
+  Redo2,
+  Save,
+  Eraser,
+  Type,
+  Minus,
+  Square,
+  Undo2,
 } from 'lucide-react'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -363,7 +354,7 @@ export default function App(){
                       aria-label="Clear canvas"
                       title="Clear canvas"
                     >
-                      <Broom className="h-5 w-5" />
+                      <Eraser className="h-5 w-5" />
                     </Button>
                   </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
