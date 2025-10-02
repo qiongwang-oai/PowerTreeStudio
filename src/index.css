@@ -4,7 +4,9 @@
 :root { --pane: 230px; }
 html, body, #root { height: 100%; }
 .rf-handle { width: 10px; height: 10px; }
-.input{border:1px solid #e2e8f0;border-radius:12px;padding:.4rem .6rem;min-width:6rem}
+.input{
+  @apply w-full min-w-[6rem] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100;
+}
 .react-flow__edges { z-index: 18 !important; }
 .react-flow__edge-labels { z-index: 19 !important; }
 .react-flow__nodes { z-index: 10 !important; }

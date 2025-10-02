@@ -1,6 +1,8 @@
 import React from 'react'
 import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ReferenceDot } from 'recharts'
 import { Button } from './ui/button'
+import { FormField, FormGrid, MetricGrid } from './ui/inspector'
+import { Trash2 } from 'lucide-react'
 import { etaFromModel } from '../calc'
 import type { EfficiencyModel } from '../models'
 
@@ -41,16 +43,6 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
       return { current, eta: typeof p.eta === 'number' ? p.eta : 0 }
     })
   }, [eff, isCurve, safeAxisMaxCurrent])
-
-  const graphData = React.useMemo(() => {
-    if (!isCurve || currentPoints.length === 0) return []
-    const pts = [...currentPoints].sort((a, b) => a.current - b.current)
-    const first = pts[0]
-    const last = pts[pts.length - 1]
-    if (first.current > 0) pts.unshift({ current: 0, eta: first.eta })
-    if (last.current < safeAxisMaxCurrent) pts.push({ current: safeAxisMaxCurrent, eta: last.eta })
-    return pts
-  }, [currentPoints, isCurve, safeAxisMaxCurrent])
 
   const updateCurvePoints = React.useCallback((points: CurvePoint[], options?: { perPhase?: boolean }) => {
     const targetPerPhase = options?.perPhase ?? ((eff as any).perPhase ?? false)
@@ -161,25 +153,47 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
     }
   }
 
+  const graphData = React.useMemo(() => {
+    if (!isCurve || currentPoints.length === 0) return []
+    const pts = [...currentPoints].sort((a, b) => a.current - b.current)
+    const first = pts[0]
+    const last = pts[pts.length - 1]
+    if (first.current > 0) pts.unshift({ current: 0, eta: first.eta })
+    if (last.current < safeAxisMaxCurrent) pts.push({ current: safeAxisMaxCurrent, eta: last.eta })
+    return pts
+  }, [currentPoints, isCurve, safeAxisMaxCurrent])
+
+  const etaBounds = React.useMemo(() => {
+    if (!isCurve || graphData.length === 0) return [0, 1] as [number, number]
+    const values = graphData.map(p => clamp(p.eta, 0, 1))
+    if (typeof computedEta === 'number') values.push(clamp(computedEta, 0, 1))
+    const min = Math.min(...values)
+    const max = Math.max(...values)
+    const span = Math.max(max - min, 0.05)
+    const padding = span * 0.1
+    const lower = clamp(min - padding, 0, 1)
+    const upper = clamp(max + padding, 0, 1)
+    return [lower, upper] as [number, number]
+  }, [graphData, isCurve, computedEta])
+
   return (
-    <div className="space-y-2">
-      {label && <div className="text-base text-slate-600 font-medium mt-2">{label}</div>}
-      <label className="flex items-center justify-between gap-2">
-        <span>Model</span>
-        <select className="input" value={isCurve ? 'curve' : 'fixed'} onChange={e => handleTypeChange(e.target.value as 'fixed' | 'curve')}>
-          <option value="fixed">fixed</option>
-          <option value="curve">curve</option>
-        </select>
-      </label>
-      {canUsePerPhase && (
-        <label className="flex items-center justify-between gap-2">
-          <span>Data scope</span>
-          <select className="input" value={perPhaseActive ? 'perPhase' : 'overall'} onChange={e => handleScopeChange(e.target.value as 'overall' | 'perPhase')}>
-            <option value="overall">overall converter</option>
-            <option value="perPhase">per-phase (x{phaseCount})</option>
+    <div className="space-y-4 text-base text-slate-700">
+      <FormGrid columns={canUsePerPhase ? 2 : 1}>
+        <FormField label="Model">
+          <select className="input" value={isCurve ? 'curve' : 'fixed'} onChange={e => handleTypeChange(e.target.value as 'fixed' | 'curve')}>
+            <option value="fixed">Fixed</option>
+            <option value="curve">Curve</option>
           </select>
-        </label>
-      )}
+        </FormField>
+        {canUsePerPhase && (
+          <FormField label={`Data scope${canUsePerPhase ? ` (x${phaseCount})` : ''}`}>
+            <select className="input" value={perPhaseActive ? 'perPhase' : 'overall'} onChange={e => handleScopeChange(e.target.value as 'overall' | 'perPhase')}>
+              <option value="overall">Overall converter</option>
+              <option value="perPhase">Per-phase</option>
+            </select>
+          </FormField>
+        )}
+      </FormGrid>
       {isCurve ? (
         <>
           <div className="h-40">
@@ -187,7 +201,7 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
               <LineChart data={graphData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="current" unit="A" type="number" domain={[0, safeAxisMaxCurrent]} />
-                <YAxis domain={[0, 1]} />
+                <YAxis domain={etaBounds} />
                 <Tooltip formatter={(v: any, name: string) => (name === 'eta' ? Number(v).toFixed(3) : v)} />
                 <Line type="monotone" dataKey="eta" dot />
                 {analysis && typeof computedEta === 'number' && (
@@ -202,44 +216,70 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex flex-col gap-2">
-            {currentPoints.map((pt, idx) => (
-              <div key={idx} className="flex items-center gap-2 text-xs">
-                <label className="flex items-center gap-1">
-                  <span>Current (A)</span>
-                  <input
-                    type="number"
-                    className="input w-24"
-                    value={pt.current}
-                    min={0}
-                    max={safeAxisMaxCurrent}
-                    step={0.01}
-                    onChange={e => handlePointChange(idx, 'current', clamp(Number(e.target.value), 0, safeAxisMaxCurrent))}
-                  />
-                </label>
-                <label className="flex items-center gap-1">
-                  <span>Efficiency</span>
-                  <input
-                    type="number"
-                    className="input w-20"
-                    value={pt.eta}
-                    min={0}
-                    max={1}
-                    step={0.001}
-                    onChange={e => handlePointChange(idx, 'eta', clamp(Number(e.target.value), 0, 1))}
-                  />
-                </label>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleDeletePoint(idx)}
-                  disabled={currentPoints.length <= 1}
-                >
-                  Remove
-                </Button>
+          {analysis && (
+            <div className="mt-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Efficiency</div>
+                  <div className="text-lg font-semibold text-slate-900">{typeof computedEta === 'number' ? `${(computedEta * 100).toFixed(1)} %` : '—'}</div>
+                  <div className="text-xs text-slate-500">{perPhaseActive ? `I_phase ${analysisPerPhaseCurrent.toFixed(1)} A` : `I_out ${analysisTotalCurrent.toFixed(1)} A`}</div>
+                </div>
+                <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">I_out (total)</div>
+                  <div className="text-lg font-semibold text-slate-900">{`${analysisTotalCurrent.toFixed(1)} A`}</div>
+                </div>
+                {perPhaseActive && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                    <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">I_phase (x{phaseCount})</div>
+                    <div className="text-lg font-semibold text-slate-900">{`${analysisPerPhaseCurrent.toFixed(1)} A`}</div>
+                  </div>
+                )}
               </div>
-            ))}
-            <div className="flex items-center gap-2">
+            </div>
+          )}
+          <div className="mt-6 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              <div className="grid grid-cols-[repeat(2,minmax(0,1fr))_auto] items-center gap-3 border-b border-slate-200 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span>{perPhaseActive ? 'Per-phase current (A)' : 'Current (A)'}</span>
+                <span>Efficiency (0-1)</span>
+                <span className="sr-only">Remove</span>
+              </div>
+              <div className="divide-y divide-slate-200">
+                {currentPoints.map((pt, idx) => (
+                  <div key={idx} className="grid grid-cols-[repeat(2,minmax(0,1fr))_auto] items-center gap-3 px-4 py-3">
+                    <input
+                      type="number"
+                      className="input w-full"
+                      value={pt.current}
+                      min={0}
+                      max={safeAxisMaxCurrent}
+                      step={0.01}
+                      onChange={e => handlePointChange(idx, 'current', clamp(Number(e.target.value), 0, safeAxisMaxCurrent))}
+                    />
+                    <input
+                      type="number"
+                      className="input w-full"
+                      value={pt.eta}
+                      min={0}
+                      max={1}
+                      step={0.001}
+                      onChange={e => handlePointChange(idx, 'eta', clamp(Number(e.target.value), 0, 1))}
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => handleDeletePoint(idx)}
+                      disabled={currentPoints.length <= 1}
+                      aria-label="Remove point"
+                      className="h-8 w-8"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
               <Button variant="outline" size="sm" className="w-fit" onClick={handleAddPoint}>
                 Add point
               </Button>
@@ -250,8 +290,7 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
           </div>
         </>
       ) : (
-        <label className="flex items-center justify-between gap-2">
-          <span>η value (0-1)</span>
+        <FormField label="η value (0-1)">
           <input
             type="number"
             className="input"
@@ -261,24 +300,7 @@ export default function EfficiencyEditor({ label, efficiency, maxCurrent, onChan
             step={0.001}
             onChange={e => handleFixedValueChange(clamp(Number(e.target.value), 0, 1))}
           />
-        </label>
-      )}
-      {analysis && (
-        <div className="text-sm text-slate-600 space-y-1">
-          <div>
-            I<sub>out</sub> (total): <b>{analysisTotalCurrent.toFixed(4)} A</b>
-          </div>
-          {perPhaseActive && (
-            <div>
-              I<sub>phase</sub>: <b>{analysisPerPhaseCurrent.toFixed(4)} A</b>
-            </div>
-          )}
-          {typeof computedEta === 'number' && (
-            <div>
-              η (at {perPhaseActive ? `I_phase = ${analysisPerPhaseCurrent.toFixed(3)} A` : `I_out = ${analysisTotalCurrent.toFixed(3)} A`}): <b>{computedEta.toFixed(4)}</b>
-            </div>
-          )}
-        </div>
+        </FormField>
       )}
     </div>
   )
