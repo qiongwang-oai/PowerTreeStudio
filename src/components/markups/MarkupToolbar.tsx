@@ -4,7 +4,7 @@ import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import type { SelectionMode } from '../../types/selection'
 import type { LucideIcon } from 'lucide-react'
-import { BoxSelect, Minus, Square, Type, MousePointer } from 'lucide-react'
+import { BoxSelect, Slash, Square, Type, MousePointer } from 'lucide-react'
 
 type MarkupToolbarProps = {
   activeTool: MarkupTool | null
@@ -15,7 +15,7 @@ type MarkupToolbarProps = {
 
 const TOOL_DEFINITIONS: { type: MarkupTool; label: string; Icon: LucideIcon; description: string }[] = [
   { type: 'text', label: 'Text', Icon: Type, description: 'Add text markup' },
-  { type: 'line', label: 'Line', Icon: Minus, description: 'Draw a straight line' },
+  { type: 'line', label: 'Line', Icon: Slash, description: 'Draw a diagonal line' },
   { type: 'rectangle', label: 'Box', Icon: Square, description: 'Draw a rectangle' },
 ]
 
