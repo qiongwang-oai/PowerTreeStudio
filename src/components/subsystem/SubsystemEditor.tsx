@@ -15,10 +15,10 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
   const [selection, setSelection] = React.useState<InspectorSelection | MultiSelection | null>(null)
   const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
-  const [inspectorWidth, setInspectorWidth] = React.useState<number>(320)
+  const [inspectorWidth, setInspectorWidth] = React.useState<number>(420)
   const [isResizing, setIsResizing] = React.useState<boolean>(false)
   const startXRef = React.useRef<number>(0)
-  const startWRef = React.useRef<number>(320)
+  const startWRef = React.useRef<number>(420)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const embedded = subsystem?.project
   const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0

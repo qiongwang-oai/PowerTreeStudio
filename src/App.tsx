@@ -71,7 +71,7 @@ export default function App(){
   const pastLen = useStore(s=>s.past.length)
   const futureLen = useStore(s=>s.future.length)
   const [selected, setSelected] = React.useState<InspectorSelection | null>(null)
-  const [rightPane, setRightPane] = React.useState<number>(300)
+  const [rightPane, setRightPane] = React.useState<number>(450)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
   const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
