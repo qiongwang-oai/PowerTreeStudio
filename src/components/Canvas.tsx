@@ -30,7 +30,7 @@ import {
 import type { Bounds } from '../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../utils/selectionClipboard'
 import { SUBSYSTEM_BASE_HEIGHT, SUBSYSTEM_PORT_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
-import { Trash2, Broom } from 'lucide-react'
+import { Trash2, Sparkles } from 'lucide-react'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
