@@ -20,21 +20,29 @@ import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 import NodeBulkEditorModal from './components/NodeBulkEditorModal'
 import {
+  AlignCenter,
+  Archive,
   BoxSelect,
+  Broom,
+  Circle,
+  ClipboardPaste,
+  Copy,
   FileBarChart2,
-  FileDown,
-  FolderOpen,
+  FileJson,
+  FileUp,
+  Github,
+  LayoutList,
+  LayoutPanelLeft,
+  MousePointer,
   PanelsTopLeft,
   PencilRuler,
-  Pointer,
-  Redo2,
-  Save,
-  Trash2,
-  Type,
-  Minus,
-  Square,
-  Undo2,
-  Broom
+  Plus,
+  Printer,
+  RotateCcw,
+  Settings2,
+  Upload,
+  Wand2,
+  X,
 } from 'lucide-react'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
