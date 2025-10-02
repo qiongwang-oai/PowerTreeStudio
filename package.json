@@ -12,6 +12,7 @@
     "lint": "echo 'lint step skipped for brevity'"
   },
   "dependencies": {
+    "@radix-ui/react-tooltip": "^1.2.8",
     "exceljs": "^4.4.0",
     "html-to-image": "^1.11.13",
     "lucide-react": "^0.453.0",
