@@ -116,7 +116,7 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
       const converterAnalysis = analysis.nodes[node.id] || {}
       const maxCurrent = (node as any).Iout_max || 1
       sections.push(
-        <InspectorSection key="converter-operating" title="Operating window">
+        <InspectorSection key="converter-operating" title="Electrical">
           <FormGrid columns={2}>
             <Field label="Vin_min (V)" value={(node as any).Vin_min} onChange={v=>onChange('Vin_min', v)} />
             <Field label="Vin_max (V)" value={(node as any).Vin_max} onChange={v=>onChange('Vin_max', v)} />
