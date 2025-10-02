@@ -4,6 +4,7 @@ import Palette from './components/Palette'
 import Canvas, { CanvasHandle } from './components/Canvas'
 import Inspector from './components/Inspector'
 import { Button } from './components/ui/button'
+import { Tooltip, TooltipProvider } from './components/ui/tooltip'
 import SubsystemEditor from './components/subsystem/SubsystemEditor'
 import { ReactFlowProvider } from 'reactflow'
 import { compute } from './calc'
@@ -18,6 +19,22 @@ import MarkupToolbar from './components/markups/MarkupToolbar'
 import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 import NodeBulkEditorModal from './components/NodeBulkEditorModal'
+import {
+  BoxSelect,
+  FileBarChart2,
+  FileDown,
+  FolderOpen,
+  PanelsTopLeft,
+  PencilRuler,
+  Pointer,
+  Redo2,
+  Save,
+  Trash2,
+  Type,
+  Minus,
+  Square,
+  Undo2,
+} from 'lucide-react'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
   constructor(props: any) {
@@ -201,8 +218,9 @@ export default function App(){
     return ()=> window.removeEventListener('keydown', onKeyDown)
   }, [undo, redo, openSubsystemIds])
   return (
-    <ErrorBoundary>
-      <QuickPresetDialogsProvider getCurrentSelection={() => selected}>
+    <TooltipProvider>
+      <ErrorBoundary>
+        <QuickPresetDialogsProvider getCurrentSelection={() => selected}>
         <div className="h-screen grid" style={{gridTemplateRows:'76px 1fr', gridTemplateColumns:`var(--pane) 1fr ${rightPane}px`}}>
           <div className="col-span-3 px-3 py-1 border-b bg-white">
           <div className="flex items-center h-full" style={{height: '76px'}}>
@@ -227,36 +245,125 @@ export default function App(){
                       e.currentTarget.value = ''
                     }}
                   />
-                  <Button variant="outline" size="xs" onClick={()=>fileInputRef.current?.click()}>Open</Button>
-                  <Button variant="outline" size="xs" onClick={onExport}>Save</Button>
-                  <Button variant="outline" size="xs" onClick={onExportPdf}>Export PDF</Button>
-                  <Button variant="outline" size="xs" onClick={undo} disabled={pastLen===0}>Undo</Button>
-                  <Button variant="outline" size="xs" onClick={redo} disabled={futureLen===0}>Redo</Button>
+                  <Tooltip label="Open project">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={()=>fileInputRef.current?.click()}
+                      aria-label="Open project"
+                      title="Open project"
+                    >
+                      <FolderOpen className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Save as JSON">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={onExport}
+                      aria-label="Save project"
+                      title="Save project"
+                    >
+                      <Save className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Export current canvas to PDF">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={onExportPdf}
+                      aria-label="Export PDF"
+                      title="Export PDF"
+                    >
+                      <FileDown className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Undo last change">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={undo}
+                      disabled={pastLen===0}
+                      aria-label="Undo"
+                      title="Undo"
+                    >
+                      <Undo2 className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Redo last undone change">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={redo}
+                      disabled={futureLen===0}
+                      aria-label="Redo"
+                      title="Redo"
+                    >
+                      <Redo2 className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
-                  <Button
-                    ref={autoAlignButtonRef}
-                    variant="outline"
-                    size="xs"
-                    onClick={openAutoAlignPrompt}
-                  >
-                    Auto Alignment
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="xs"
-                    onClick={() => setBulkEditorOpen(true)}
-                  >
-                    Edit Nodes
-                  </Button>
-                  <Button size="xs" variant="success" onClick={onReport}>Report</Button>
-                  <Button size="xs" variant="danger" onClick={onClear}>Clear</Button>
-                <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
-                <MarkupToolbar
-                  activeTool={markupTool}
-                  selectionMode={selectionMode}
-                  onSelectTool={handleMarkupToolChange}
-                  onSelectionModeChange={handleSelectionModeChange}
-                />
+                  <Tooltip label="Auto-align selected nodes">
+                    <Button
+                      ref={autoAlignButtonRef}
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={openAutoAlignPrompt}
+                      aria-label="Auto alignment"
+                      title="Auto alignment"
+                    >
+                      <PanelsTopLeft className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Bulk edit selected nodes">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      type="button"
+                      onClick={() => setBulkEditorOpen(true)}
+                      aria-label="Edit nodes"
+                      title="Edit nodes"
+                    >
+                      <PencilRuler className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Generate report">
+                    <Button
+                      size="icon"
+                      variant="success"
+                      type="button"
+                      onClick={onReport}
+                      aria-label="Open report"
+                      title="Open report"
+                    >
+                      <FileBarChart2 className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <Tooltip label="Clear all nodes and edges">
+                    <Button
+                      size="icon"
+                      variant="danger"
+                      type="button"
+                      onClick={onClear}
+                      aria-label="Clear canvas"
+                      title="Clear canvas"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  </Tooltip>
+                  <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
+                  <MarkupToolbar
+                    activeTool={markupTool}
+                    selectionMode={selectionMode}
+                    onSelectTool={handleMarkupToolChange}
+                    onSelectionModeChange={handleSelectionModeChange}
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2 justify-end">
@@ -326,5 +433,6 @@ export default function App(){
         </div>
       </QuickPresetDialogsProvider>
     </ErrorBoundary>
+  </TooltipProvider>
   )
 }

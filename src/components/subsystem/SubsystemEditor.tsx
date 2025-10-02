@@ -4,10 +4,12 @@ import SubsystemPalette from './SubsystemPalette'
 import SubsystemCanvas from './SubsystemCanvas'
 import SubsystemInspector from './SubsystemInspector'
 import { Button } from '../ui/button'
+import { Tooltip } from '../ui/tooltip'
 import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
+import { BoxSelect, PanelsTopLeft, Pointer, Redo2, Trash2, Undo2 } from 'lucide-react'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
@@ -147,6 +149,17 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     return null
   }, [selection])
 
+  const handleSelectSingle = React.useCallback(() => {
+    setSelectionMode('single')
+  }, [setSelectionMode])
+
+  const handleToggleMulti = React.useCallback(() => {
+    setSelectionMode(prev => (prev === 'multi' ? 'single' : 'multi'))
+  }, [setSelectionMode])
+
+  const isSelectActive = selectionMode === 'single'
+  const isMultiActive = selectionMode === 'multi'
+
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
@@ -156,32 +169,84 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             <div className="font-semibold">Subsystem: {subsystem.name}</div>
             <div className={"text-xs px-2 py-0.5 rounded-full " + (inputCount===1? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{inputCount===1? '1 input ok' : `${inputCount} inputs`}</div>
           </div>
-          <div className="flex items-center gap-2 toolbar-buttons">
-            <Button variant="outline" size="sm" onClick={undo} disabled={pastLen===0}>Undo</Button>
-            <Button variant="outline" size="sm" onClick={redo} disabled={futureLen===0}>Redo</Button>
-            <Button
-              variant={selectionMode === 'single' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectionMode('single')}
-            >
-              Select
-            </Button>
-            <Button
-              variant={selectionMode === 'multi' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setSelectionMode('multi')}
-            >
-              Multi-Select
-            </Button>
-            <Button
-              ref={autoAlignButtonRef}
-              variant="outline"
-              size="sm"
-              onClick={openAutoAlignPrompt}
-            >
-              Auto Alignment
-            </Button>
-            <Button size="sm" variant="danger" onClick={handleClear}>Clear</Button>
+          <div className="flex items-center gap-1.5 toolbar-buttons">
+            <Tooltip label="Undo last change">
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                onClick={undo}
+                disabled={pastLen===0}
+                aria-label="Undo"
+                title="Undo"
+              >
+                <Undo2 className="h-5 w-5" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Redo last undone change">
+              <Button
+                variant="outline"
+                size="icon"
+                type="button"
+                onClick={redo}
+                disabled={futureLen===0}
+                aria-label="Redo"
+                title="Redo"
+              >
+                <Redo2 className="h-5 w-5" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Select nodes">
+              <Button
+                variant={isSelectActive ? 'default' : 'outline'}
+                size="icon"
+                type="button"
+                onClick={handleSelectSingle}
+                aria-label="Select nodes"
+                title="Select nodes"
+                aria-pressed={isSelectActive}
+              >
+                <Pointer className="h-5 w-5" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Toggle multi-select">
+              <Button
+                variant={isMultiActive ? 'default' : 'outline'}
+                size="icon"
+                type="button"
+                onClick={handleToggleMulti}
+                aria-label="Toggle multi-select"
+                title="Toggle multi-select"
+                aria-pressed={isMultiActive}
+              >
+                <BoxSelect className="h-5 w-5" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Auto-align selected nodes">
+              <Button
+                ref={autoAlignButtonRef}
+                variant="outline"
+                size="icon"
+                type="button"
+                onClick={openAutoAlignPrompt}
+                aria-label="Auto alignment"
+                title="Auto alignment"
+              >
+                <PanelsTopLeft className="h-5 w-5" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Clear this subsystem">
+              <Button
+                size="icon"
+                variant="danger"
+                type="button"
+                onClick={handleClear}
+                aria-label="Clear subsystem"
+                title="Clear subsystem"
+              >
+                <Trash2 className="h-5 w-5" />
+              </Button>
+            </Tooltip>
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           </div>
         </div>
