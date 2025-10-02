@@ -955,6 +955,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const updateEdgeStore = useStore(s=>s.updateEdge)
   const nestedAddNode = useStore(s=>s.nestedSubsystemAddNode)
   const nestedUpdateNodePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
+  const bulkUpdateNodesStore = useStore(s=>s.bulkUpdateNodes)
   const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
@@ -2014,6 +2015,347 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     [resolveEdgeSnapshotById, resolveMarkupSnapshotById, resolveNodeSnapshotById]
   )
 
+  type AlignableNode = {
+    rfId: string
+    nodeId: string
+    subsystemPath: string[]
+    width: number
+    height: number
+    absolute: { x: number; y: number }
+    canonical: { x: number; y: number }
+    centerX: number
+    centerY: number
+    left: number
+    right: number
+    top: number
+    bottom: number
+    owningSubsystemId?: string
+    containerAbsolute?: { x: number; y: number }
+    contentOffset?: { x: number; y: number }
+  }
+
+  type NodePositionMutation = {
+    node: AlignableNode
+    absolute: { x: number; y: number }
+  }
+
+  const collectAlignableNodes = useCallback(
+    (ids: string[]): AlignableNode[] => {
+      const result: AlignableNode[] = []
+      for (const id of ids) {
+        if (!id || id.endsWith('::container')) continue
+        const rfNode = nodes.find(n => n.id === id)
+        if (!rfNode) continue
+        if ((rfNode as any).type === 'embeddedSubsystemContainer') continue
+        if ((rfNode as any).draggable === false) continue
+
+        const positionAbsolute = (rfNode as any).positionAbsolute ?? rfNode.position
+        const absXRaw = (positionAbsolute as any)?.x
+        const absYRaw = (positionAbsolute as any)?.y
+        if (!Number.isFinite(absXRaw) || !Number.isFinite(absYRaw)) continue
+        const absX = Number(absXRaw)
+        const absY = Number(absYRaw)
+
+        let width = typeof rfNode.width === 'number' && Number.isFinite(rfNode.width) ? rfNode.width : undefined
+        let height = typeof rfNode.height === 'number' && Number.isFinite(rfNode.height) ? rfNode.height : undefined
+
+        if (!Number.isFinite(width) || !Number.isFinite(height)) {
+          const snapshot = resolveNodeSnapshotById(id)
+          if (snapshot) {
+            const estimated = estimateEmbeddedNodeSize(snapshot)
+            if (!Number.isFinite(width)) width = estimated.width
+            if (!Number.isFinite(height)) height = estimated.height
+          }
+        }
+
+        const nested = parseNestedNodeId(id)
+        let nodeId = id
+        let subsystemPath: string[] = []
+        let canonicalX = absX
+        let canonicalY = absY
+        let containerAbsolute: { x: number; y: number } | undefined
+        let contentOffset: { x: number; y: number } | undefined
+        let owningSubsystemId: string | undefined
+
+        if (nested) {
+          const layout = expandedLayouts.get(nested.subsystemId)
+          if (!layout) continue
+          const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+          if (!containerPos) continue
+          containerAbsolute = { x: containerPos.x, y: containerPos.y }
+          contentOffset = layout.contentOffset
+          owningSubsystemId = nested.subsystemId
+          subsystemPath = layout.subsystemPath
+          nodeId = nested.nodeId
+          canonicalX = absX - containerAbsolute.x + (contentOffset?.x ?? 0)
+          canonicalY = absY - containerAbsolute.y + (contentOffset?.y ?? 0)
+        }
+
+        const widthValue = Number(width)
+        const heightValue = Number(height)
+        if (!Number.isFinite(widthValue) || !Number.isFinite(heightValue) || widthValue <= 0 || heightValue <= 0)
+          continue
+
+        const centerX = absX + widthValue / 2
+        const centerY = absY + heightValue / 2
+
+        result.push({
+          rfId: id,
+          nodeId,
+          subsystemPath,
+          width: widthValue,
+          height: heightValue,
+          absolute: { x: absX, y: absY },
+          canonical: { x: canonicalX, y: canonicalY },
+          centerX,
+          centerY,
+          left: absX,
+          right: absX + widthValue,
+          top: absY,
+          bottom: absY + heightValue,
+          owningSubsystemId,
+          containerAbsolute,
+          contentOffset,
+        })
+      }
+      return result
+    },
+    [expandedLayouts, nodePositions, nodes, resolveNodeSnapshotById]
+  )
+
+  const commitNodePositionMutations = useCallback(
+    (mutations: NodePositionMutation[]): boolean => {
+      if (!mutations.length) return false
+      const epsilon = 0.1
+      const updates: { nodeId: string; patch: { x: number; y: number }; subsystemPath?: string[] }[] = []
+      const nextPositions = new Map<string, { position: { x: number; y: number }; positionAbsolute: { x: number; y: number } }>()
+
+      for (const { node, absolute } of mutations) {
+        const { x: absXRaw, y: absYRaw } = absolute
+        if (!Number.isFinite(absXRaw) || !Number.isFinite(absYRaw)) continue
+        const absX = Number(absXRaw)
+        const absY = Number(absYRaw)
+
+        let canonicalX = absX
+        let canonicalY = absY
+        if (node.subsystemPath.length) {
+          const container = node.containerAbsolute
+          const offset = node.contentOffset ?? { x: 0, y: 0 }
+          if (!container) continue
+          canonicalX = absX - container.x + offset.x
+          canonicalY = absY - container.y + offset.y
+        }
+
+        if (
+          Math.abs(canonicalX - node.canonical.x) < epsilon &&
+          Math.abs(canonicalY - node.canonical.y) < epsilon
+        ) {
+          continue
+        }
+
+        const entry: { nodeId: string; patch: { x: number; y: number }; subsystemPath?: string[] } = {
+          nodeId: node.nodeId,
+          patch: { x: canonicalX, y: canonicalY },
+        }
+        if (node.subsystemPath.length) {
+          entry.subsystemPath = node.subsystemPath
+        }
+        updates.push(entry)
+
+        const position = node.subsystemPath.length
+          ? {
+              x: canonicalX - (node.contentOffset?.x ?? 0),
+              y: canonicalY - (node.contentOffset?.y ?? 0),
+            }
+          : { x: canonicalX, y: canonicalY }
+
+        nextPositions.set(node.rfId, {
+          position,
+          positionAbsolute: { x: absX, y: absY },
+        })
+      }
+
+      if (!updates.length) {
+        return false
+      }
+
+      if (typeof bulkUpdateNodesStore === 'function') {
+        bulkUpdateNodesStore(updates)
+      }
+
+      setNodes(prev =>
+        prev.map(rfNode => {
+          const next = nextPositions.get(rfNode.id)
+          if (!next) return rfNode
+          return {
+            ...rfNode,
+            position: next.position,
+            positionAbsolute: next.positionAbsolute,
+          }
+        })
+      )
+
+      return true
+    },
+    [bulkUpdateNodesStore, setNodes]
+  )
+
+  type HorizontalAlignment = 'left' | 'center' | 'right'
+  type VerticalAlignment = 'top' | 'middle' | 'bottom'
+
+  const performHorizontalAlignment = useCallback(
+    (mode: HorizontalAlignment) => {
+      if (!contextMenu || contextMenu.type !== 'node') return
+      const selectionIds = activeMultiSelection?.nodes ?? []
+      const nodeIds = selectionIds.length >= 2 ? selectionIds : contextMenu.targetId ? [contextMenu.targetId] : []
+      const alignables = collectAlignableNodes(nodeIds)
+      if (alignables.length < 2) {
+        setContextMenu(null)
+        return
+      }
+
+      const reference = (() => {
+        switch (mode) {
+          case 'left':
+            return Math.min(...alignables.map(n => n.left))
+          case 'center':
+            return alignables.reduce((sum, n) => sum + n.centerX, 0) / alignables.length
+          case 'right':
+            return Math.max(...alignables.map(n => n.right))
+          default:
+            return 0
+        }
+      })()
+
+      const mutations: NodePositionMutation[] = alignables.map(node => {
+        let targetCenterX = node.centerX
+        switch (mode) {
+          case 'left':
+            targetCenterX = reference + node.width / 2
+            break
+          case 'center':
+            targetCenterX = reference
+            break
+          case 'right':
+            targetCenterX = reference - node.width / 2
+            break
+        }
+        const newAbsX = targetCenterX - node.width / 2
+        return {
+          node,
+          absolute: { x: newAbsX, y: node.absolute.y },
+        }
+      })
+
+      commitNodePositionMutations(mutations)
+      setContextMenu(null)
+    },
+    [activeMultiSelection, collectAlignableNodes, commitNodePositionMutations, contextMenu, setContextMenu]
+  )
+
+  const performVerticalAlignment = useCallback(
+    (mode: VerticalAlignment) => {
+      if (!contextMenu || contextMenu.type !== 'node') return
+      const selectionIds = activeMultiSelection?.nodes ?? []
+      const nodeIds = selectionIds.length >= 2 ? selectionIds : contextMenu.targetId ? [contextMenu.targetId] : []
+      const alignables = collectAlignableNodes(nodeIds)
+      if (alignables.length < 2) {
+        setContextMenu(null)
+        return
+      }
+
+      const reference = (() => {
+        switch (mode) {
+          case 'top':
+            return Math.min(...alignables.map(n => n.top))
+          case 'middle':
+            return alignables.reduce((sum, n) => sum + n.centerY, 0) / alignables.length
+          case 'bottom':
+            return Math.max(...alignables.map(n => n.bottom))
+          default:
+            return 0
+        }
+      })()
+
+      const mutations: NodePositionMutation[] = alignables.map(node => {
+        let targetCenterY = node.centerY
+        switch (mode) {
+          case 'top':
+            targetCenterY = reference + node.height / 2
+            break
+          case 'middle':
+            targetCenterY = reference
+            break
+          case 'bottom':
+            targetCenterY = reference - node.height / 2
+            break
+        }
+        const newAbsY = targetCenterY - node.height / 2
+        return {
+          node,
+          absolute: { x: node.absolute.x, y: newAbsY },
+        }
+      })
+
+      commitNodePositionMutations(mutations)
+      setContextMenu(null)
+    },
+    [activeMultiSelection, collectAlignableNodes, commitNodePositionMutations, contextMenu, setContextMenu]
+  )
+
+  const performDistribution = useCallback(
+    (axis: 'horizontal' | 'vertical') => {
+      if (!contextMenu || contextMenu.type !== 'node') return
+      const selectionIds = activeMultiSelection?.nodes ?? []
+      const alignables = collectAlignableNodes(selectionIds)
+      if (alignables.length < 3) {
+        setContextMenu(null)
+        return
+      }
+
+      const sorted = [...alignables].sort((a, b) =>
+        axis === 'horizontal' ? a.centerX - b.centerX : a.centerY - b.centerY
+      )
+      const first = sorted[0]
+      const last = sorted[sorted.length - 1]
+      if (!first || !last) {
+        setContextMenu(null)
+        return
+      }
+      const span = axis === 'horizontal' ? last.centerX - first.centerX : last.centerY - first.centerY
+      if (Math.abs(span) < 1e-6) {
+        setContextMenu(null)
+        return
+      }
+      const step = span / (sorted.length - 1)
+
+      const mutations: NodePositionMutation[] = sorted.map((node, index) => {
+        if (axis === 'horizontal') {
+          const targetCenter = first.centerX + step * index
+          return {
+            node,
+            absolute: {
+              x: targetCenter - node.width / 2,
+              y: node.absolute.y,
+            },
+          }
+        }
+        const targetCenter = first.centerY + step * index
+        return {
+          node,
+          absolute: {
+            x: node.absolute.x,
+            y: targetCenter - node.height / 2,
+          },
+        }
+      })
+
+      commitNodePositionMutations(mutations)
+      setContextMenu(null)
+    },
+    [activeMultiSelection, collectAlignableNodes, commitNodePositionMutations, contextMenu, setContextMenu]
+  )
+
   const handleCopy = useCallback(() => {
     if (!contextMenu || contextMenu.type !== 'node' || !contextMenu.targetId) return
     const selection: MultiSelection = {
@@ -2186,6 +2528,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [activeMultiSelection, clearMultiSelection, collectClipboardPayload, deleteSelection, handleMarkupSelect, markupTool, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard])
 
+  const selectionNodeIds = activeMultiSelection?.nodes ?? []
+  const contextNodeInSelection =
+    contextMenu?.type === 'node' && contextMenu.targetId ? selectionNodeIds.includes(contextMenu.targetId) : false
+  const alignmentMenuEnabled = contextNodeInSelection && selectionNodeIds.length >= 2
+  const distributionMenuEnabled = contextNodeInSelection && selectionNodeIds.length >= 3
+  const menuButtonClass = (enabled: boolean) =>
+    `block w-full text-left px-3 py-1 ${enabled ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`
+
   const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && contextMenu.targetId ? !contextMenu.targetId.endsWith('::container') : false
 
   return (
@@ -2313,18 +2663,99 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         <div data-export-exclude="true" className="fixed z-50 bg-white border shadow-md rounded-md text-sm" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={e=>e.stopPropagation()}>
           {contextMenu.type==='node' ? (
             <div className="py-1">
-              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
+              {contextNodeInSelection && (
+                <>
+                  <div className="px-3 py-1 text-xs font-semibold uppercase text-slate-500">Align Horizontally</div>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performHorizontalAlignment('left') : undefined}
+                  >
+                    Align Left
+                  </button>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performHorizontalAlignment('center') : undefined}
+                  >
+                    Align Center
+                  </button>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performHorizontalAlignment('right') : undefined}
+                  >
+                    Align Right
+                  </button>
+                  <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase text-slate-500">Align Vertically</div>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performVerticalAlignment('top') : undefined}
+                  >
+                    Align Top
+                  </button>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performVerticalAlignment('middle') : undefined}
+                  >
+                    Align Middle
+                  </button>
+                  <button
+                    type="button"
+                    className={menuButtonClass(alignmentMenuEnabled)}
+                    disabled={!alignmentMenuEnabled}
+                    onClick={alignmentMenuEnabled ? () => performVerticalAlignment('bottom') : undefined}
+                  >
+                    Align Bottom
+                  </button>
+                  <div className="px-3 pt-2 pb-1 text-xs font-semibold uppercase text-slate-500">Distribute</div>
+                  <button
+                    type="button"
+                    className={menuButtonClass(distributionMenuEnabled)}
+                    disabled={!distributionMenuEnabled}
+                    onClick={distributionMenuEnabled ? () => performDistribution('horizontal') : undefined}
+                  >
+                    Distribute Horizontally
+                  </button>
+                  <button
+                    type="button"
+                    className={menuButtonClass(distributionMenuEnabled)}
+                    disabled={!distributionMenuEnabled}
+                    onClick={distributionMenuEnabled ? () => performDistribution('vertical') : undefined}
+                  >
+                    Distribute Vertically
+                  </button>
+                  <div className="my-1 h-px bg-slate-200" />
+                </>
+              )}
+              <button type="button" className="block w-full text-left px-3 py-1 hover:bg-slate-100" onClick={handleCopy}>Copy</button>
               <button
+                type="button"
                 className={`block w-full text-left px-3 py-1 ${canSaveQuickPresetFromContext ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`}
                 onClick={canSaveQuickPresetFromContext ? handleSaveQuickPreset : undefined}
+                disabled={!canSaveQuickPresetFromContext}
               >
                 Save as quick preset…
               </button>
-              <button className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
+              <button type="button" className="block w-full text-left px-3 py-1 hover:bg-slate-100 text-red-600" onClick={handleDelete}>Delete</button>
             </div>
           ) : (
             <div className="py-1">
-              <button className={`block w-full text-left px-3 py-1 ${clipboard ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`} onClick={clipboard ? handlePaste : undefined}>Paste</button>
+              <button
+                type="button"
+                className={`block w-full text-left px-3 py-1 ${clipboard ? 'hover:bg-slate-100' : 'text-slate-400 cursor-not-allowed'}`}
+                onClick={clipboard ? handlePaste : undefined}
+                disabled={!clipboard}
+              >
+                Paste
+              </button>
             </div>
           )}
         </div>
