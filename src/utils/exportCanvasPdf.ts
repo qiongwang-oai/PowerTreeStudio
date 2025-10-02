@@ -282,7 +282,7 @@ export async function exportCanvasToPdf({
 
   try {
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-    const pixelRatio = Math.min(2, Math.max(1, window.devicePixelRatio || 1))
+    const pixelRatio = Math.min(4, Math.max(2, window.devicePixelRatio || 1))
     const dataUrl = await toPng(clone, {
       backgroundColor: '#ffffff',
       width,
