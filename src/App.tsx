@@ -308,7 +308,7 @@ export default function App(){
                     </Button>
                   </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
-                  <Tooltip label="Auto-align selected nodes">
+                  <Tooltip label="Auto align all the nodes">
                     <Button
                       ref={autoAlignButtonRef}
                       variant="outline"
@@ -321,7 +321,7 @@ export default function App(){
                       <PanelsTopLeft className="h-5 w-5" />
                     </Button>
                   </Tooltip>
-                  <Tooltip label="Bulk edit selected nodes">
+                  <Tooltip label="Nodes editor">
                     <Button
                       variant="outline"
                       size="icon"

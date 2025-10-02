@@ -222,7 +222,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 <BoxSelect className="h-5 w-5" />
               </Button>
             </Tooltip>
-            <Tooltip label="Auto-align selected nodes">
+            <Tooltip label="Auto align all the nodes">
               <Button
                 ref={autoAlignButtonRef}
                 variant="outline"
