@@ -34,6 +34,7 @@ import {
   Minus,
   Square,
   Undo2,
+  Broom
 } from 'lucide-react'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -354,7 +355,7 @@ export default function App(){
                       aria-label="Clear canvas"
                       title="Clear canvas"
                     >
-                      <Trash2 className="h-5 w-5" />
+                      <Broom className="h-5 w-5" />
                     </Button>
                   </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
