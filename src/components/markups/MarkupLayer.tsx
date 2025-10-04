@@ -242,6 +242,8 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
   const transform = useReactFlowStore(store => store.transform)
   const [tx, ty, zoom] = transform
   const containerRef = useRef<HTMLDivElement | null>(null)
+  const rectangleVisualLayerRef = useRef<HTMLDivElement | null>(null)
+  const rectangleInteractionLayerRef = useRef<HTMLDivElement | null>(null)
   const [dragState, setDragState] = useState<DragState | null>(null)
   const [drafts, setDrafts] = useState<Record<string, CanvasMarkup>>({})
   const [creationDraft, setCreationDraft] = useState<CreationDraft | null>(null)
@@ -255,6 +257,79 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
     const merged = markups.map(markup => drafts[markup.id] ?? markup)
     return merged.sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0))
   }, [markups, drafts])
+
+  const { rectangleMarkups, otherMarkups } = useMemo(() => {
+    const rectangles: CanvasMarkup[] = []
+    const others: CanvasMarkup[] = []
+    for (const markup of displayedMarkups) {
+      if (markup.type === 'rectangle') {
+        rectangles.push(markup)
+      } else {
+        others.push(markup)
+      }
+    }
+    return { rectangleMarkups: rectangles, otherMarkups: others }
+  }, [displayedMarkups])
+
+  type RectangleInteractionResult = {
+    shouldHandle: boolean
+    hitElement: HTMLElement | null
+  }
+
+  const evaluateRectangleInteraction = useCallback((event: React.PointerEvent): RectangleInteractionResult => {
+    if (typeof document === 'undefined') {
+      return { shouldHandle: true, hitElement: null }
+    }
+    const target = event.currentTarget as HTMLElement | null
+    const interactionLayer = rectangleInteractionLayerRef.current
+    const modifiedElements: Array<{ element: HTMLElement; value: string }> = []
+
+    const disablePointerEvents = (element: HTMLElement | null, includeAncestors = false) => {
+      let current: HTMLElement | null = element
+      while (current) {
+        const existing = current.style.pointerEvents
+        modifiedElements.push({ element: current, value: existing })
+        current.style.pointerEvents = 'none'
+        if (!includeAncestors) break
+        if (current === interactionLayer || current === containerRef.current) break
+        current = current.parentElement
+      }
+    }
+
+    disablePointerEvents(target, true)
+    disablePointerEvents(interactionLayer ?? null, false)
+
+    const elements = document.elementsFromPoint(event.clientX, event.clientY)
+
+    let topGraphElement: HTMLElement | null = null
+    for (const element of elements) {
+      if (
+        rectangleInteractionLayerRef.current?.contains(element) ||
+        rectangleVisualLayerRef.current?.contains(element) ||
+        containerRef.current?.contains(element)
+      ) {
+        continue
+      }
+      const hit =
+        element.closest('.react-flow__node') ||
+        element.closest('.react-flow__edge') ||
+        element.closest('.react-flow__edge-path') ||
+        element.closest('.react-flow__handle')
+      if (hit) {
+        topGraphElement = hit as HTMLElement
+        break
+      }
+    }
+
+    const isClear = topGraphElement === null
+
+    modifiedElements.forEach(({ element, value }) => {
+      element.style.pointerEvents = value
+    })
+
+    return { shouldHandle: isClear, hitElement: topGraphElement }
+  }, [])
+
 
   const startDrag = useCallback((markup: CanvasMarkup, mode: DragMode, event: React.PointerEvent) => {
     event.stopPropagation()
@@ -387,56 +462,116 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
   })()
 
   return (
-    <div
-      ref={containerRef}
-      className="absolute inset-0"
-      style={{ pointerEvents, cursor, zIndex: 50 }}
-      onPointerDown={handleBackgroundPointerDown}
-      onPointerMove={handleCreationPointerMove}
-      onPointerUp={commitCreation}
-      onPointerCancel={event => cancelCreation(event.pointerId)}
-      onLostPointerCapture={event => cancelCreation(event.pointerId)}
-    >
+    <>
       <div
+        ref={rectangleVisualLayerRef}
         className="absolute inset-0"
-        style={{
-          transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
-          transformOrigin: '0 0',
-          pointerEvents: 'none',
-        }}
+        style={{ pointerEvents: 'none', cursor: 'default', zIndex: 2 }}
       >
-        {creationDraft && (
-          <MarkupItem
-            key={creationDraft.markup.id}
-            markup={creationDraft.markup}
-            isPrimarySelected={false}
-            isMultiSelected={false}
-            onSelect={() => {}}
-            startDrag={() => {}}
-            onPointerMove={() => {}}
-            onPointerUp={() => {}}
-            readOnly
-          />
-        )}
-        {displayedMarkups.map(markup => (
-          <MarkupItem
-            key={markup.id}
-            markup={markup}
-            isPrimarySelected={primarySelectedId === markup.id}
-            isMultiSelected={multiSelectedIds.includes(markup.id)}
-            onSelect={onSelect}
-            startDrag={startDrag}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-          />
-        ))}
-      </div>
-      {activeTool && (
-        <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-md bg-slate-900/80 px-3 py-1 text-xs text-white shadow">
-          {activeTool === 'text' ? 'Click to place text annotation' : 'Click and drag to place a ' + (activeTool === 'rectangle' ? 'box' : 'line')}
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        >
+          {rectangleMarkups.map(markup => (
+            <MarkupItem
+              key={markup.id}
+              markup={markup}
+              isPrimarySelected={primarySelectedId === markup.id}
+              isMultiSelected={multiSelectedIds.includes(markup.id)}
+              onSelect={onSelect}
+              startDrag={startDrag}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              readOnly
+              renderMode="visual"
+            />
+          ))}
         </div>
-      )}
-    </div>
+      </div>
+      <div
+        ref={rectangleInteractionLayerRef}
+        className="absolute inset-0"
+        style={{ pointerEvents: 'none', cursor: 'default', zIndex: 45 }}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        >
+          {rectangleMarkups.map(markup => (
+            <MarkupItem
+              key={markup.id}
+              markup={markup}
+              isPrimarySelected={primarySelectedId === markup.id}
+              isMultiSelected={multiSelectedIds.includes(markup.id)}
+              onSelect={onSelect}
+              startDrag={startDrag}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              evaluateRectInteraction={evaluateRectangleInteraction}
+              renderMode="interactive"
+            />
+          ))}
+        </div>
+      </div>
+      <div
+        ref={containerRef}
+        className="absolute inset-0"
+        style={{ pointerEvents, cursor, zIndex: 50 }}
+        onPointerDown={handleBackgroundPointerDown}
+        onPointerMove={handleCreationPointerMove}
+        onPointerUp={commitCreation}
+        onPointerCancel={event => cancelCreation(event.pointerId)}
+        onLostPointerCapture={event => cancelCreation(event.pointerId)}
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
+            transformOrigin: '0 0',
+            pointerEvents: 'none',
+          }}
+        >
+          {creationDraft && (
+            <MarkupItem
+              key={creationDraft.markup.id}
+              markup={creationDraft.markup}
+              isPrimarySelected={false}
+              isMultiSelected={false}
+              onSelect={() => {}}
+              startDrag={() => {}}
+              onPointerMove={() => {}}
+              onPointerUp={() => {}}
+              readOnly
+            />
+          )}
+          {otherMarkups.map(markup => (
+            <MarkupItem
+              key={markup.id}
+              markup={markup}
+              isPrimarySelected={primarySelectedId === markup.id}
+              isMultiSelected={multiSelectedIds.includes(markup.id)}
+              onSelect={onSelect}
+              startDrag={startDrag}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            />
+          ))}
+        </div>
+        {activeTool && (
+          <div className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-md bg-slate-900/80 px-3 py-1 text-xs text-white shadow">
+            {activeTool === 'text' ? 'Click to place text annotation' : 'Click and drag to place a ' + (activeTool === 'rectangle' ? 'box' : 'line')}
+          </div>
+        )}
+      </div>
+    </>
   )
 }
 
@@ -449,11 +584,153 @@ type MarkupItemProps = {
   onPointerMove: (event: React.PointerEvent) => void
   onPointerUp: (event: React.PointerEvent) => void
   readOnly?: boolean
+  evaluateRectInteraction?: (event: React.PointerEvent) => { shouldHandle: boolean; hitElement: HTMLElement | null }
+  renderMode?: 'default' | 'visual' | 'interactive'
 }
 
-const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMultiSelected, onSelect, startDrag, onPointerMove, onPointerUp, readOnly }) => {
-  const interactive = !readOnly
+const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMultiSelected, onSelect, startDrag, onPointerMove, onPointerUp, readOnly, evaluateRectInteraction, renderMode = 'default' }) => {
+  const interactive = !readOnly && renderMode !== 'visual'
   const multiAccent = 'rgba(2, 132, 199, 0.35)'
+  const [pointerSuspended, setPointerSuspended] = useState(false)
+  const suspendedPointersRef = useRef<Map<number, { element: HTMLElement; previousPointerEvents: string }>>(new Map())
+  const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const [passThrough, setPassThrough] = useState(false)
+  const [passThroughCursor, setPassThroughCursor] = useState<string | null>(null)
+  const [passThroughType, setPassThroughType] = useState<'node' | 'edge' | 'handle' | null>(null)
+  const passThroughTimeoutRef = useRef<number | null>(null)
+  const passThroughTargetRef = useRef<HTMLElement | null>(null)
+
+  const suspendPointer = useCallback((native: PointerEvent, element: HTMLElement) => {
+    if (suspendedPointersRef.current.has(native.pointerId)) return
+    if (suspendedPointersRef.current.size === 0) {
+      setPointerSuspended(true)
+    }
+    const previousPointerEvents = element.style.pointerEvents
+    suspendedPointersRef.current.set(native.pointerId, { element, previousPointerEvents })
+    element.style.pointerEvents = 'none'
+
+    if (typeof window === 'undefined') return
+
+    const restore = () => {
+      const entry = suspendedPointersRef.current.get(native.pointerId)
+      if (entry) {
+        entry.element.style.pointerEvents = entry.previousPointerEvents
+        suspendedPointersRef.current.delete(native.pointerId)
+      }
+      if (suspendedPointersRef.current.size === 0) {
+        setPointerSuspended(false)
+      }
+      window.removeEventListener('pointerup', restore, true)
+      window.removeEventListener('pointercancel', restore, true)
+    }
+
+    window.addEventListener('pointerup', restore, true)
+    window.addEventListener('pointercancel', restore, true)
+  }, [])
+
+  const redirectPointerToGraph = useCallback((event: React.PointerEvent, explicitTarget?: HTMLElement | null) => {
+    const targetElement = event.currentTarget as HTMLElement | null
+    const native = event.nativeEvent
+    if (!targetElement || !(native instanceof PointerEvent)) return
+
+    suspendPointer(native, targetElement)
+
+    let dispatchTarget: HTMLElement | null = explicitTarget ?? passThroughTargetRef.current ?? null
+    if (!dispatchTarget && typeof document !== 'undefined') {
+      dispatchTarget = document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+    }
+
+    if (dispatchTarget) {
+      const clone = new PointerEvent(event.type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: native.pointerId,
+        pointerType: native.pointerType,
+        isPrimary: native.isPrimary,
+        button: native.button,
+        buttons: native.buttons,
+        clientX: native.clientX,
+        clientY: native.clientY,
+        screenX: native.screenX,
+        screenY: native.screenY,
+        altKey: native.altKey,
+        ctrlKey: native.ctrlKey,
+        metaKey: native.metaKey,
+        shiftKey: native.shiftKey,
+        width: native.width,
+        height: native.height,
+        pressure: native.pressure,
+        tangentialPressure: native.tangentialPressure,
+        tiltX: native.tiltX,
+        tiltY: native.tiltY,
+        twist: native.twist,
+      })
+      dispatchTarget.dispatchEvent(clone)
+
+      try {
+        const mouseDown = new MouseEvent('mousedown', {
+          bubbles: true,
+          cancelable: true,
+          clientX: native.clientX,
+          clientY: native.clientY,
+          screenX: native.screenX,
+          screenY: native.screenY,
+          button: native.button,
+          buttons: native.buttons,
+          altKey: native.altKey,
+          ctrlKey: native.ctrlKey,
+          metaKey: native.metaKey,
+          shiftKey: native.shiftKey,
+        })
+        dispatchTarget.dispatchEvent(mouseDown)
+      } catch {}
+    }
+
+    event.stopPropagation()
+  }, [suspendPointer])
+
+  const updatePassThrough = useCallback((clientX: number, clientY: number) => {
+    const el = wrapperRef.current
+    if (!el || typeof document === 'undefined') return
+    const prev = el.style.pointerEvents
+    el.style.pointerEvents = 'none'
+    const hit = document.elementFromPoint(clientX, clientY) as HTMLElement | null
+    let hitType: 'node' | 'edge' | 'handle' | null = null
+    if (hit) {
+      if (hit.closest('.react-flow__handle')) {
+        hitType = 'handle'
+      } else if (hit.closest('.react-flow__edge') || hit.closest('.react-flow__edge-path')) {
+        hitType = 'edge'
+      } else if (hit.closest('.react-flow__node')) {
+        hitType = 'node'
+      }
+    }
+    el.style.pointerEvents = prev
+    passThroughTargetRef.current = hitType ? (hit as HTMLElement | null) : null
+    const normalizedCursor = hitType === 'handle' ? 'crosshair' : hitType ? 'pointer' : null
+    // Debounce to avoid rapid flicker when hovering boundaries
+    if (hitType) {
+      if (passThroughTimeoutRef.current !== null) {
+        window.clearTimeout(passThroughTimeoutRef.current)
+        passThroughTimeoutRef.current = null
+      }
+      setPassThrough(true)
+      setPassThroughType(hitType)
+      setPassThroughCursor(normalizedCursor)
+    } else {
+      if (passThroughTimeoutRef.current !== null) {
+        window.clearTimeout(passThroughTimeoutRef.current)
+      }
+      passThroughTimeoutRef.current = window.setTimeout(() => {
+        setPassThrough(false)
+        setPassThroughCursor(null)
+        setPassThroughType(null)
+        passThroughTargetRef.current = null
+        passThroughTimeoutRef.current = null
+      }, 160)
+    }
+  }, [])
 
   if (markup.type === 'text') {
     const borderStyle = isPrimarySelected
@@ -623,32 +900,84 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
       w: { left: -HANDLE_SIZE / 2, top: markup.size.height / 2 - HANDLE_SIZE / 2, cursor: 'ew-resize' },
     }
 
+    if (renderMode === 'visual') {
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            left: markup.position.x,
+            top: markup.position.y,
+            width: markup.size.width,
+            height: markup.size.height,
+            pointerEvents: 'none',
+            zIndex: markup.zIndex ?? 0,
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: markup.cornerRadius ?? 0,
+              border: `${markup.thickness}px ${borderStyle} ${isMultiSelected ? multiAccent : markup.strokeColor || '#0f172a'}`,
+              background: fillColor,
+              boxShadow: highlightShadow,
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
+      )
+    }
+
+    const interactiveZIndex = renderMode === 'interactive' ? Math.max(10, (markup.zIndex ?? 0) + 100) : markup.zIndex ?? 0
+    const interactionBackground = renderMode === 'interactive' ? 'transparent' : fillColor
+    const interactionBorderColor = renderMode === 'interactive' ? 'transparent' : isMultiSelected ? multiAccent : markup.strokeColor || '#0f172a'
+    const pointerEnabled = interactive
+
     return (
       <div
+        ref={wrapperRef}
+        data-markup-id={markup.id}
         style={{
           position: 'absolute',
           left: markup.position.x,
           top: markup.position.y,
           width: markup.size.width,
           height: markup.size.height,
-          pointerEvents: interactive ? 'auto' : 'none',
-          zIndex: markup.zIndex ?? 0,
+          pointerEvents: pointerEnabled && !pointerSuspended && !passThrough ? 'auto' : 'none',
+          zIndex: interactive ? interactiveZIndex : markup.zIndex ?? 0,
+        }}
+        onPointerEnter={e => {
+          if (pointerEnabled) updatePassThrough(e.clientX, e.clientY)
+        }}
+        onPointerMove={e => {
+          if (pointerEnabled) updatePassThrough(e.clientX, e.clientY)
+        }}
+        onPointerLeave={() => {
+          setPassThrough(false)
+          setPassThroughCursor(null)
+          passThroughTargetRef.current = null
         }}
       >
         <div
-          onPointerDown={interactive ? event => {
+          onPointerDown={pointerEnabled ? event => {
+            if (event.button !== 0) return
+            const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
+            if (!interaction.shouldHandle) {
+              redirectPointerToGraph(event, interaction.hitElement)
+              return
+            }
             onSelect(markup.id)
             startDrag(markup, { type: 'move' }, event)
           } : undefined}
-          onPointerMove={interactive ? onPointerMove : undefined}
-          onPointerUp={interactive ? onPointerUp : undefined}
+          onPointerMove={pointerEnabled ? onPointerMove : undefined}
+          onPointerUp={pointerEnabled ? onPointerUp : undefined}
           style={{
             width: '100%',
             height: '100%',
             borderRadius: markup.cornerRadius ?? 0,
-            border: `${markup.thickness}px ${borderStyle} ${isMultiSelected ? multiAccent : markup.strokeColor || '#0f172a'}`,
-            background: fillColor,
-            cursor: interactive ? 'move' : 'default',
+            border: `${markup.thickness}px ${borderStyle} ${interactionBorderColor}`,
+            background: interactionBackground,
+            cursor: passThrough ? passThroughCursor ?? 'pointer' : pointerEnabled ? 'grab' : 'default',
             boxShadow: highlightShadow,
           }}
         />
@@ -668,13 +997,20 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 borderRadius: 2,
                 cursor: pos.cursor,
                 zIndex: Math.max(50, (markup.zIndex ?? 0) + 1),
+                pointerEvents: pointerEnabled && !pointerSuspended ? 'auto' : 'none',
               }}
               onPointerDown={event => {
+                if (event.button !== 0) return
+                const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
+                if (!interaction.shouldHandle) {
+                  redirectPointerToGraph(event, interaction.hitElement)
+                  return
+                }
                 onSelect(markup.id)
                 startDrag(markup, { type: 'rect-resize', handle }, event)
               }}
-              onPointerMove={onPointerMove}
-              onPointerUp={onPointerUp}
+              onPointerMove={pointerEnabled ? onPointerMove : undefined}
+              onPointerUp={pointerEnabled ? onPointerUp : undefined}
             />
           )
         })}
