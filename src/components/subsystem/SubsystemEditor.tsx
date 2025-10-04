@@ -9,16 +9,16 @@ import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
-import { BoxSelect, PanelsTopLeft, MousePointer, Redo2, Trash2, Undo2 } from 'lucide-react'
+import { BoxSelect, PanelsTopLeft, MousePointer, Redo2, Eraser, Undo2 } from 'lucide-react'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
   const [selection, setSelection] = React.useState<InspectorSelection | MultiSelection | null>(null)
   const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
-  const [inspectorWidth, setInspectorWidth] = React.useState<number>(320)
+  const [inspectorWidth, setInspectorWidth] = React.useState<number>(420)
   const [isResizing, setIsResizing] = React.useState<boolean>(false)
   const startXRef = React.useRef<number>(0)
-  const startWRef = React.useRef<number>(320)
+  const startWRef = React.useRef<number>(420)
   const containerRef = React.useRef<HTMLDivElement>(null)
   const embedded = subsystem?.project
   const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0
@@ -244,7 +244,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 aria-label="Clear subsystem"
                 title="Clear subsystem"
               >
-                <Trash2 className="h-5 w-5" />
+                <Eraser className="h-5 w-5" />
               </Button>
             </Tooltip>
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>

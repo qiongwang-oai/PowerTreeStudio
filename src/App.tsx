@@ -29,7 +29,7 @@ import {
   Pointer,
   Redo2,
   Save,
-  Trash2,
+  Eraser,
   Type,
   Minus,
   Square,
@@ -71,7 +71,7 @@ export default function App(){
   const pastLen = useStore(s=>s.past.length)
   const futureLen = useStore(s=>s.future.length)
   const [selected, setSelected] = React.useState<InspectorSelection | null>(null)
-  const [rightPane, setRightPane] = React.useState<number>(300)
+  const [rightPane, setRightPane] = React.useState<number>(450)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
   const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
@@ -354,7 +354,7 @@ export default function App(){
                       aria-label="Clear canvas"
                       title="Clear canvas"
                     >
-                      <Trash2 className="h-5 w-5" />
+                      <Eraser className="h-5 w-5" />
                     </Button>
                   </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
