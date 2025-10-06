@@ -8,7 +8,6 @@ import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
 import { Tooltip } from './ui/tooltip'
-import { validate } from '../rules'
 import type { AnyNode, Edge, Project, Scenario, CanvasMarkup } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
@@ -1273,34 +1272,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
   const computeResult = useMemo(()=> compute(project), [project])
 
-  const deepWarningCount = useMemo(()=>{
-    const countWarningsDeep = (p: Project, scenario: Scenario): number => {
-      // Clone to avoid mutating store; force scenario alignment
-      const cloned: Project = JSON.parse(JSON.stringify(p))
-      cloned.currentScenario = scenario
-      const r = compute(cloned)
-      let total = validate(cloned).length + r.globalWarnings.length
-      total += Object.values(r.nodes).reduce((acc, n:any) => acc + ((n.warnings||[]).length), 0)
-      for (const n of cloned.nodes as any[]) {
-        if (n.type === 'Subsystem' && n.project) {
-          total += countWarningsDeep(n.project as Project, scenario)
-        }
-      }
-      return total
-    }
-    return countWarningsDeep(project, project.currentScenario)
-  }, [project])
-
   // Detailed metrics for banner
-  const { criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss, overallEta } = useMemo(()=>{
+  const { criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss, totalSystemPower, overallEta } = useMemo(()=>{
     const deep = computeDeepAggregates(project)
     const sourceInput = computeResult.totals.sourceInput || 0
     const eta = sourceInput > 0 ? (deep.criticalLoadPower / sourceInput) : 0
-    return { criticalLoadPower: deep.criticalLoadPower, nonCriticalLoadPower: deep.nonCriticalLoadPower, edgeLoss: deep.edgeLoss, converterLoss: deep.converterLoss, overallEta: eta }
+    return {
+      criticalLoadPower: deep.criticalLoadPower,
+      nonCriticalLoadPower: deep.nonCriticalLoadPower,
+      edgeLoss: deep.edgeLoss,
+      converterLoss: deep.converterLoss,
+      totalSystemPower: deep.totalLoadPower + deep.edgeLoss + deep.converterLoss,
+      overallEta: eta,
+    }
   }, [project, computeResult])
 
   const bannerPowerMetrics = useMemo(() => {
     const entries = [
+      { key: 'total', label: 'Total', raw: totalSystemPower },
       { key: 'critical', label: 'Critical', raw: criticalLoadPower },
       { key: 'nonCritical', label: 'Non-critical', raw: nonCriticalLoadPower },
       { key: 'edgeLoss', label: 'Copper loss', raw: edgeLoss },
@@ -1312,7 +1301,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       formatted: formatPower(entry.raw),
       tooltip: powerTooltipLabel(entry.raw),
     }))
-  }, [criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss])
+  }, [totalSystemPower, criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss])
 
   const rfNodesInit: RFNode[] = useMemo(() => {
     const nodes: RFNode[] = []
@@ -2621,7 +2610,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             </div>
           ))}
           <div>Efficiency: <b>{(overallEta*100).toFixed(2)}%</b></div>
-          <div>Warnings: <b>{deepWarningCount}</b></div>
         </div>
       </div>
       <div data-export-exclude="true" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40">
