@@ -1,5 +1,7 @@
 import React from 'react'
+import { BookmarkPlus, Settings2 } from 'lucide-react'
 import { Button } from '../ui/button'
+import { Tooltip } from '../ui/tooltip'
 import { useStore } from '../../state/store'
 import { Project } from '../../models'
 import { createNodePreset, NODE_PRESET_MIME, type NodePresetDescriptor, serializePresetDescriptor } from '../../utils/nodePresets'
@@ -12,32 +14,9 @@ export default function SubsystemPalette({ subsystemId, subsystemPath, project }
   const quickPresets = useStore(s => s.quickPresets)
   const applyQuickPreset = useStore(s => s.applyQuickPreset)
   const quickPresetDialogs = useQuickPresetDialogs()
-  const savePresetButtonRef = React.useRef<HTMLButtonElement | null>(null)
-  const [manageButtonWidth, setManageButtonWidth] = React.useState<number | null>(null)
   const path = React.useMemo(() => (subsystemPath && subsystemPath.length>0)? subsystemPath : [subsystemId], [subsystemPath, subsystemId])
   const availableQuickPresets = React.useMemo(() => quickPresets.filter(preset => preset.nodeType !== 'Source'), [quickPresets])
   const blockedPresetCount = quickPresets.length - availableQuickPresets.length
-
-  React.useEffect(() => {
-    const button = savePresetButtonRef.current
-    if (!button) return
-
-    const updateWidth = () => {
-      const rect = button.getBoundingClientRect()
-      setManageButtonWidth(rect.width)
-    }
-
-    updateWidth()
-
-    if (typeof ResizeObserver === 'function') {
-      const observer = new ResizeObserver(() => updateWidth())
-      observer.observe(button)
-      return () => observer.disconnect()
-    }
-
-    window.addEventListener('resize', updateWidth)
-    return () => window.removeEventListener('resize', updateWidth)
-  }, [])
 
   const onAdd = (descriptor: NodePresetDescriptor)=>{
     if (descriptor.type==='Source') return // blocked in nested
@@ -83,22 +62,28 @@ export default function SubsystemPalette({ subsystemId, subsystemPath, project }
       <section>
         <h3 className="text-sm font-semibold text-slate-600">Quick presets</h3>
         <div className="flex flex-wrap items-center gap-2 mt-2">
-          <Button
-            ref={savePresetButtonRef}
-            size="sm"
-            variant="outline"
-            onClick={()=>quickPresetDialogs.openCaptureDialog({ kind: 'selection' })}
-          >
-            Save selection as preset
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={()=>quickPresetDialogs.openManager()}
-            style={manageButtonWidth ? { width: manageButtonWidth } : undefined}
-          >
-            Manage presets
-          </Button>
+          <Tooltip label="Save selection as preset">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-9 w-9"
+              onClick={()=>quickPresetDialogs.openCaptureDialog({ kind: 'selection' })}
+              aria-label="Save selection as preset"
+            >
+              <BookmarkPlus className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Manage presets">
+            <Button
+              size="icon"
+              variant="outline"
+              className="h-9 w-9"
+              onClick={()=>quickPresetDialogs.openManager()}
+              aria-label="Manage presets"
+            >
+              <Settings2 className="h-5 w-5" />
+            </Button>
+          </Tooltip>
         </div>
         <div className="grid grid-cols-1 gap-2 mt-3">
           {availableQuickPresets.map(preset => (

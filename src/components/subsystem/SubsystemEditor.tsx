@@ -10,6 +10,7 @@ import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
 import { PanelsTopLeft, Eraser } from 'lucide-react'
+import { QuickPresetDialogsProvider } from '../quick-presets/QuickPresetDialogsContext'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
@@ -30,6 +31,17 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
+
+  const getCurrentSelectionForQuickPreset = React.useCallback((): InspectorSelection | null => {
+    if (!selection) return null
+    if (selection.kind === 'node') {
+      return { kind: 'nested-node', subsystemPath, nodeId: selection.id }
+    }
+    if (selection.kind === 'nested-node') {
+      return selection
+    }
+    return null
+  }, [selection, subsystemPath])
 
   React.useEffect(()=>{
     const handleMove = (e: MouseEvent)=>{
@@ -146,10 +158,11 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   }, [selection])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
-      <div ref={containerRef} className="relative bg-white shadow-xl border w-[95vw] h-[90vh] mt-[5vh] rounded-lg overflow-hidden grid" style={{gridTemplateRows:'48px 1fr', gridTemplateColumns:`250px 1fr 6px ${inspectorWidth}px`}}>
-        <div className="col-span-4 flex items-center justify-between px-3 border-b bg-white">
+    <QuickPresetDialogsProvider getCurrentSelection={getCurrentSelectionForQuickPreset}>
+      <div className="fixed inset-0 z-50 flex items-stretch justify-center">
+        <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
+        <div ref={containerRef} className="relative bg-white shadow-xl border w-[95vw] h-[90vh] mt-[5vh] rounded-lg overflow-hidden grid" style={{gridTemplateRows:'48px 1fr', gridTemplateColumns:`250px 1fr 6px ${inspectorWidth}px`}}>
+          <div className="col-span-4 flex items-center justify-between px-3 border-b bg-white">
           <div className="flex items-center gap-3">
             <div className="font-semibold">Subsystem: {subsystem.name}</div>
             <div className={"text-xs px-2 py-0.5 rounded-full " + (inputCount===1? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{inputCount===1? '1 input ok' : `${inputCount} inputs`}</div>
@@ -182,43 +195,44 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             </Tooltip>
             <Button variant="outline" size="sm" onClick={onClose}>Close</Button>
           </div>
+          </div>
+          <aside className="border-r bg-white overflow-auto side-panel"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
+          <main className="overflow-hidden">
+            <ReactFlowProvider>
+              <SubsystemCanvas
+                subsystemId={subsystemId}
+                subsystemPath={subsystemPath}
+                project={embedded}
+                onSelect={setSelection}
+                onOpenNested={onOpenSubsystem}
+                selectionMode={selectionMode}
+                onSelectionModeChange={setSelectionMode}
+              />
+            </ReactFlowProvider>
+          </main>
+          <div
+            className={`bg-slate-200 cursor-col-resize ${isResizing? 'opacity-100' : 'opacity-70'}`}
+            onMouseDown={onResizerMouseDown}
+            aria-label="Resize inspector"
+            role="separator"
+          />
+          <aside className="border-l bg-white overflow-auto side-panel">
+            <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={inspectorTargetId} onDeleted={()=>setSelection(null)} />
+          </aside>
         </div>
-        <aside className="border-r bg-white overflow-auto side-panel"><SubsystemPalette subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} /></aside>
-        <main className="overflow-hidden">
-          <ReactFlowProvider>
-            <SubsystemCanvas
-              subsystemId={subsystemId}
-              subsystemPath={subsystemPath}
-              project={embedded}
-              onSelect={setSelection}
-              onOpenNested={onOpenSubsystem}
-              selectionMode={selectionMode}
-              onSelectionModeChange={setSelectionMode}
-            />
-          </ReactFlowProvider>
-        </main>
-        <div
-          className={`bg-slate-200 cursor-col-resize ${isResizing? 'opacity-100' : 'opacity-70'}`}
-          onMouseDown={onResizerMouseDown}
-          aria-label="Resize inspector"
-          role="separator"
-        />
-        <aside className="border-l bg-white overflow-auto side-panel">
-          <SubsystemInspector subsystemId={subsystemId} subsystemPath={subsystemPath} project={embedded} selected={inspectorTargetId} onDeleted={()=>setSelection(null)} />
-        </aside>
+        {autoAlignPromptOpen && (
+          <AutoAlignPrompt
+            anchorRect={autoAlignAnchor}
+            horizontalValue={autoAlignHorizontalInput}
+            verticalValue={autoAlignVerticalInput}
+            onHorizontalChange={setAutoAlignHorizontalInput}
+            onVerticalChange={setAutoAlignVerticalInput}
+            onConfirm={applyAutoAlign}
+            onCancel={closeAutoAlignPrompt}
+            error={autoAlignError}
+          />
+        )}
       </div>
-      {autoAlignPromptOpen && (
-        <AutoAlignPrompt
-          anchorRect={autoAlignAnchor}
-          horizontalValue={autoAlignHorizontalInput}
-          verticalValue={autoAlignVerticalInput}
-          onHorizontalChange={setAutoAlignHorizontalInput}
-          onVerticalChange={setAutoAlignVerticalInput}
-          onConfirm={applyAutoAlign}
-          onCancel={closeAutoAlignPrompt}
-          error={autoAlignError}
-        />
-      )}
-    </div>
+    </QuickPresetDialogsProvider>
   )
 }
