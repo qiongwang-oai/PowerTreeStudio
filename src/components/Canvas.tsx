@@ -31,7 +31,7 @@ import {
 } from '../utils/multiSelection'
 import type { Bounds } from '../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../utils/selectionClipboard'
-import { SUBSYSTEM_BASE_HEIGHT, SUBSYSTEM_PORT_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
+import { SUBSYSTEM_BASE_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
@@ -813,8 +813,7 @@ function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: numbe
       const ports = Array.isArray((node as any).project?.nodes)
         ? (node as any).project.nodes.filter((n: any) => n.type === 'SubsystemInput')
         : []
-      const extraRows = Math.max(ports.length - 1, 0)
-      const estimatedHeight = SUBSYSTEM_BASE_HEIGHT + (extraRows * SUBSYSTEM_PORT_HEIGHT)
+      const estimatedHeight = computeSubsystemNodeMinHeight(ports.length)
       return {
         width: hasWidth ? rawWidth : 240,
         height: hasHeight ? rawHeight : Math.max(estimatedHeight, SUBSYSTEM_EMBEDDED_MIN_HEIGHT),
