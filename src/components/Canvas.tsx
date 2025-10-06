@@ -636,7 +636,6 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
           ) : node.type === 'Subsystem' ? (
             withPower(
               <div>
-                <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((node as any).project?.nodes||[]).filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—'}</div>
                 <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledSystems ?? 1)}</div>
               </div>,
               [

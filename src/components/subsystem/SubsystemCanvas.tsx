@@ -701,7 +701,6 @@ export default function SubsystemCanvas({
                 </div>
                ) : n.type === 'Subsystem' ? (
                 <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—')}</div>
                   <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
                 </div>
                ) : n.type === 'SubsystemInput' ? (
