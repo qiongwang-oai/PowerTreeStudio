@@ -26,6 +26,9 @@ import {
 } from '../../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../../utils/selectionClipboard'
 import { computeSubsystemNodeMinHeight, getSubsystemPortPosition } from '../SubsystemNodeLayout'
+import { Button } from '../ui/button'
+import { Tooltip } from '../ui/tooltip'
+import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
 
 type PowerDisplay = { text: string; tooltip?: string }
 
@@ -577,6 +580,10 @@ export default function SubsystemCanvas({
   const clipboard = useStore(s=>s.clipboard)
   const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
+  const undo = useStore(s=>s.undo)
+  const redo = useStore(s=>s.redo)
+  const pastLen = useStore(s=>s.past.length)
+  const futureLen = useStore(s=>s.future.length)
   const reactFlowInstance = useReactFlow()
   const { screenToFlowPosition } = reactFlowInstance
 
@@ -733,6 +740,18 @@ export default function SubsystemCanvas({
     setMarqueeRect(null)
     marqueeStateRef.current = null
   }, [])
+
+  const handleSingleSelectClick = useCallback(() => {
+    onSelectionModeChange('single')
+  }, [onSelectionModeChange])
+
+  const handleMultiSelectClick = useCallback(() => {
+    const nextMode: SelectionMode = selectionMode === 'multi' ? 'single' : 'multi'
+    onSelectionModeChange(nextMode)
+  }, [onSelectionModeChange, selectionMode])
+
+  const isSelectActive = selectionMode === 'single'
+  const isMultiActive = selectionMode === 'multi'
 
   const mergeSelections = useCallback(
     (base: MultiSelection | null, addition: MultiSelection): MultiSelection =>
@@ -1768,6 +1787,63 @@ export default function SubsystemCanvas({
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      <div data-export-exclude="true" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40">
+        <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 shadow-md">
+          <Tooltip label="Select nodes">
+            <Button
+              variant={isSelectActive ? 'default' : 'outline'}
+              size="icon"
+              type="button"
+              onClick={handleSingleSelectClick}
+              aria-label="Select nodes"
+              title="Select nodes"
+              aria-pressed={isSelectActive}
+            >
+              <MousePointer className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Toggle multi-select">
+            <Button
+              variant={isMultiActive ? 'default' : 'outline'}
+              size="icon"
+              type="button"
+              onClick={handleMultiSelectClick}
+              aria-label="Toggle multi-select"
+              title="Toggle multi-select"
+              aria-pressed={isMultiActive}
+            >
+              <BoxSelect className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <div className="h-6 w-px bg-slate-300" aria-hidden="true" />
+          <Tooltip label="Undo last change">
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              onClick={undo}
+              disabled={pastLen === 0}
+              aria-label="Undo"
+              title="Undo"
+            >
+              <Undo2 className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Redo last undone change">
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              onClick={redo}
+              disabled={futureLen === 0}
+              aria-label="Redo"
+              title="Redo"
+            >
+              <Redo2 className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
       <ReactFlow
         nodes={nodes}
         edges={edges}

@@ -9,7 +9,7 @@ import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
-import { BoxSelect, PanelsTopLeft, MousePointer, Redo2, Eraser, Undo2 } from 'lucide-react'
+import { PanelsTopLeft, Eraser } from 'lucide-react'
 
 export default function SubsystemEditor({ subsystemId, subsystemPath, projectContext, onClose, onOpenSubsystem }:{ subsystemId:string, subsystemPath: string[], projectContext: Project, onClose:()=>void, onOpenSubsystem:(id:string)=>void }){
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
@@ -22,10 +22,6 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const containerRef = React.useRef<HTMLDivElement>(null)
   const embedded = subsystem?.project
   const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0
-  const undo = useStore(s=>s.undo)
-  const redo = useStore(s=>s.redo)
-  const pastLen = useStore(s=>s.past.length)
-  const futureLen = useStore(s=>s.future.length)
   const autoAlignNested = useStore(s=>s.nestedSubsystemAutoAlign)
   const clearNested = useStore(s=>s.nestedSubsystemClear)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
@@ -149,17 +145,6 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     return null
   }, [selection])
 
-  const handleSelectSingle = React.useCallback(() => {
-    setSelectionMode('single')
-  }, [setSelectionMode])
-
-  const handleToggleMulti = React.useCallback(() => {
-    setSelectionMode(prev => (prev === 'multi' ? 'single' : 'multi'))
-  }, [setSelectionMode])
-
-  const isSelectActive = selectionMode === 'single'
-  const isMultiActive = selectionMode === 'multi'
-
   return (
     <div className="fixed inset-0 z-50 flex items-stretch justify-center">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden="true" />
@@ -170,58 +155,6 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             <div className={"text-xs px-2 py-0.5 rounded-full " + (inputCount===1? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700')}>{inputCount===1? '1 input ok' : `${inputCount} inputs`}</div>
           </div>
           <div className="flex items-center gap-1.5 toolbar-buttons">
-            <Tooltip label="Undo last change">
-              <Button
-                variant="outline"
-                size="icon"
-                type="button"
-                onClick={undo}
-                disabled={pastLen===0}
-                aria-label="Undo"
-                title="Undo"
-              >
-                <Undo2 className="h-5 w-5" />
-              </Button>
-            </Tooltip>
-            <Tooltip label="Redo last undone change">
-              <Button
-                variant="outline"
-                size="icon"
-                type="button"
-                onClick={redo}
-                disabled={futureLen===0}
-                aria-label="Redo"
-                title="Redo"
-              >
-                <Redo2 className="h-5 w-5" />
-              </Button>
-            </Tooltip>
-            <Tooltip label="Select nodes">
-              <Button
-                variant={isSelectActive ? 'default' : 'outline'}
-                size="icon"
-                type="button"
-                onClick={handleSelectSingle}
-                aria-label="Select nodes"
-                title="Select nodes"
-                aria-pressed={isSelectActive}
-              >
-              <MousePointer className="h-5 w-5" />
-              </Button>
-            </Tooltip>
-            <Tooltip label="Toggle multi-select">
-              <Button
-                variant={isMultiActive ? 'default' : 'outline'}
-                size="icon"
-                type="button"
-                onClick={handleToggleMulti}
-                aria-label="Toggle multi-select"
-                title="Toggle multi-select"
-                aria-pressed={isMultiActive}
-              >
-                <BoxSelect className="h-5 w-5" />
-              </Button>
-            </Tooltip>
             <Tooltip label="Auto align all the nodes">
               <Button
                 ref={autoAlignButtonRef}

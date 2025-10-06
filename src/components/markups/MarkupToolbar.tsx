@@ -4,7 +4,7 @@ import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import type { SelectionMode } from '../../types/selection'
 import type { LucideIcon } from 'lucide-react'
-import { BoxSelect, Slash, Square, Type, MousePointer } from 'lucide-react'
+import { Slash, Square, Type } from 'lucide-react'
 
 type MarkupToolbarProps = {
   activeTool: MarkupTool | null
@@ -25,51 +25,8 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
   onSelectTool,
   onSelectionModeChange,
 }) => {
-  const handleSelect = React.useCallback(() => {
-    onSelectionModeChange('single')
-    onSelectTool(null)
-  }, [onSelectTool, onSelectionModeChange])
-
-  const toggleMultiSelect = React.useCallback(() => {
-    const nextMode = selectionMode === 'multi' ? 'single' : 'multi'
-    onSelectionModeChange(nextMode)
-    if (nextMode === 'multi') {
-      onSelectTool(null)
-    }
-  }, [selectionMode, onSelectionModeChange, onSelectTool])
-
-  const isSelectActive = selectionMode === 'single' && activeTool === null
-  const isMultiActive = selectionMode === 'multi'
-
   return (
     <div className="flex items-center gap-1.5">
-      <Tooltip label="Select nodes">
-        <Button
-          variant={isSelectActive ? 'default' : 'outline'}
-          size="icon"
-          type="button"
-          onClick={handleSelect}
-          aria-label="Select nodes"
-          title="Select nodes"
-          aria-pressed={isSelectActive}
-        >
-          <MousePointer className="h-5 w-5" />
-        </Button>
-      </Tooltip>
-      <Tooltip label="Toggle multi-select">
-        <Button
-          variant={isMultiActive ? 'default' : 'outline'}
-          size="icon"
-          type="button"
-          onClick={toggleMultiSelect}
-          aria-label="Toggle multi-select"
-          title="Toggle multi-select"
-          aria-pressed={isMultiActive}
-        >
-          <BoxSelect className="h-5 w-5" />
-        </Button>
-      </Tooltip>
-      <span className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
       {TOOL_DEFINITIONS.map(({ type, Icon, description, label }) => {
         const isActive = activeTool === type
         return (

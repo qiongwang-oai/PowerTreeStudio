@@ -7,6 +7,7 @@ import { compute, etaFromModel, computeDeepAggregates } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
+import { Tooltip } from './ui/tooltip'
 import { validate } from '../rules'
 import type { AnyNode, Edge, Project, Scenario, CanvasMarkup } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
@@ -21,6 +22,7 @@ import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext
 import MarkupLayer, { MarkupTool } from './markups/MarkupLayer'
 import { genId } from '../utils'
 import { formatPower, powerTooltipLabel } from '../utils/format'
+import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
 import {
   mergeMultiSelections,
   normalizeBounds,
@@ -989,6 +991,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const addMarkupStore = useStore(s=>s.addMarkup)
   const updateMarkupStore = useStore(s=>s.updateMarkup)
   const removeMarkupStore = useStore(s=>s.removeMarkup)
+  const undo = useStore(s=>s.undo)
+  const redo = useStore(s=>s.redo)
+  const pastLen = useStore(s=>s.past.length)
+  const futureLen = useStore(s=>s.future.length)
 
   const markups = project.markups ?? []
   const [selectedMarkupId, setSelectedMarkupId] = useState<string | null>(null)
@@ -1014,6 +1020,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     additive: boolean
   } | null>(null)
   const activeMultiSelection = multiSelectionPreview ?? multiSelection
+
+  const handleSingleSelectClick = useCallback(() => {
+    if (markupTool !== null) {
+      onMarkupToolChange(null)
+    }
+    onSelectionModeChange('single')
+  }, [markupTool, onMarkupToolChange, onSelectionModeChange])
+
+  const handleMultiSelectClick = useCallback(() => {
+    const nextMode: SelectionMode = selectionMode === 'multi' ? 'single' : 'multi'
+    if (nextMode === 'multi' && markupTool !== null) {
+      onMarkupToolChange(null)
+    }
+    onSelectionModeChange(nextMode)
+  }, [markupTool, onMarkupToolChange, onSelectionModeChange, selectionMode])
+
+  const isSelectActive = selectionMode === 'single' && markupTool === null
+  const isMultiActive = selectionMode === 'multi'
 
   const clearMultiSelection = useCallback(() => {
     setMultiSelection(null)
@@ -2598,6 +2622,63 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           ))}
           <div>Efficiency: <b>{(overallEta*100).toFixed(2)}%</b></div>
           <div>Warnings: <b>{deepWarningCount}</b></div>
+        </div>
+      </div>
+      <div data-export-exclude="true" className="absolute bottom-24 left-1/2 -translate-x-1/2 z-40">
+        <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-white/90 px-3 py-2 shadow-md">
+          <Tooltip label="Select nodes">
+            <Button
+              variant={isSelectActive ? 'default' : 'outline'}
+              size="icon"
+              type="button"
+              onClick={handleSingleSelectClick}
+              aria-label="Select nodes"
+              title="Select nodes"
+              aria-pressed={isSelectActive}
+            >
+              <MousePointer className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Toggle multi-select">
+            <Button
+              variant={isMultiActive ? 'default' : 'outline'}
+              size="icon"
+              type="button"
+              onClick={handleMultiSelectClick}
+              aria-label="Toggle multi-select"
+              title="Toggle multi-select"
+              aria-pressed={isMultiActive}
+            >
+              <BoxSelect className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <div className="h-6 w-px bg-slate-300" aria-hidden="true" />
+          <Tooltip label="Undo last change">
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              onClick={undo}
+              disabled={pastLen === 0}
+              aria-label="Undo"
+              title="Undo"
+            >
+              <Undo2 className="h-5 w-5" />
+            </Button>
+          </Tooltip>
+          <Tooltip label="Redo last undone change">
+            <Button
+              variant="outline"
+              size="icon"
+              type="button"
+              onClick={redo}
+              disabled={futureLen === 0}
+              aria-label="Redo"
+              title="Redo"
+            >
+              <Redo2 className="h-5 w-5" />
+            </Button>
+          </Tooltip>
         </div>
       </div>
       <ReactFlow

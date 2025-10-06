@@ -20,20 +20,13 @@ import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 import NodeBulkEditorModal from './components/NodeBulkEditorModal'
 import {
-  BoxSelect,
   FileBarChart2,
   FileDown,
   FolderOpen,
   PanelsTopLeft,
   PencilRuler,
-  Pointer,
-  Redo2,
   Save,
   Eraser,
-  Type,
-  Minus,
-  Square,
-  Undo2,
 } from 'lucide-react'
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: any}> {
@@ -68,8 +61,6 @@ export default function App(){
   const undo = useStore(s=>s.undo)
   const redo = useStore(s=>s.redo)
   const autoAlign = useStore(s=>s.autoAlign)
-  const pastLen = useStore(s=>s.past.length)
-  const futureLen = useStore(s=>s.future.length)
   const [selected, setSelected] = React.useState<InspectorSelection | null>(null)
   const [rightPane, setRightPane] = React.useState<number>(450)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
@@ -279,32 +270,6 @@ export default function App(){
                       title="Export PDF"
                     >
                       <FileDown className="h-5 w-5" />
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Undo last change">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      type="button"
-                      onClick={undo}
-                      disabled={pastLen===0}
-                      aria-label="Undo"
-                      title="Undo"
-                    >
-                      <Undo2 className="h-5 w-5" />
-                    </Button>
-                  </Tooltip>
-                  <Tooltip label="Redo last undone change">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      type="button"
-                      onClick={redo}
-                      disabled={futureLen===0}
-                      aria-label="Redo"
-                      title="Redo"
-                    >
-                      <Redo2 className="h-5 w-5" />
                     </Button>
                   </Tooltip>
                   <div className="h-6 w-px bg-slate-300 mx-1" aria-hidden="true" />
