@@ -7,8 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest --environment jsdom",
-    "test:run": "vitest run --environment jsdom",
+    "test": "vitest --run --environment jsdom",
+    "test:run": "vitest --run --environment jsdom",
     "lint": "echo 'lint step skipped for brevity'"
   },
   "dependencies": {

@@ -16,7 +16,7 @@ import {
   MetricGrid
 } from './ui/inspector'
 import { compute, etaFromModel } from '../calc'
-import { fmt } from '../utils'
+import { renderPowerDisplay, formatPowerText } from './inspector/powerFormat'
 import { download, importProjectFile, serializeProject } from '../io'
 import { sanitizeEmbeddedProject } from '../utils/embeddedProject'
 import type { InspectorSelection } from '../types/selection'
@@ -380,7 +380,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
             </FormField>
           </InspectorSection>
           <InspectorSection title="Computed" description="Calculated from current scenario.">
-            <MetricGrid items={[{ label: 'Dissipation (W)', value: fmt(analysis.edges[edge.id]?.P_loss_edge ?? 0, 4) }]} />
+            <MetricGrid items={[{ label: 'Dissipation', value: renderPowerDisplay(analysis.edges[edge.id]?.P_loss_edge) }]} />
           </InspectorSection>
         </InspectorContent>
       </InspectorShell>
@@ -431,7 +431,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
       )
       sections.push(
         <InspectorSection key="source-computed" title="Computed" description="Calculated for the active scenario.">
-          <MetricGrid items={[{ label: 'Total output power (W)', value: fmt(analysis.nodes[node.id]?.P_out ?? 0, 3) }]} />
+          <MetricGrid items={[{ label: 'Total output power', value: renderPowerDisplay(analysis.nodes[node.id]?.P_out) }]} />
         </InspectorSection>
       )
     }
@@ -467,9 +467,9 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         <InspectorSection key="converter-computed" title="Computed" description="Values derived from the current scenario.">
           <MetricGrid
             items={[
-              { label: 'Total input power (W)', value: fmt(converterAnalysis?.P_in ?? 0, 3) },
-              { label: 'Total output power (W)', value: fmt(converterAnalysis?.P_out ?? 0, 3) },
-              { label: 'Dissipation (W)', value: fmt((converterAnalysis?.P_in ?? 0) - (converterAnalysis?.P_out ?? 0), 3) }
+              { label: 'Total input power', value: renderPowerDisplay(converterAnalysis?.P_in) },
+              { label: 'Total output power', value: renderPowerDisplay(converterAnalysis?.P_out) },
+              { label: 'Dissipation', value: renderPowerDisplay((converterAnalysis?.P_in ?? 0) - (converterAnalysis?.P_out ?? 0)) }
             ]}
           />
         </InspectorSection>
@@ -530,9 +530,9 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         <InspectorSection key="dual-computed" title="Computed">
           <MetricGrid
             items={[
-              { label: 'Total input power (W)', value: fmt(analysisEntry?.P_in ?? 0, 3) },
-              { label: 'Total output power (W)', value: fmt(analysisEntry?.P_out ?? 0, 3) },
-              { label: 'Dissipation (W)', value: fmt((analysisEntry?.P_in ?? 0) - (analysisEntry?.P_out ?? 0), 3) }
+              { label: 'Total input power', value: renderPowerDisplay(analysisEntry?.P_in) },
+              { label: 'Total output power', value: renderPowerDisplay(analysisEntry?.P_out) },
+              { label: 'Dissipation', value: renderPowerDisplay((analysisEntry?.P_in ?? 0) - (analysisEntry?.P_out ?? 0)) }
             ]}
           />
         </InspectorSection>
@@ -562,7 +562,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
       )
       sections.push(
         <InspectorSection key="load-computed" title="Computed">
-          <MetricGrid items={[{ label: 'Total input power (W)', value: fmt(analysis.nodes[node.id]?.P_in ?? 0, 3) }]} />
+          <MetricGrid items={[{ label: 'Total input power', value: renderPowerDisplay(analysis.nodes[node.id]?.P_in) }]} />
         </InspectorSection>
       )
     }
@@ -602,15 +602,24 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         if (embeddedInputs.length === 1) return Number(embeddedInputs[0]?.Vout || 0)
         return embeddedInputs.map((i:any)=>i.Vout).join(', ')
       })()
+      const computedNumberClass = 'text-base font-semibold text-slate-900 tabular-nums'
+      const renderScalar = (value: React.ReactNode) => (
+        <span className={computedNumberClass}>{value}</span>
+      )
+      const renderEta = () => (
+        <span className={computedNumberClass}>
+          {((analysis.nodes[node.id]?.P_in||0)>0 ? ((analysis.nodes[node.id]?.P_out||0)/(analysis.nodes[node.id]?.P_in||1))*100 : 0).toFixed(2)}
+        </span>
+      )
       sections.push(
         <InspectorSection key="subsystem-computed" title="Computed (embedded)" description="Aggregated from the embedded subsystem.">
           <MetricGrid
             items={[
-              { label: 'Inputs (V)', value: inputValue },
-              { label: 'Σ Loads (W)', value: fmt(analysis.nodes[node.id]?.P_out ?? 0, 3) },
-              { label: 'Σ Sources (W)', value: fmt(analysis.nodes[node.id]?.P_in ?? 0, 3) },
-              { label: 'η (%)', value: ((analysis.nodes[node.id]?.P_in||0)>0 ? ((analysis.nodes[node.id]?.P_out||0)/(analysis.nodes[node.id]?.P_in||1))*100 : 0).toFixed(2) },
-              { label: 'Dissipation (W)', value: fmt(((analysis.nodes[node.id]?.P_in||0) - (analysis.nodes[node.id]?.P_out||0)), 3) }
+              { label: 'Inputs (V)', value: renderScalar(inputValue) },
+              { label: 'Σ Loads', value: renderPowerDisplay(analysis.nodes[node.id]?.P_out, computedNumberClass) },
+              { label: 'Σ Sources', value: renderPowerDisplay(analysis.nodes[node.id]?.P_in, computedNumberClass) },
+              { label: 'η (%)', value: renderEta() },
+              { label: 'Dissipation', value: renderPowerDisplay((analysis.nodes[node.id]?.P_in||0) - (analysis.nodes[node.id]?.P_out||0), computedNumberClass) }
             ]}
           />
         </InspectorSection>
@@ -681,11 +690,11 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
             const eta = (()=>{ try{ return etaFromModel(eff, res.P_out||0, res.I_out||0, node as any) }catch(e){ return 0 } })()
             return (
               <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                <InlineKeyValue label="P_in" value={`${(res.P_in||0).toFixed(3)} W`} />
-                <InlineKeyValue label="P_out" value={`${(res.P_out||0).toFixed(3)} W`} />
+                <InlineKeyValue label="P_in" value={renderPowerDisplay(res.P_in)} />
+                <InlineKeyValue label="P_out" value={renderPowerDisplay(res.P_out)} />
                 <InlineKeyValue label="I_in" value={`${(res.I_in||0).toFixed(3)} A`} />
                 <InlineKeyValue label="I_out" value={`${(res.I_out||0).toFixed(3)} A`} />
-                <InlineKeyValue label="Loss" value={`${(res.loss||0).toFixed(3)} W`} />
+                <InlineKeyValue label="Loss" value={renderPowerDisplay(res.loss)} />
                 <InlineKeyValue label="η (at op)" value={eta.toFixed(4)} />
               </div>
             )
@@ -697,7 +706,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
               <div className="grid gap-3 sm:grid-cols-2 text-sm">
                 <InlineKeyValue label="V_upstream" value={`${(up||0).toFixed(3)} V`} />
                 <InlineKeyValue label="Allow ≥" value={`${allow.toFixed(3)} V`} />
-                <InlineKeyValue label="P_in" value={`${(res.P_in||0).toFixed(3)} W`} />
+                <InlineKeyValue label="P_in" value={renderPowerDisplay(res.P_in)} />
                 <InlineKeyValue label="I_in" value={`${(res.I_in||0).toFixed(3)} A`} />
               </div>
             )
@@ -705,7 +714,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
           if (node.type === 'Source' || node.type === 'SubsystemInput') {
             return (
               <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                <InlineKeyValue label="P_out" value={`${(res.P_out||0).toFixed(3)} W`} />
+                <InlineKeyValue label="P_out" value={renderPowerDisplay(res.P_out)} />
                 <InlineKeyValue label="I_out" value={`${(res.I_out||0).toFixed(3)} A`} />
               </div>
             )
@@ -715,9 +724,9 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
               <div className="grid gap-3 sm:grid-cols-2 text-sm">
                 <InlineKeyValue label="Vin (resolved)" value={`${((res as any).inputV_nom||0).toFixed(3)} V`} />
                 <InlineKeyValue label="Paralleled" value={`${((node as any).numParalleledSystems ?? 1)}`} />
-                <InlineKeyValue label="P_in" value={`${(res.P_in||0).toFixed(3)} W`} />
-                <InlineKeyValue label="P_out" value={`${(res.P_out||0).toFixed(3)} W`} />
-                <InlineKeyValue label="Loss" value={`${(res.loss||0).toFixed(3)} W`} />
+                <InlineKeyValue label="P_in" value={renderPowerDisplay(res.P_in)} />
+                <InlineKeyValue label="P_out" value={renderPowerDisplay(res.P_out)} />
+                <InlineKeyValue label="Loss" value={renderPowerDisplay(res.loss)} />
               </div>
             )
           }
@@ -757,11 +766,12 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
             const otherNodeId = direction==='incoming' ? e.from : e.to
             const otherNode = project.nodes.find(n=>n.id===otherNodeId)
             const displayName = otherNode?.name || otherNodeId
+            const plText = formatPowerText(Pl)
             return (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700" key={edgeId}>
                 <div className="min-w-0 flex-1">
                   <span className="font-semibold text-slate-800">{displayName}</span>
-                  <span className="ml-2 text-sm text-slate-500">{Rm} mΩ • I {I.toFixed(3)} A • ΔV {Vd.toFixed(4)} V • P_loss {Pl.toFixed(4)} W</span>
+                  <span className="ml-2 text-sm text-slate-500">{Rm} mΩ • I {I.toFixed(3)} A • ΔV {Vd.toFixed(4)} V • P_loss {plText}</span>
                 </div>
                 {onSelect && <Button size="sm" variant="outline" onClick={()=>onSelect({ kind: 'edge', id: edgeId })}>Select</Button>}
               </div>
