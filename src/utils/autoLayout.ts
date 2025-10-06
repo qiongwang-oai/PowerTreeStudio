@@ -19,8 +19,9 @@ type ParentDescriptor = {
 const DEFAULT_COLUMN_SPACING = 500
 const COLUMN_START_X = 120
 const DEFAULT_ROW_SPACING = 100
-const COMPONENT_GAP = 200
-const TOP_MARGIN = 120
+const BASE_COMPONENT_GAP = 200
+const BASE_TOP_MARGIN = 120
+const MIN_TOP_MARGIN = 40
 
 type Position = { x?: number; y?: number }
 
@@ -294,6 +295,8 @@ const assignCoordinates = (
   depthMap: Map<string, number>,
   columnSpacing: number,
   rowSpacing: number,
+  componentGap: number,
+  topMargin: number,
   powerByNode: Map<string, number>
 ): Map<string, { x: number; y: number }> => {
   const coords = new Map<string, { x: number; y: number }>()
@@ -307,7 +310,7 @@ const assignCoordinates = (
 
   const componentMap = buildComponents(maps)
   const components = sortComponents(project, depthMap, componentMap, maps)
-  let currentY = TOP_MARGIN
+  let currentY = topMargin
   const spanCache = new Map<string, number>()
   const getSpanUnits = (nodeId: string): number => {
     if (spanCache.has(nodeId)) return spanCache.get(nodeId)!
@@ -582,7 +585,7 @@ const assignCoordinates = (
       }
     }
 
-    currentY = startY + componentHeight + COMPONENT_GAP
+    currentY = startY + componentHeight + componentGap
   }
 
   return coords
@@ -670,7 +673,11 @@ export const autoLayoutProject = (
     ? rawRowSpacing
     : DEFAULT_ROW_SPACING
 
-  const coords = assignCoordinates(project, maps, depthMap, columnSpacing, rowSpacing, powerByNode)
+  const spacingScale = rowSpacing / DEFAULT_ROW_SPACING
+  const componentGap = Math.max(rowSpacing, BASE_COMPONENT_GAP * spacingScale)
+  const topMargin = Math.max(MIN_TOP_MARGIN, BASE_TOP_MARGIN * spacingScale)
+
+  const coords = assignCoordinates(project, maps, depthMap, columnSpacing, rowSpacing, componentGap, topMargin, powerByNode)
   const nodes = project.nodes.map(node => {
     const position = coords.get(node.id)
     if (!position) return { ...node }
