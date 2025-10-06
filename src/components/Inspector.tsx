@@ -3,7 +3,8 @@ import { useStore } from '../state/store'
 import { CanvasMarkup, DualOutputConverterBranch, DualOutputConverterNode, Project } from '../models'
 import { Tabs, TabsContent, TabsList } from './ui/tabs'
 import { Button } from './ui/button'
-import { Trash2 } from 'lucide-react'
+import { Download, Trash2, Upload } from 'lucide-react'
+import { Tooltip } from './ui/tooltip'
 import {
   EmptyState,
   FormField,
@@ -390,6 +391,47 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
 
   const onChange = (field:string, value:any)=>{ const patch:any = {}; patch[field] = value; update(node.id, patch) }
 
+  const triggerEmbeddedImport = () => {
+    if (node.type !== 'Subsystem') return
+    fileRef.current?.click()
+  }
+
+  const handleEmbeddedFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (node.type !== 'Subsystem') return
+    const file = event.target.files?.[0]
+    if (!file) return
+    const pj = await importProjectFile(file)
+    const sanitized = sanitizeEmbeddedProject(pj)
+    onChange('project', sanitized as Project)
+    onChange('projectFileName', file.name)
+    event.currentTarget.value = ''
+  }
+
+  const exportEmbeddedProject = () => {
+    if (node.type !== 'Subsystem') return
+    const embeddedProject = (node as any).project as Project | undefined
+    if (!embeddedProject) return
+    const fileName = (node as any).projectFileName || (node.name || 'Subsystem')
+    const trimmed = String(fileName).trim()
+    const base = trimmed ? trimmed.replace(/\s+/g, '_').replace(/\.[^./\\]+$/, '') : 'Subsystem'
+    const downloadName = `${base || 'Subsystem'}.yaml`
+    download(downloadName, serializeProject(embeddedProject))
+  }
+
+  const canExportEmbeddedProject = node.type === 'Subsystem' && !!(node as any).project
+
+  const embeddedFileInput = node.type === 'Subsystem'
+    ? (
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".json,.yaml,.yml,application/json,text/yaml"
+        className="hidden"
+        onChange={handleEmbeddedFileChange}
+      />
+    )
+    : null
+
   const tabItems = [
     { value: 'props', label: 'Properties' },
     ...((node.type !== 'Note') ? [{ value: 'warn', label: 'Node Summary' }] : []),
@@ -410,6 +452,41 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
         </FormField>,
         <FormField key="powerStage" label="Power Stage Part Number">
           <input className="input" value={(node as any).powerStagePartNumber || ''} onChange={e=>onChange('powerStagePartNumber', e.target.value)} />
+        </FormField>
+      )
+    }
+    if (node.type === 'Subsystem') {
+      identityFields.push(
+        <FormField key="embedded-file" label="Embedded file">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              className="input flex-1"
+              value={(node as any).projectFileName || ''}
+              placeholder="No file selected"
+              readOnly
+            />
+            <Tooltip label="Import embedded project">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Import embedded project"
+                onClick={triggerEmbeddedImport}
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip label="Export embedded project">
+              <Button
+                variant="outline"
+                size="icon"
+                aria-label="Export embedded project"
+                disabled={!canExportEmbeddedProject}
+                onClick={exportEmbeddedProject}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
+            </Tooltip>
+          </div>
         </FormField>
       )
     }
@@ -807,42 +884,27 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
     return (
       <div className="space-y-6">
         <InspectorSection title="Embedded project" description="Manage the linked subsystem file and colors.">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".json,.yaml,.yml,application/json,text/yaml"
-            className="hidden"
-            onChange={async e=>{
-              const file = e.target.files?.[0]
-              if (!file) return
-              const pj = await importProjectFile(file)
-              const sanitized = sanitizeEmbeddedProject(pj)
-              onChange('project', sanitized as Project)
-              onChange('projectFileName', file.name)
-              e.currentTarget.value = ''
-            }}
-          />
           <div className="space-y-4 text-base text-slate-600">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <span>Embedded project: <span className="font-semibold text-slate-800">{subsystem.projectFileName || 'None'}</span></span>
               <div className="flex flex-wrap items-center gap-2">
-                <Button variant="outline" size="sm" onClick={()=>fileRef.current?.click()}>Import</Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!subsystem.project}
-                  onClick={()=>{
-                    const embeddedProject = subsystem.project as Project | undefined
-                    if (!embeddedProject) return
-                    const fileName = subsystem.projectFileName || (node.name || 'Subsystem')
-                    const trimmed = String(fileName).trim()
-                    const base = trimmed ? trimmed.replace(/\s+/g, '_').replace(/\.[^./\\]+$/, '') : 'Subsystem'
-                    const downloadName = `${base || 'Subsystem'}.yaml`
-                    download(downloadName, serializeProject(embeddedProject))
-                  }}
-                >
-                  Export
-                </Button>
+                <Tooltip label="Import embedded project">
+                  <Button variant="outline" size="sm" onClick={triggerEmbeddedImport}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Import
+                  </Button>
+                </Tooltip>
+                <Tooltip label="Export embedded project">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canExportEmbeddedProject}
+                    onClick={exportEmbeddedProject}
+                  >
+                    <Download className="mr-2 h-4 w-4" />
+                    Export
+                  </Button>
+                </Tooltip>
                 <Button size="sm" onClick={()=> onOpenSubsystemEditor && onOpenSubsystemEditor(node.id)}>Open Editor</Button>
               </div>
             </div>
@@ -873,6 +935,7 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
 
   return (
     <InspectorShell>
+      {embeddedFileInput}
       <InspectorHeader
         title={node.name || 'Untitled'}
         subtitle={`ID ${node.id}`}
