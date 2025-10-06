@@ -20,6 +20,7 @@ import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuic
 import { useQuickPresetDialogs } from './quick-presets/QuickPresetDialogsContext'
 import MarkupLayer, { MarkupTool } from './markups/MarkupLayer'
 import { genId } from '../utils'
+import { formatPower, powerTooltipLabel } from '../utils/format'
 import {
   mergeMultiSelections,
   normalizeBounds,
@@ -521,16 +522,25 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
   const outputMetrics: Record<string, any> = (nodeResult as any)?.__outputs || {}
   const formatPowerValue = (value: unknown) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
-      return `${value.toFixed(2)} W`
+      const formatted = formatPower(value)
+      return {
+        text: `${formatted.value} ${formatted.unit}`,
+        tooltip: powerTooltipLabel(value),
+      }
     }
-    return '—'
+    return { text: '—', tooltip: undefined }
   }
-  type PowerEntry = { label: string; value: string }
+  type PowerEntry = { label: string; text: string; tooltip?: string }
+  const buildPowerEntry = (label: string, raw: unknown): PowerEntry => ({ label, ...formatPowerValue(raw) })
   const renderPowerBlock = (entries: PowerEntry[]) => (
     <div className="text-left" style={{ minWidth: 110 }}>
       {entries.map(entry => (
-        <div key={entry.label} style={{ fontSize: '11px', color: '#1e293b' }}>
-          {entry.label}: {entry.value}
+        <div
+          key={entry.label}
+          style={{ fontSize: '11px', color: '#1e293b' }}
+          title={entry.tooltip}
+        >
+          {entry.label}: {entry.text}
         </div>
       ))}
     </div>
@@ -575,8 +585,8 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                 })()}</div>
               </div>,
               [
-                { label: 'P_in', value: formatPowerValue(pinValue) },
-                { label: 'P_out', value: formatPowerValue(poutValue) },
+                buildPowerEntry('P_in', pinValue),
+                buildPowerEntry('P_out', poutValue),
               ]
             )
           ) : node.type === 'DualOutputConverter' ? (
@@ -593,15 +603,22 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                     return (
                       <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
                         <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
-                        <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {formatPowerValue(metric.P_out)} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                        {(() => {
+                          const powerDisplay = formatPowerValue(metric.P_out)
+                          return (
+                            <div style={{fontSize:'10px',color:'#64748b'}}>
+                              P_out: <span title={powerDisplay.tooltip}>{powerDisplay.text}</span> | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })
                 })()}
               </div>,
               [
-                { label: 'P_in', value: formatPowerValue(pinValue) },
-                { label: 'P_out', value: formatPowerValue(poutValue) },
+                buildPowerEntry('P_in', pinValue),
+                buildPowerEntry('P_out', poutValue),
               ]
             )
           ) : node.type === 'Load' && 'Vreq' in node && 'I_typ' in node && 'I_max' in node ? (
@@ -612,7 +629,7 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                 <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledDevices ?? 1)}</div>
               </div>,
               [
-                { label: 'P_in', value: formatPowerValue(pinValue) },
+                buildPowerEntry('P_in', pinValue),
               ]
             )
           ) : node.type === 'Subsystem' ? (
@@ -622,8 +639,8 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                 <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledSystems ?? 1)}</div>
               </div>,
               [
-                { label: 'P_in total', value: formatPowerValue(pinValue) },
-                { label: 'P_in single', value: formatPowerValue(pinSingleValue) },
+                buildPowerEntry('P_in total', pinValue),
+                buildPowerEntry('P_in single', pinSingleValue),
               ]
             )
           ) : node.type === 'SubsystemInput' ? (
@@ -633,7 +650,7 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                 <div style={{fontSize:'11px',color:'#555'}}>Vout: {(node as any).Vout ?? 0}V</div>
               </div>,
               [
-                { label: 'P_in', value: formatPowerValue(pinValue) },
+                buildPowerEntry('P_in', pinValue),
               ]
             )
           ) : node.type === 'Note' && 'text' in node ? (
@@ -1257,6 +1274,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const eta = sourceInput > 0 ? (deep.criticalLoadPower / sourceInput) : 0
     return { criticalLoadPower: deep.criticalLoadPower, nonCriticalLoadPower: deep.nonCriticalLoadPower, edgeLoss: deep.edgeLoss, converterLoss: deep.converterLoss, overallEta: eta }
   }, [project, computeResult])
+
+  const bannerPowerMetrics = useMemo(() => {
+    const entries = [
+      { key: 'critical', label: 'Critical', raw: criticalLoadPower },
+      { key: 'nonCritical', label: 'Non-critical', raw: nonCriticalLoadPower },
+      { key: 'edgeLoss', label: 'Copper loss', raw: edgeLoss },
+      { key: 'converterLoss', label: 'Converter loss', raw: converterLoss },
+    ] as const
+
+    return entries.map((entry) => ({
+      ...entry,
+      formatted: formatPower(entry.raw),
+      tooltip: powerTooltipLabel(entry.raw),
+    }))
+  }, [criticalLoadPower, nonCriticalLoadPower, edgeLoss, converterLoss])
 
   const rfNodesInit: RFNode[] = useMemo(() => {
     const nodes: RFNode[] = []
@@ -2559,10 +2591,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           </div>
         </div>
         <div className="flex items-center gap-6 text-sm">
-          <div>Critical: <b>{criticalLoadPower.toFixed(2)} W</b></div>
-          <div>Non-critical: <b>{nonCriticalLoadPower.toFixed(2)} W</b></div>
-          <div>Copper loss: <b>{edgeLoss.toFixed(2)} W</b></div>
-          <div>Converter loss: <b>{converterLoss.toFixed(2)} W</b></div>
+          {bannerPowerMetrics.map(({ key, label, formatted, tooltip }) => (
+            <div key={key} title={tooltip}>
+              {label}: <b className="tabular-nums">{formatted.value} {formatted.unit}</b>
+            </div>
+          ))}
           <div>Efficiency: <b>{(overallEta*100).toFixed(2)}%</b></div>
           <div>Warnings: <b>{deepWarningCount}</b></div>
         </div>

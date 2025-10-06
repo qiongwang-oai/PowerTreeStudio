@@ -14,6 +14,7 @@ import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDesc
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
 import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 import { genId } from '../../utils'
+import { formatPower, powerTooltipLabel } from '../../utils/format'
 import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
 import {
   mergeMultiSelections,
@@ -25,6 +26,24 @@ import {
 } from '../../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../../utils/selectionClipboard'
 import { computeSubsystemNodeMinHeight, getSubsystemPortPosition } from '../SubsystemNodeLayout'
+
+type PowerDisplay = { text: string; tooltip?: string }
+
+function formatPowerDisplay(value: unknown): PowerDisplay {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const formatted = formatPower(value)
+    return {
+      text: `${formatted.value} ${formatted.unit}`,
+      tooltip: powerTooltipLabel(value),
+    }
+  }
+  return { text: '—', tooltip: undefined }
+}
+
+function renderPowerDisplay(value: unknown) {
+  const { text, tooltip } = formatPowerDisplay(value)
+  return <span title={tooltip}>{text}</span>
+}
 
 function CustomNode(props: NodeProps) {
   const { data, selected } = props
@@ -646,15 +665,17 @@ export default function SubsystemCanvas({
                           return (
                             <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
                               <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
-                              <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                              <div style={{fontSize:'10px',color:'#64748b'}}>
+                                P_out: {renderPowerDisplay(metric.P_out)} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}
+                              </div>
                             </div>
                           )
                         })}
                       </div>
                       <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
                       <div className="text-left" style={{minWidth:90}}>
-                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
-                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(pin)}</div>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {renderPowerDisplay(pout)}</div>
                       </div>
                     </div>
                   )
@@ -668,7 +689,7 @@ export default function SubsystemCanvas({
                   </div>
                   <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
                   <div className="text-left" style={{minWidth:70}}>
-                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
                   </div>
                 </div>
                ) : n.type === 'Subsystem' ? (
@@ -1194,7 +1215,7 @@ export default function SubsystemCanvas({
                         </div>
                         <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
                         <div className="text-left" style={{minWidth:70}}>
-                          <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
                         </div>
                       </div>
            ) : n.type === 'Subsystem' ? (
@@ -1278,15 +1299,15 @@ export default function SubsystemCanvas({
                       return (
                         <div key={handleId} style={{fontSize:'11px',color:'#555'}}>
                           <div>{label}: {(branch?.Vout ?? 0)}V, η: {eta !== undefined ? (eta * 100).toFixed(1) + '%' : '—'}</div>
-                          <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {Number.isFinite(metric.P_out) ? `${(metric.P_out || 0).toFixed(2)} W` : '—'} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
+                          <div style={{fontSize:'10px',color:'#64748b'}}>P_out: {renderPowerDisplay(metric.P_out)} | I_out: {Number.isFinite(metric.I_out) ? `${(metric.I_out || 0).toFixed(3)} A` : '—'}</div>
                         </div>
                       )
                     })}
                   </div>
                   <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
                   <div className="text-left" style={{minWidth:90}}>
-                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {Number.isFinite(pin) ? `${(pin || 0).toFixed(2)} W` : '—'}</div>
-                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {Number.isFinite(pout) ? `${(pout || 0).toFixed(2)} W` : '—'}</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(pin)}</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_out: {renderPowerDisplay(pout)}</div>
                   </div>
                 </div>
               )
@@ -1300,7 +1321,7 @@ export default function SubsystemCanvas({
               </div>
               <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
               <div className="text-left" style={{minWidth:70}}>
-                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {(() => { const nodeResult = computeResult.nodes[n.id]; const pin = nodeResult?.P_in; return (pin !== undefined) ? pin.toFixed(2) : '—'; })()} W</div>
+                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
               </div>
             </div>
           ) : n.type === 'Subsystem' ? (
@@ -1326,10 +1347,10 @@ export default function SubsystemCanvas({
               <div className="w-px bg-slate-300 mx-1" />
               <div className="text-left min-w-[70px]">
                 {pinSingle !== undefined && (
-                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(single): {pinSingle.toFixed(2)} W</div>
+                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(single): {renderPowerDisplay(pinSingle)}</div>
                 )}
                 {pinTotal !== undefined && (
-                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(total): {pinTotal.toFixed(2)} W</div>
+                  <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in(total): {renderPowerDisplay(pinTotal)}</div>
                 )}
               </div>
             </>
@@ -1346,10 +1367,10 @@ export default function SubsystemCanvas({
             <div className="w-px bg-slate-300 mx-1" />
             <div className="text-left min-w-[70px]">
               {showPin && (
-                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {pin!.toFixed(2)} W</div>
+                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_in: {renderPowerDisplay(pin)}</div>
               )}
               {showPout && (
-                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {pout!.toFixed(2)} W</div>
+                <div style={{ fontSize: '10px', color: '#1e293b' }}>P_out: {renderPowerDisplay(pout)}</div>
               )}
             </div>
           </>
