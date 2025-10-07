@@ -25,9 +25,12 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const inputCount = embedded?.nodes?.filter((n:any)=>n.type==='SubsystemInput').length ?? 0
   const autoAlignNested = useStore(s=>s.nestedSubsystemAutoAlign)
   const clearNested = useStore(s=>s.nestedSubsystemClear)
+  const autoAlignModePref = useStore(s=>s.autoAlignMode)
+  const setAutoAlignModePref = useStore(s=>s.setAutoAlignMode)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
   const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
   const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
+  const [autoAlignModeSelection, setAutoAlignModeSelection] = React.useState<'legacy' | 'depthV2'>('legacy')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
@@ -81,9 +84,10 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
     setAutoAlignHorizontalInput(prev => (prev.trim().length > 0 ? prev : '500'))
     setAutoAlignVerticalInput(prev => (prev.trim().length > 0 ? prev : '100'))
+    setAutoAlignModeSelection(autoAlignModePref)
     setAutoAlignError(null)
     setAutoAlignPromptOpen(true)
-  }, [])
+  }, [autoAlignModePref])
 
   const closeAutoAlignPrompt = React.useCallback(() => {
     setAutoAlignPromptOpen(false)
@@ -115,7 +119,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     }
 
     if (columnSpacing === undefined && rowSpacing === undefined) {
-      autoAlignNested(subsystemPath)
+      autoAlignNested(subsystemPath, { mode: autoAlignModeSelection })
+      setAutoAlignModePref(autoAlignModeSelection)
       setAutoAlignHorizontalInput('500')
       setAutoAlignVerticalInput('100')
       closeAutoAlignPrompt()
@@ -126,7 +131,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     if (columnSpacing !== undefined) options.columnSpacing = columnSpacing
     if (rowSpacing !== undefined) options.rowSpacing = rowSpacing
 
-    autoAlignNested(subsystemPath, options)
+    autoAlignNested(subsystemPath, { ...options, mode: autoAlignModeSelection })
+    setAutoAlignModePref(autoAlignModeSelection)
 
     if (columnSpacing !== undefined) {
       setAutoAlignHorizontalInput(String(columnSpacing))
@@ -138,10 +144,12 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
     closeAutoAlignPrompt()
   }, [
     autoAlignHorizontalInput,
+    autoAlignModeSelection,
     autoAlignNested,
     autoAlignVerticalInput,
     subsystemPath,
     closeAutoAlignPrompt,
+    setAutoAlignModePref,
   ])
 
   const handleClear = () => {
@@ -225,8 +233,10 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
             anchorRect={autoAlignAnchor}
             horizontalValue={autoAlignHorizontalInput}
             verticalValue={autoAlignVerticalInput}
+            mode={autoAlignModeSelection}
             onHorizontalChange={setAutoAlignHorizontalInput}
             onVerticalChange={setAutoAlignVerticalInput}
+            onModeChange={setAutoAlignModeSelection}
             onConfirm={applyAutoAlign}
             onCancel={closeAutoAlignPrompt}
             error={autoAlignError}

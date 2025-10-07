@@ -3,6 +3,7 @@ import { Project, AnyNode, Edge, Scenario, CanvasMarkup } from '../models'
 import { sampleProject } from '../sampleData'
 import { autosave, loadAutosave } from '../io'
 import { autoLayoutProject } from '../utils/autoLayout'
+import { autoLayoutProjectV2 } from '../utils/autoLayout.v2'
 import { genId } from '../utils'
 import {
   QuickPreset,
@@ -47,7 +48,9 @@ type State = {
   setClipboard: (payload: ClipboardPayload | null) => void
   undo: () => void
   redo: () => void
-  autoAlign: (options?: { columnSpacing?: number; rowSpacing?: number }) => void
+  autoAlignMode: 'legacy' | 'depthV2'
+  setAutoAlignMode: (mode: 'legacy' | 'depthV2') => void
+  autoAlign: (options?: { columnSpacing?: number; rowSpacing?: number; mode?: 'legacy' | 'depthV2' }) => void
   updateSubsystemProject: (subsystemId: string, updater: (p: Project) => Project) => void
   updateSubsystemProjectAtPath: (subsystemPath: string[], updater: (p: Project) => Project) => void
   subsystemAddNode: (subsystemId: string, node: AnyNode) => void
@@ -64,7 +67,7 @@ type State = {
   nestedSubsystemUpdateNodePos: (subsystemPath: string[], nodeId: string, x: number, y: number) => void
   nestedSubsystemRemoveNode: (subsystemPath: string[], nodeId: string) => void
   nestedSubsystemRemoveEdge: (subsystemPath: string[], edgeId: string) => void
-  nestedSubsystemAutoAlign: (subsystemPath: string[], options?: { columnSpacing?: number; rowSpacing?: number }) => void
+  nestedSubsystemAutoAlign: (subsystemPath: string[], options?: { columnSpacing?: number; rowSpacing?: number; mode?: 'legacy' | 'depthV2' }) => void
   nestedSubsystemClear: (subsystemPath: string[]) => void
   openSubsystemIds: string[],
   setOpenSubsystemIds: (ids: string[]) => void
@@ -251,6 +254,8 @@ export const useStore = create<State>((set,get)=>({
   past: [],
   future: [],
   quickPresets: storedQuickPresets,
+  autoAlignMode: 'legacy',
+  setAutoAlignMode: mode => set({ autoAlignMode: mode }),
   setProject: (p) => {
     const prev = snapshotProject(get().project)
     const importedQuickPresets = Array.isArray((p as any).quickPresets) ? (p as any).quickPresets as QuickPreset[] : null
@@ -533,7 +538,15 @@ export const useStore = create<State>((set,get)=>({
     ensureMarkupsInitialized(project)
     const prev = snapshotProject(project)
     set(state => ({ past: [...state.past, prev], future: [] }))
-    const { nodes, edges } = autoLayoutProject(project, options)
+    const mode = options?.mode ?? get().autoAlignMode
+    const layoutOptions = {
+      columnSpacing: options?.columnSpacing,
+      rowSpacing: options?.rowSpacing,
+    }
+    const layoutResult = mode === 'depthV2'
+      ? autoLayoutProjectV2(project, layoutOptions)
+      : autoLayoutProject(project, layoutOptions)
+    const { nodes, edges } = layoutResult
     const next: Project = { ...project, nodes, edges }
     set({ project: next })
     autosave(next)
@@ -630,7 +643,15 @@ export const useStore = create<State>((set,get)=>({
   }
   ,nestedSubsystemAutoAlign: (subsystemPath, options) => {
     const fn = (proj: Project): Project => {
-      const { nodes, edges } = autoLayoutProject(proj, options)
+      const mode = options?.mode ?? get().autoAlignMode
+      const layoutOptions = {
+        columnSpacing: options?.columnSpacing,
+        rowSpacing: options?.rowSpacing,
+      }
+      const layoutResult = mode === 'depthV2'
+        ? autoLayoutProjectV2(proj, layoutOptions)
+        : autoLayoutProject(proj, layoutOptions)
+      const { nodes, edges } = layoutResult
       return { ...proj, nodes, edges }
     }
     get().updateSubsystemProjectAtPath(subsystemPath, fn)

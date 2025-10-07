@@ -20,8 +20,8 @@ const DEFAULT_COLUMN_SPACING = 500
 const COLUMN_START_X = 120
 const DEFAULT_ROW_SPACING = 100
 const BASE_COMPONENT_GAP = 200
-const BASE_TOP_MARGIN = 120
-const MIN_TOP_MARGIN = 40
+const BASE_TOP_MARGIN = 0
+const MIN_TOP_MARGIN = 0
 
 type Position = { x?: number; y?: number }
 

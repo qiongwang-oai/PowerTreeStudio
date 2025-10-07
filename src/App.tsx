@@ -61,12 +61,15 @@ export default function App(){
   const undo = useStore(s=>s.undo)
   const redo = useStore(s=>s.redo)
   const autoAlign = useStore(s=>s.autoAlign)
+  const autoAlignModePref = useStore(s=>s.autoAlignMode)
+  const setAutoAlignModePref = useStore(s=>s.setAutoAlignMode)
   const [selected, setSelected] = React.useState<InspectorSelection | null>(null)
   const [rightPane, setRightPane] = React.useState<number>(450)
   const [reportOpen, setReportOpen] = React.useState<boolean>(false)
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
   const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
   const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
+  const [autoAlignModeSelection, setAutoAlignModeSelection] = React.useState<'legacy' | 'depthV2'>('legacy')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const [bulkEditorOpen, setBulkEditorOpen] = React.useState(false)
@@ -123,9 +126,10 @@ export default function App(){
     setAutoAlignAnchor(autoAlignButtonRef.current?.getBoundingClientRect() ?? null)
     setAutoAlignHorizontalInput(prev => (prev.trim().length > 0 ? prev : '500'))
     setAutoAlignVerticalInput(prev => (prev.trim().length > 0 ? prev : '100'))
+    setAutoAlignModeSelection(autoAlignModePref)
     setAutoAlignError(null)
     setAutoAlignPromptOpen(true)
-  }, [])
+  }, [autoAlignModePref])
   const closeAutoAlignPrompt = React.useCallback(() => {
     setAutoAlignPromptOpen(false)
     setAutoAlignError(null)
@@ -155,7 +159,8 @@ export default function App(){
     }
 
     if (columnSpacing === undefined && rowSpacing === undefined) {
-      autoAlign()
+      autoAlign({ mode: autoAlignModeSelection })
+      setAutoAlignModePref(autoAlignModeSelection)
       setAutoAlignHorizontalInput('500')
       setAutoAlignVerticalInput('100')
       closeAutoAlignPrompt()
@@ -166,7 +171,8 @@ export default function App(){
     if (columnSpacing !== undefined) options.columnSpacing = columnSpacing
     if (rowSpacing !== undefined) options.rowSpacing = rowSpacing
 
-    autoAlign(options)
+    autoAlign({ ...options, mode: autoAlignModeSelection })
+    setAutoAlignModePref(autoAlignModeSelection)
 
     if (columnSpacing !== undefined) {
       setAutoAlignHorizontalInput(String(columnSpacing))
@@ -180,7 +186,9 @@ export default function App(){
     autoAlign,
     autoAlignHorizontalInput,
     autoAlignVerticalInput,
+    autoAlignModeSelection,
     closeAutoAlignPrompt,
+    setAutoAlignModePref,
   ])
   const onClear = ()=>{
     if (!window.confirm('Clear canvas? This will remove all nodes and edges.')) return
@@ -387,8 +395,10 @@ export default function App(){
             anchorRect={autoAlignAnchor}
             horizontalValue={autoAlignHorizontalInput}
             verticalValue={autoAlignVerticalInput}
+            mode={autoAlignModeSelection}
             onHorizontalChange={setAutoAlignHorizontalInput}
             onVerticalChange={setAutoAlignVerticalInput}
+            onModeChange={setAutoAlignModeSelection}
             onConfirm={applyAutoAlign}
             onCancel={closeAutoAlignPrompt}
             error={autoAlignError}

@@ -710,7 +710,9 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
         inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
       }
     })
-    const portIds = inputPortInfos.map(port => (typeof port?.id === 'string' ? port.id : '')).filter(id => id.length > 0)
+    const portIds = inputPortInfos
+      .map(port => (typeof port?.id === 'string' ? port.id : ''))
+      .filter(id => id.length > 0)
     const storedOrder = (node as any).inputHandleOrder
     const sanitizedOrder = sanitizeSubsystemHandleOrder(portIds, storedOrder)
     const orderedPorts = orderSubsystemPorts(inputPortInfos, sanitizedOrder)

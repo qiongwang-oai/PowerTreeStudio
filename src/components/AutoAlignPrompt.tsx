@@ -5,8 +5,10 @@ type AutoAlignPromptProps = {
   anchorRect: DOMRect | null
   horizontalValue: string
   verticalValue: string
+  mode: 'legacy' | 'depthV2'
   onHorizontalChange: (value: string) => void
   onVerticalChange: (value: string) => void
+  onModeChange: (mode: 'legacy' | 'depthV2') => void
   onConfirm: () => void
   onCancel: () => void
   error?: string | null
@@ -18,8 +20,10 @@ export default function AutoAlignPrompt({
   anchorRect,
   horizontalValue,
   verticalValue,
+  mode,
   onHorizontalChange,
   onVerticalChange,
+  onModeChange,
   onConfirm,
   onCancel,
   error,
@@ -65,6 +69,33 @@ export default function AutoAlignPrompt({
           }}
         >
           <div className="font-semibold text-slate-700 mb-2">Auto alignment</div>
+          <fieldset className="mb-3">
+            <legend className="text-xs font-medium text-slate-600 mb-1">Algorithm</legend>
+            <div className="flex flex-col gap-1">
+              <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                <input
+                  type="radio"
+                  name="auto-align-mode"
+                  value="legacy"
+                  checked={mode === 'legacy'}
+                  onChange={() => onModeChange('legacy')}
+                  className="h-3 w-3"
+                />
+                Existing algorithm
+              </label>
+              <label className="inline-flex items-center gap-2 text-xs text-slate-700">
+                <input
+                  type="radio"
+                  name="auto-align-mode"
+                  value="depthV2"
+                  checked={mode === 'depthV2'}
+                  onChange={() => onModeChange('depthV2')}
+                  className="h-3 w-3"
+                />
+                New depth-based algorithm
+              </label>
+            </div>
+          </fieldset>
           <label className="block text-xs font-medium text-slate-600 mb-1" htmlFor="auto-align-horizontal-spacing">
             Horizontal spacing (px)
           </label>
