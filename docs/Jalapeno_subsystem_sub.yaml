@@ -1,0 +1,1576 @@
+id: p_zhu6ek
+name: Sample Server Tree
+units:
+  voltage: V
+  current: A
+  power: W
+  resistance: mΩ
+defaultMargins:
+  currentPct: 10
+  powerPct: 10
+  voltageDropPct: 5
+  voltageMarginPct: 3
+scenarios:
+  - Typical
+  - Max
+  - Idle
+currentScenario: Typical
+nodes:
+  - id: n_5z6vb0
+    type: Converter
+    name: VDD_CORE
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228249
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 14
+    efficiency:
+      type: fixed
+      value: 0.87
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 494
+  - id: node_iymrdb
+    type: Converter
+    name: VDD_UNCORE
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228249
+    powerStagePartNumber: RRV20900
+    phaseCount: 9
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 594
+  - id: node_cfolra
+    type: Converter
+    name: VDD_HBMPHY_0
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1194
+  - id: node_6hgo8x
+    type: Converter
+    name: VDD_HBMPHY_1
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1094
+  - id: node_1qn9o0
+    type: Converter
+    name: VDDQL_HBM_0
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.4
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.82
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1494
+  - id: node_fo1yr6
+    type: Converter
+    name: VDDQL_HBM_1
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.4
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.82
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1594
+  - id: node_3trenv
+    type: Converter
+    name: VDDC_HBM_0
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 1.05
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.905
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 794
+  - id: node_1411sv
+    type: Converter
+    name: VDDC_HBM_1
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 1.05
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.905
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 694
+  - id: node_rxbwho
+    type: Converter
+    name: VDDQ_HBM_0
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.8
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.89
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 994
+  - id: node_civ8yr
+    type: Converter
+    name: VDDQ_HBM_1
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.8
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: D07D0R8140TBR
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.89
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 894
+  - id: node_fwz9q6
+    type: Converter
+    name: VPP_HBM_1P8
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 1.8
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.93
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1294
+  - id: node_csnd17
+    type: Converter
+    name: VDDH_1P8
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 1.8
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.93
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 294
+  - id: node_25n3bh
+    type: Converter
+    name: VDD_MAXPHY
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1394
+  - id: node_w9pfmy
+    type: Converter
+    name: TRVDD0P9
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.9
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.9
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 394
+  - id: node_f7pbf5
+    type: Converter
+    name: TRVDD0P75
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.75
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1694
+  - id: node_97fold
+    type: Converter
+    name: RVDD1P5
+    Vin_min: 1.8
+    Vin_max: 1.8
+    Vout: 1.5
+    controllerPartNumber: ""
+    powerStagePartNumber: TPS7A54
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.83
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1620
+    y: 394
+  - id: node_dnxnqg
+    type: Converter
+    name: PVDD0P9
+    Vin_min: 0.9
+    Vin_max: 0.9
+    Vout: 0.9
+    controllerPartNumber: ""
+    powerStagePartNumber: TPS7A54
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 1
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1620
+    y: 694
+  - id: node_4cyyp5
+    type: Converter
+    name: PVDD1P5
+    Vin_min: 1.8
+    Vin_max: 1.8
+    Vout: 1.5
+    controllerPartNumber: ""
+    powerStagePartNumber: TPS7A54
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.83
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1620
+    y: 294
+  - id: node_g08cpg
+    type: Converter
+    name: VDDH_PCIE
+    Vin_min: 1.8
+    Vin_max: 1.8
+    Vout: 1.2
+    controllerPartNumber: ""
+    powerStagePartNumber: TPS7A54
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.66
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1620
+    y: 594
+  - id: node_yisk5b
+    type: Converter
+    name: AVDD_PCIE
+    Vin_min: 5.5
+    Vin_max: 6.8
+    Vout: 0.8
+    controllerPartNumber: RAA228244
+    powerStagePartNumber: RAA221450
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.88
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1120
+    y: 1794
+  - id: node_8vp2ei
+    type: Converter
+    name: PLL_VDD
+    Vin_min: 1.8
+    Vin_max: 1.8
+    Vout: 1.5
+    controllerPartNumber: ""
+    powerStagePartNumber: TPS7A54
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.83
+      _lastCurve:
+        base: Iout_max
+        points:
+          - eta: 0.85
+            current: 0
+            loadPct: 0
+          - eta: 0.92
+            current: 0.5
+            loadPct: 50
+          - eta: 0.9
+            current: 1
+            loadPct: 100
+        perPhase: false
+    x: 1620
+    y: 494
+  - id: n_riuuvf
+    type: Converter
+    name: IBC
+    Vin_min: 46
+    Vin_max: 52
+    Vout: 6
+    controllerPartNumber: ""
+    powerStagePartNumber: ""
+    phaseCount: 1
+    efficiency:
+      type: fixed
+      value: 0.95
+    x: 620
+    y: 294
+  - id: n_379b5a
+    type: SubsystemInput
+    name: Jalapeno ASIC
+    Vout: 50
+    x: 118.57989264145658
+    y: 294.08887273529405
+  - id: n_7iunz6
+    type: Subsystem
+    name: Subsystem
+    inputV_nom: 12
+    numParalleledSystems: 1
+    project:
+      id: p_6wflik
+      name: Embedded
+      units:
+        voltage: V
+        current: A
+        power: W
+        resistance: mΩ
+      defaultMargins:
+        currentPct: 10
+        powerPct: 10
+        voltageDropPct: 5
+        voltageMarginPct: 3
+      scenarios:
+        - Typical
+        - Max
+        - Idle
+      currentScenario: Typical
+      nodes:
+        - id: node_r0l07f
+          type: Load
+          name: RVDD1P5
+          Vreq: 1.5
+          I_typ: 2.3
+          I_idle: 0
+          I_max: 2.3
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 1120
+        - id: node_kycxqv
+          type: Load
+          name: PVDD1P5
+          Vreq: 1.5
+          I_typ: 0.08
+          I_idle: 0
+          I_max: 0.08
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 1720
+        - id: node_ggfq08
+          type: Load
+          name: LEX_VDD1P5
+          Vreq: 1.5
+          I_typ: 0.08
+          I_idle: 0
+          I_max: 0.08
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 1920
+        - id: node_7fsvf4
+          type: Load
+          name: VDDH_PCIE
+          Vreq: 1.2
+          I_typ: 0.76
+          I_idle: 0
+          I_max: 0.76
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 1320
+        - id: node_wdm4xy
+          type: Load
+          name: PLL_VDD
+          Vreq: 1.5
+          I_typ: 0.7
+          I_idle: 0
+          I_max: 0.7
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 920
+        - id: node_kqbbqw
+          type: Load
+          name: VDD_CORE
+          Vreq: 0.75
+          I_typ: 1123
+          I_idle: 219
+          I_max: 1345
+          Utilization_typ: 95
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 120
+        - id: node_4iigf3
+          type: Load
+          name: VDD_UNCORE
+          Vreq: 0.75
+          I_typ: 277
+          I_idle: 166
+          I_max: 301
+          Utilization_typ: 95
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 720
+        - id: node_j3g93w
+          type: Load
+          name: VDDC_HBM_0
+          Vreq: 1.05
+          I_typ: 103
+          I_idle: 0
+          I_max: 121
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 320
+        - id: node_he2tq8
+          type: Load
+          name: VDDC_HBM_1
+          Vreq: 1.05
+          I_typ: 103
+          I_idle: 0
+          I_max: 121
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 520
+        - id: node_tvpaf0
+          type: Load
+          name: VDDH_1P8
+          Vreq: 1.8
+          I_typ: 4
+          I_idle: 0
+          I_max: 4
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 1520
+        - id: node_hnbvos
+          type: Load
+          name: VDD_HBMPHY_0
+          Vreq: 0.75
+          I_typ: 54
+          I_idle: 0
+          I_max: 64
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 2520
+        - id: node_j3jf91
+          type: Load
+          name: VDD_HBMPHY_1
+          Vreq: 0.75
+          I_typ: 54
+          I_idle: 0
+          I_max: 64
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 2720
+        - id: node_42rrpw
+          type: Load
+          name: VDDQL_HBM_0
+          Vreq: 0.4
+          I_typ: 21
+          I_idle: 0
+          I_max: 25
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 3720
+        - id: node_l4dh9r
+          type: Load
+          name: VDDQL_HBM_1
+          Vreq: 0.4
+          I_typ: 21
+          I_idle: 0
+          I_max: 25
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 3920
+        - id: node_iu4iui
+          type: Load
+          name: VDDQ_HBM_0
+          Vreq: 0.8
+          I_typ: 64
+          I_idle: 0
+          I_max: 75
+          Utilization_typ: 90
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 2120
+        - id: node_5wmau5
+          type: Load
+          name: VDDQ_HBM_1
+          Vreq: 0.8
+          I_typ: 64
+          I_idle: 0
+          I_max: 75
+          Utilization_typ: 90
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 2320
+        - id: node_9b55h2
+          type: Load
+          name: VPP_HBM_1P8
+          Vreq: 1.8
+          I_typ: 12
+          I_idle: 0
+          I_max: 14
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 2920
+        - id: node_4s5npd
+          type: Load
+          name: VDD_MAXPHY
+          Vreq: 0.75
+          I_typ: 19
+          I_idle: 0
+          I_max: 19
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 3120
+        - id: node_qxkx8l
+          type: Load
+          name: TRVDD0P9
+          Vreq: 0.9
+          I_typ: 14.5
+          I_idle: 0
+          I_max: 14.5
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 3520
+        - id: node_pn2fia
+          type: Load
+          name: TRVDD0P75
+          Vreq: 0.75
+          I_typ: 6.6
+          I_idle: 0
+          I_max: 6.6
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 4120
+        - id: node_wscm4l
+          type: Load
+          name: PVDD0P
+          Vreq: 0.9
+          I_typ: 0.68
+          I_idle: 0
+          I_max: 0.68
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 3320
+        - id: node_74tkot
+          type: Load
+          name: AVDD_PCIE
+          Vreq: 0.8
+          I_typ: 5.4
+          I_idle: 0
+          I_max: 5.4
+          Utilization_typ: 100
+          Utilization_max: 100
+          numParalleledDevices: 1
+          x: 520
+          y: 4320
+        - id: n_l7mzj8
+          type: SubsystemInput
+          name: VDD_CORE
+          Vout: 0.75
+          x: 120
+          y: 148
+        - id: n_0hoco5
+          type: SubsystemInput
+          name: VDDC_HBM_0
+          Vout: 1.05
+          x: 120
+          y: 348
+        - id: node_r5h9sf
+          type: SubsystemInput
+          name: VDDC_HBM_1
+          Vout: 1.05
+          x: 120
+          y: 548
+        - id: n_7v0two
+          type: SubsystemInput
+          name: VDD_UNCORE
+          Vout: 0.75
+          x: 120
+          y: 748
+        - id: n_sjbx6m
+          type: SubsystemInput
+          name: PLL_VDD
+          Vout: 1.5
+          x: 120
+          y: 948
+        - id: n_039gtm
+          type: SubsystemInput
+          name: RVDD1P5
+          Vout: 1.5
+          x: 120
+          y: 1148
+        - id: n_rxu9ey
+          type: SubsystemInput
+          name: VDDH_PCIE
+          Vout: 1.2
+          x: 120
+          y: 1348
+        - id: n_klosl2
+          type: SubsystemInput
+          name: VDD_1P8
+          Vout: 1.8
+          x: 120
+          y: 1548
+        - id: n_uukv9n
+          type: SubsystemInput
+          name: PVDD1P5
+          Vout: 1.5
+          x: 120
+          y: 1748
+        - id: n_wv5w6c
+          type: SubsystemInput
+          name: LEX_VDD1P5
+          Vout: 1.5
+          x: 120
+          y: 1948
+        - id: n_ob9bi5
+          type: SubsystemInput
+          name: VDDQ_HBM_0
+          Vout: 0.8
+          x: 120
+          y: 2148
+        - id: node_zl9d2r
+          type: SubsystemInput
+          name: VDDQ_HBM_1
+          Vout: 0.8
+          x: 120
+          y: 2348
+        - id: n_n5bets
+          type: SubsystemInput
+          name: VDD_HBMPHY_0
+          Vout: 0.75
+          x: 120
+          y: 2548
+        - id: node_af7ypa
+          type: SubsystemInput
+          name: VDD_HBMPHY_1
+          Vout: 0.75
+          x: 120
+          y: 2748
+        - id: n_20oawh
+          type: SubsystemInput
+          name: VPP_HBM_1P8
+          Vout: 1.8
+          x: 120
+          y: 2948
+        - id: n_oir52r
+          type: SubsystemInput
+          name: VDD_MAXPHY
+          Vout: 0.75
+          x: 120
+          y: 3148
+        - id: n_c7dc2g
+          type: SubsystemInput
+          name: PVDD0P
+          Vout: 0.9
+          x: 120
+          y: 3348
+        - id: n_lc3aaw
+          type: SubsystemInput
+          name: TRVDD0P9
+          Vout: 0.9
+          x: 120
+          y: 3548
+        - id: n_a1gw8l
+          type: SubsystemInput
+          name: VDDQL_HBM_0
+          Vout: 0.4
+          x: 120
+          y: 3748
+        - id: node_gbuhok
+          type: SubsystemInput
+          name: VDDQL_HBM_1
+          Vout: 0.4
+          x: 120
+          y: 3948
+        - id: n_m6w3qc
+          type: SubsystemInput
+          name: TRVDD0P75
+          Vout: 0.75
+          x: 120
+          y: 4148
+        - id: n_6ct5xp
+          type: SubsystemInput
+          name: AVDD_PCIE
+          Vout: 0.8
+          x: 120
+          y: 4348
+      edges:
+        - id: n_l7mzj8-node_kqbbqw
+          from: n_l7mzj8
+          to: node_kqbbqw
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_0hoco5-node_j3g93w
+          from: n_0hoco5
+          to: node_j3g93w
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: node_r5h9sf-node_he2tq8
+          from: node_r5h9sf
+          to: node_he2tq8
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_7v0two-node_4iigf3
+          from: n_7v0two
+          to: node_4iigf3
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_sjbx6m-node_wdm4xy
+          from: n_sjbx6m
+          to: node_wdm4xy
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_039gtm-node_r0l07f
+          from: n_039gtm
+          to: node_r0l07f
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_rxu9ey-node_7fsvf4
+          from: n_rxu9ey
+          to: node_7fsvf4
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_klosl2-node_tvpaf0
+          from: n_klosl2
+          to: node_tvpaf0
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_uukv9n-node_kycxqv
+          from: n_uukv9n
+          to: node_kycxqv
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_wv5w6c-node_ggfq08
+          from: n_wv5w6c
+          to: node_ggfq08
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_ob9bi5-node_iu4iui
+          from: n_ob9bi5
+          to: node_iu4iui
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: node_zl9d2r-node_5wmau5
+          from: node_zl9d2r
+          to: node_5wmau5
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_n5bets-node_hnbvos
+          from: n_n5bets
+          to: node_hnbvos
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: node_af7ypa-node_j3jf91
+          from: node_af7ypa
+          to: node_j3jf91
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_20oawh-node_9b55h2
+          from: n_20oawh
+          to: node_9b55h2
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_oir52r-node_4s5npd
+          from: n_oir52r
+          to: node_4s5npd
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_c7dc2g-node_wscm4l
+          from: n_c7dc2g
+          to: node_wscm4l
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_lc3aaw-node_qxkx8l
+          from: n_lc3aaw
+          to: node_qxkx8l
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_a1gw8l-node_42rrpw
+          from: n_a1gw8l
+          to: node_42rrpw
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: node_gbuhok-node_l4dh9r
+          from: node_gbuhok
+          to: node_l4dh9r
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_m6w3qc-node_pn2fia
+          from: n_m6w3qc
+          to: node_pn2fia
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+        - id: n_6ct5xp-node_74tkot
+          from: n_6ct5xp
+          to: node_74tkot
+          fromHandle: output
+          toHandle: input
+          midpointOffset: 0.5
+          midpointX: 390
+    x: 2581.9081401923027
+    y: 751.2399938424751
+edges:
+  - id: node_w9pfmy-node_dnxnqg
+    from: node_w9pfmy
+    to: node_dnxnqg
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.12812435157262578
+    midpointX: 1483.3007089562975
+  - id: node_csnd17-node_97fold
+    from: node_csnd17
+    to: node_97fold
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.7546125014354557
+    midpointX: 1497.3062507177278
+  - id: node_csnd17-node_4cyyp5
+    from: node_csnd17
+    to: node_4cyyp5
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.7546125014354557
+    midpointX: 1497.3062507177278
+  - id: node_csnd17-node_g08cpg
+    from: node_csnd17
+    to: node_g08cpg
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.7546125014354557
+    midpointX: 1497.3062507177278
+  - id: node_csnd17-node_8vp2ei
+    from: node_csnd17
+    to: node_8vp2ei
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.7546125014354557
+    midpointX: 1497.3062507177278
+  - id: n_riuuvf-n_5z6vb0
+    from: n_riuuvf
+    to: n_5z6vb0
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+    interconnect:
+      R_milliohm: 0.12
+  - id: n_riuuvf-node_iymrdb
+    from: n_riuuvf
+    to: node_iymrdb
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_cfolra
+    from: n_riuuvf
+    to: node_cfolra
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_6hgo8x
+    from: n_riuuvf
+    to: node_6hgo8x
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_1qn9o0
+    from: n_riuuvf
+    to: node_1qn9o0
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_fo1yr6
+    from: n_riuuvf
+    to: node_fo1yr6
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_3trenv
+    from: n_riuuvf
+    to: node_3trenv
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_1411sv
+    from: n_riuuvf
+    to: node_1411sv
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_rxbwho
+    from: n_riuuvf
+    to: node_rxbwho
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_civ8yr
+    from: n_riuuvf
+    to: node_civ8yr
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_fwz9q6
+    from: n_riuuvf
+    to: node_fwz9q6
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_csnd17
+    from: n_riuuvf
+    to: node_csnd17
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.734510528669962
+    midpointX: 987.255264334981
+  - id: n_riuuvf-node_25n3bh
+    from: n_riuuvf
+    to: node_25n3bh
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.499310635278565
+    midpointX: 869.6553176392825
+  - id: n_riuuvf-node_w9pfmy
+    from: n_riuuvf
+    to: node_w9pfmy
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.499310635278565
+    midpointX: 869.6553176392825
+  - id: n_riuuvf-node_f7pbf5
+    from: n_riuuvf
+    to: node_f7pbf5
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.5021482933287135
+    midpointX: 871.0741466643567
+  - id: n_riuuvf-node_yisk5b
+    from: n_riuuvf
+    to: node_yisk5b
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.4995432414605011
+    midpointX: 869.7716207302506
+  - id: n_379b5a-n_riuuvf
+    from: n_379b5a
+    to: n_riuuvf
+    fromHandle: output
+    toHandle: input
+    midpointOffset: 0.5
+    midpointX: 486.31250098247205
+  - id: n_5z6vb0-n_7iunz6
+    from: n_5z6vb0
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_l7mzj8
+    midpointOffset: 0.11224981415125453
+    midpointX: 1468.8499619092454
+  - id: node_3trenv-n_7iunz6
+    from: node_3trenv
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_0hoco5
+    midpointOffset: 0.04772093980528998
+    midpointX: 1387.2388826740219
+  - id: node_1411sv-n_7iunz6
+    from: node_1411sv
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: node_r5h9sf
+    midpointOffset: 0.0725904850477763
+    midpointX: 1418.4271766772097
+  - id: node_iymrdb-n_7iunz6
+    from: node_iymrdb
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_7v0two
+    midpointOffset: 0.09523874474573688
+    midpointX: 1447.5981886725885
+  - id: node_4cyyp5-n_7iunz6
+    from: node_4cyyp5
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_uukv9n
+    midpointOffset: 0.8354173749759962
+    midpointX: 2453.2956356428126
+  - id: node_97fold-n_7iunz6
+    from: node_97fold
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_039gtm
+    midpointOffset: 0.7909820656792654
+    midpointX: 2419.651773370965
+  - id: node_8vp2ei-n_7iunz6
+    from: node_8vp2ei
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_sjbx6m
+    midpointOffset: 0.8151196710531668
+    midpointX: 2437.927380846741
+  - id: node_g08cpg-n_7iunz6
+    from: node_g08cpg
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_rxu9ey
+    midpointOffset: 0.7620221954619635
+    midpointX: 2397.7176037459753
+  - id: node_dnxnqg-n_7iunz6
+    from: node_dnxnqg
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_c7dc2g
+    midpointOffset: 0.7294584881565518
+    midpointX: 2373.524071289026
+  - id: node_civ8yr-n_7iunz6
+    from: node_civ8yr
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: node_zl9d2r
+    midpointOffset: 0.8190729107712225
+    midpointX: 2350.7651596401065
+  - id: node_rxbwho-n_7iunz6
+    from: node_rxbwho
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_ob9bi5
+    midpointOffset: 0.5
+    midpointX: 1718.2343368050192
+  - id: node_6hgo8x-n_7iunz6
+    from: node_6hgo8x
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: node_af7ypa
+    midpointOffset: 0.5
+    midpointX: 1721.3085636061385
+  - id: node_cfolra-n_7iunz6
+    from: node_cfolra
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_n5bets
+    midpointOffset: 0.732232557571404
+    midpointX: 2243.388674399905
+  - id: node_fwz9q6-n_7iunz6
+    from: node_fwz9q6
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_20oawh
+    midpointOffset: 0.7583010133019392
+    midpointX: 2274.0656106401298
+  - id: node_25n3bh-n_7iunz6
+    from: node_25n3bh
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_oir52r
+    midpointOffset: 0.7889299658008242
+    midpointX: 2314.2202421192487
+  - id: node_w9pfmy-n_7iunz6
+    from: node_w9pfmy
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_lc3aaw
+    midpointOffset: 0.12812435157262578
+    midpointX: 1483.3007089562975
+  - id: node_1qn9o0-n_7iunz6
+    from: node_1qn9o0
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_a1gw8l
+    midpointOffset: 0.8177212338460932
+    midpointX: 2349.0966784218854
+  - id: node_fo1yr6-n_7iunz6
+    from: node_fo1yr6
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: node_gbuhok
+    midpointOffset: 0.8426875502632086
+    midpointX: 2380.436476926863
+  - id: node_f7pbf5-n_7iunz6
+    from: node_f7pbf5
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_m6w3qc
+    midpointOffset: 0.8695665726688464
+    midpointX: 2414.958837734042
+  - id: node_yisk5b-n_7iunz6
+    from: node_yisk5b
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_6ct5xp
+    midpointOffset: 0.8946929666890748
+    midpointX: 2445.7016484850496
+  - id: node_csnd17-n_7iunz6
+    from: node_csnd17
+    to: n_7iunz6
+    fromHandle: output
+    toHandle: n_klosl2
+    midpointOffset: 0.336547194213903
+    midpointX: 1456.547194213903
+markups: []
+quickPresets:
+  - id: qp_hh28bm
+    name: 48V Source
+    node:
+      type: Source
+      name: Source
+      Vout: 48
+    nodeType: Source
+    accentColor: "#22c55e"
+    createdAt: 2025-09-29T23:42:22.253Z
+    updatedAt: 2025-10-06T21:38:07.808Z
+    source:
+      type: default
+  - id: qp_9xf7z0
+    name: 12V Buck 95%
+    node:
+      type: Converter
+      name: Buck
+      Vin_min: 40
+      Vin_max: 60
+      Vout: 12
+      controllerPartNumber: ""
+      powerStagePartNumber: ""
+      phaseCount: 1
+      efficiency:
+        type: fixed
+        value: 0.95
+    nodeType: Converter
+    accentColor: "#3b82f6"
+    createdAt: 2025-09-29T23:42:22.254Z
+    updatedAt: 2025-10-06T21:38:07.808Z
+    source:
+      type: default
+  - id: qp_5opd1b
+    name: VRM 0.9V 92%
+    node:
+      type: Converter
+      name: VRM 0.9V 92%
+      Vin_min: 10
+      Vin_max: 13
+      Vout: 0.9
+      controllerPartNumber: ""
+      powerStagePartNumber: ""
+      phaseCount: 1
+      efficiency:
+        type: fixed
+        value: 0.92
+    nodeType: Converter
+    accentColor: "#3b82f6"
+    createdAt: 2025-09-29T23:42:22.254Z
+    updatedAt: 2025-10-06T21:38:07.808Z
+    source:
+      type: default
+      variantId: vrm-0p9-92
+  - id: qp_qhuy8x
+    name: Dual-output default
+    node:
+      type: DualOutputConverter
+      name: Dual-output Converter
+      Vin_min: 38
+      Vin_max: 60
+      controllerPartNumber: ""
+      powerStagePartNumber: ""
+      outputs:
+        - id: outputA
+          label: Output A
+          Vout: 12
+          Iout_max: 10
+          Pout_max: 120
+          phaseCount: 1
+          efficiency:
+            type: fixed
+            value: 0.95
+        - id: outputB
+          label: Output B
+          Vout: 5
+          Iout_max: 20
+          Pout_max: 100
+          phaseCount: 1
+          efficiency:
+            type: fixed
+            value: 0.9
+    nodeType: DualOutputConverter
+    accentColor: "#0ea5e9"
+    createdAt: 2025-09-29T23:42:22.254Z
+    updatedAt: 2025-10-06T21:38:07.808Z
+    source:
+      type: default
+      variantId: dual-default
