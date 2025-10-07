@@ -3,6 +3,53 @@ export const SUBSYSTEM_PORT_HEIGHT = 24
 export const SUBSYSTEM_PORT_SPACING_PX = 45
 export const SUBSYSTEM_PORT_MARGIN_MAX_PX = 50
 
+export function sanitizeSubsystemHandleOrder(portIds: string[], stored?: unknown): string[] {
+  const validPortIds = Array.isArray(portIds)
+    ? portIds.filter(id => typeof id === 'string' && id.trim().length > 0)
+    : []
+  if (validPortIds.length === 0) {
+    return []
+  }
+  const storedArray = Array.isArray(stored)
+    ? stored.map(id => (typeof id === 'string' ? id.trim() : '')).filter(id => id.length > 0)
+    : []
+  const existing = new Set<string>()
+  const ordered: string[] = []
+  for (const id of storedArray) {
+    if (!existing.has(id) && validPortIds.includes(id)) {
+      ordered.push(id)
+      existing.add(id)
+    }
+  }
+  for (const id of validPortIds) {
+    if (!existing.has(id)) {
+      ordered.push(id)
+      existing.add(id)
+    }
+  }
+  return ordered
+}
+
+export function orderSubsystemPorts<T extends { id?: string }>(ports: T[], order: readonly string[]): T[] {
+  if (!Array.isArray(ports) || ports.length <= 1) {
+    return Array.isArray(ports) ? [...ports] : []
+  }
+  const orderIndex = new Map<string, number>()
+  order.forEach((id, index) => {
+    if (typeof id === 'string' && id.length > 0 && !orderIndex.has(id)) {
+      orderIndex.set(id, index)
+    }
+  })
+  return [...ports].sort((a, b) => {
+    const idA = typeof a?.id === 'string' ? a.id : ''
+    const idB = typeof b?.id === 'string' ? b.id : ''
+    const idxA = orderIndex.has(idA) ? orderIndex.get(idA)! : Number.POSITIVE_INFINITY
+    const idxB = orderIndex.has(idB) ? orderIndex.get(idB)! : Number.POSITIVE_INFINITY
+    if (idxA !== idxB) return idxA - idxB
+    return 0
+  })
+}
+
 function getRawSubsystemMarginPercent(total: number): number {
   const baseMargin = Math.min(25, 60 / total)
   return Math.max(baseMargin, 12)

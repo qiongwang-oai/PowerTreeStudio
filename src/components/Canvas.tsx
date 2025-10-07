@@ -31,7 +31,13 @@ import {
 } from '../utils/multiSelection'
 import type { Bounds } from '../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../utils/selectionClipboard'
-import { SUBSYSTEM_BASE_HEIGHT, computeSubsystemNodeMinHeight, getSubsystemPortPosition } from './SubsystemNodeLayout'
+import {
+  SUBSYSTEM_BASE_HEIGHT,
+  computeSubsystemNodeMinHeight,
+  getSubsystemPortPosition,
+  sanitizeSubsystemHandleOrder,
+  orderSubsystemPorts,
+} from './SubsystemNodeLayout'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
@@ -690,21 +696,28 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
     const projectNodes = Array.isArray((node as any).project?.nodes)
       ? (node as any).project.nodes
       : []
-    data.inputPorts = projectNodes
-      .filter((x:any)=>x.type==='SubsystemInput')
-      .map((x:any)=>{
-        const fallback = Number(x.Vout)
-        const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
-        const inferred = inferVoltageForHandle(x.id, true)
-        const connections = edgesForHandle(x.id, true).length
-        return {
-          id: x.id,
-          Vout: x.Vout,
-          name: x.name,
-          connectionCount: connections,
-          inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
-        }
-      })
+    const subsystemInputs = projectNodes.filter((x:any)=>x.type==='SubsystemInput')
+    const inputPortInfos = subsystemInputs.map((x:any)=>{
+      const fallback = Number(x.Vout)
+      const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
+      const inferred = inferVoltageForHandle(x.id, true)
+      const connections = edgesForHandle(x.id, true).length
+      return {
+        id: x.id,
+        Vout: x.Vout,
+        name: x.name,
+        connectionCount: connections,
+        inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
+      }
+    })
+    const portIds = inputPortInfos.map(port => (typeof port?.id === 'string' ? port.id : '')).filter(id => id.length > 0)
+    const storedOrder = (node as any).inputHandleOrder
+    const sanitizedOrder = sanitizeSubsystemHandleOrder(portIds, storedOrder)
+    const orderedPorts = orderSubsystemPorts(inputPortInfos, sanitizedOrder)
+    data.inputPorts = orderedPorts
+    if (sanitizedOrder.length > 0) {
+      data.inputHandleOrder = sanitizedOrder
+    }
     if (!Array.isArray(data.inputPorts) || data.inputPorts.length === 0) {
       data.inputConnectionCount = defaultHandleConnectionCount
       if (typeof resolvedInputVoltage === 'number' && Number.isFinite(resolvedInputVoltage)) {

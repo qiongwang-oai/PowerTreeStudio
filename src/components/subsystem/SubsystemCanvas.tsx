@@ -25,7 +25,12 @@ import {
   type Bounds,
 } from '../../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../../utils/selectionClipboard'
-import { computeSubsystemNodeMinHeight, getSubsystemPortPosition } from '../SubsystemNodeLayout'
+import {
+  computeSubsystemNodeMinHeight,
+  getSubsystemPortPosition,
+  sanitizeSubsystemHandleOrder,
+  orderSubsystemPorts,
+} from '../SubsystemNodeLayout'
 import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
@@ -512,21 +517,28 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
     const projectNodes = Array.isArray((node as any).project?.nodes)
       ? (node as any).project.nodes
       : []
-    data.inputPorts = projectNodes
-      .filter((x:any)=>x.type==='SubsystemInput')
-      .map((x:any)=>{
-        const fallback = Number(x.Vout)
-        const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
-        const inferred = inferVoltageForHandle(x.id, true)
-        const connections = edgesForHandle(x.id, true).length
-        return {
-          id: x.id,
-          Vout: x.Vout,
-          name: x.name,
-          connectionCount: connections,
-          inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
-        }
-      })
+    const subsystemInputs = projectNodes.filter((x:any)=>x.type==='SubsystemInput')
+    const inputPortInfos = subsystemInputs.map((x:any)=>{
+      const fallback = Number(x.Vout)
+      const fallbackVoltage = Number.isFinite(fallback) ? fallback : undefined
+      const inferred = inferVoltageForHandle(x.id, true)
+      const connections = edgesForHandle(x.id, true).length
+      return {
+        id: x.id,
+        Vout: x.Vout,
+        name: x.name,
+        connectionCount: connections,
+        inputVoltage: typeof inferred === 'number' && Number.isFinite(inferred) ? inferred : fallbackVoltage,
+      }
+    })
+    const portIds = inputPortInfos.map(port => (typeof port?.id === 'string' ? port.id : '')).filter(id => id.length > 0)
+    const storedOrder = (node as any).inputHandleOrder
+    const sanitizedOrder = sanitizeSubsystemHandleOrder(portIds, storedOrder)
+    const orderedPorts = orderSubsystemPorts(inputPortInfos, sanitizedOrder)
+    data.inputPorts = orderedPorts
+    if (sanitizedOrder.length > 0) {
+      data.inputHandleOrder = sanitizedOrder
+    }
   }
   if (node.type === 'SubsystemInput') {
     const vout = (node as any).Vout

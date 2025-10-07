@@ -3,9 +3,10 @@ import { useStore } from '../../state/store'
 import { DualOutputConverterBranch, DualOutputConverterNode, Edge, Project } from '../../models'
 import { Tabs, TabsContent, TabsList } from '../ui/tabs'
 import { Button } from '../ui/button'
-import { Download, Trash2, Upload } from 'lucide-react'
+import { ArrowDown, ArrowUp, Download, ListRestart, Trash2, Upload } from 'lucide-react'
 import { Tooltip } from '../ui/tooltip'
 import { compute, etaFromModel } from '../../calc'
+import { orderSubsystemPorts, sanitizeSubsystemHandleOrder } from '../SubsystemNodeLayout'
 import { download, importProjectFile, serializeProject } from '../../io'
 import { sanitizeEmbeddedProject } from '../../utils/embeddedProject'
 import EfficiencyEditor from '../EfficiencyEditor'
@@ -347,6 +348,85 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
     if (node.type === 'Subsystem') {
       const embedded = (node as any).project
       const embeddedInputs = embedded?.nodes?.filter((n:any)=> n.type==='SubsystemInput') || []
+      const embeddedInputIds = embeddedInputs
+        .map((input:any)=> typeof input?.id === 'string' ? input.id : '')
+        .filter((id:string)=> id.length > 0)
+      const storedOrder = (node as any).inputHandleOrder
+      const handleOrder = sanitizeSubsystemHandleOrder(embeddedInputIds, storedOrder)
+      const orderedEmbeddedInputs = orderSubsystemPorts(embeddedInputs, handleOrder)
+      const pickName = (value: unknown): string | undefined => {
+        if (typeof value !== 'string') return undefined
+        const trimmed = value.trim()
+        return trimmed.length ? trimmed : undefined
+      }
+      const handleDisplayItems = orderedEmbeddedInputs
+        .map((input:any, index:number) => {
+          const id = typeof input?.id === 'string' ? input.id : ''
+          if (!id) return null
+          const orderIndex = handleOrder.indexOf(id)
+          if (orderIndex === -1) return null
+          const baseLabel = pickName(input?.name) ?? pickName(input?.label) ?? `Input ${orderIndex + 1}`
+          const voltageValue = Number(input?.Vout)
+          const voltageText = Number.isFinite(voltageValue) ? `${voltageValue} V` : null
+          const metaParts: string[] = []
+          if (voltageText) metaParts.push(voltageText)
+          metaParts.push(`ID: ${id}`)
+          return {
+            id,
+            label: baseLabel,
+            meta: metaParts.length ? metaParts.join(' • ') : null,
+            orderIndex,
+          }
+        })
+        .filter((item): item is { id: string; label: string; meta: string | null; orderIndex: number } => !!item)
+        .sort((a, b) => a.orderIndex - b.orderIndex)
+      const handleCount = handleDisplayItems.length
+      const canManageOrder = handleCount > 1
+      const arraysEqualLocal = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((value, idx) => value === b[idx])
+      const moveHandle = (handleId: string, delta: number) => {
+        if (!canManageOrder) return
+        const currentIndex = handleOrder.indexOf(handleId)
+        if (currentIndex === -1) return
+        const targetIndex = currentIndex + delta
+        if (targetIndex < 0 || targetIndex >= handleOrder.length) return
+        const nextOrder = [...handleOrder]
+        const [moved] = nextOrder.splice(currentIndex, 1)
+        nextOrder.splice(targetIndex, 0, moved)
+        if (arraysEqualLocal(handleOrder, nextOrder)) return
+        nestedUpdateNode(path, node.id, { inputHandleOrder: nextOrder })
+      }
+      const syncFromEmbeddedLayout = () => {
+        if (!canManageOrder) return
+        const sortable = embeddedInputs.filter((input:any)=> typeof input?.id === 'string' && input.id.length > 0)
+        if (sortable.length <= 1) return
+        const handleOrderMap = new Map(handleOrder.map((id, idx) => [id, idx]))
+        const defaultOrderMap = new Map<string, number>()
+        sortable.forEach((input:any, idx:number)=>{
+          if (typeof input?.id === 'string') defaultOrderMap.set(input.id, idx)
+        })
+        const sorted = [...sortable].sort((a:any, b:any)=>{
+          const idA = typeof a?.id === 'string' ? a.id : ''
+          const idB = typeof b?.id === 'string' ? b.id : ''
+          const yA = Number.isFinite(Number(a?.y)) ? Number(a.y) : null
+          const yB = Number.isFinite(Number(b?.y)) ? Number(b.y) : null
+          if (yA !== null && yB !== null && yA !== yB) return yA - yB
+          if (yA !== null && yB === null) return -1
+          if (yA === null && yB !== null) return 1
+          const fallbackA = handleOrderMap.has(idA) ? handleOrderMap.get(idA)! : (defaultOrderMap.get(idA) ?? Number.POSITIVE_INFINITY)
+          const fallbackB = handleOrderMap.has(idB) ? handleOrderMap.get(idB)! : (defaultOrderMap.get(idB) ?? Number.POSITIVE_INFINITY)
+          if (fallbackA !== fallbackB) return fallbackA - fallbackB
+          const xA = Number.isFinite(Number(a?.x)) ? Number(a.x) : 0
+          const xB = Number.isFinite(Number(b?.x)) ? Number(b.x) : 0
+          if (xA !== xB) return xA - xB
+          return 0
+        })
+        const nextOrderRaw = sorted
+          .map((input:any)=> typeof input?.id === 'string' ? input.id : '')
+          .filter((id:string)=> id.length > 0)
+        const sanitizedNextOrder = sanitizeSubsystemHandleOrder(embeddedInputIds, nextOrderRaw)
+        if (!sanitizedNextOrder.length || arraysEqualLocal(handleOrder, sanitizedNextOrder)) return
+        nestedUpdateNode(path, node.id, { inputHandleOrder: sanitizedNextOrder })
+      }
       const embeddedInputValue = (() => {
         if (!embeddedInputs.length) return '—'
         if (embeddedInputs.length === 1) return Number(embeddedInputs[0]?.Vout || 0)
@@ -366,6 +446,60 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
           <FormGrid columns={2}>
             <Field label="Number of Paralleled Systems" value={(node as any).numParalleledSystems ?? 1} onChange={v=>onChange('numParalleledSystems', Math.max(1, Math.round(v)))} />
           </FormGrid>
+        </InspectorSection>
+      )
+      sections.push(
+        <InspectorSection
+          key="subsystem-handles"
+          title="Input handles"
+          description="Arrange how inputs appear on the subsystem node in the parent canvas."
+        >
+          {canManageOrder ? (
+            <>
+              <div className="space-y-2">
+                {handleDisplayItems.map((item, idx) => (
+                  <div key={item.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-700">{`${idx + 1}. ${item.label}`}</div>
+                      {item.meta ? <div className="text-xs text-slate-500">{item.meta}</div> : null}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label={`Move ${item.label} up`}
+                        disabled={idx === 0}
+                        onClick={()=>moveHandle(item.id, -1)}
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label={`Move ${item.label} down`}
+                        disabled={idx === handleCount - 1}
+                        onClick={()=>moveHandle(item.id, 1)}
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 flex justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={syncFromEmbeddedLayout}
+                >
+                  <ListRestart className="mr-2 h-4 w-4" />
+                  Sync from embedded layout
+                </Button>
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-slate-500">Add at least two subsystem inputs to manage handle order.</p>
+          )}
         </InspectorSection>
       )
       sections.push(

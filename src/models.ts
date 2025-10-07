@@ -48,6 +48,7 @@ export type SubsystemNode = BaseNode & {
   projectFileName?: string
   numParalleledSystems?: number
   embeddedViewColor?: string
+  inputHandleOrder?: string[]
 }
 export type SubsystemInputNode = BaseNode & { type: 'SubsystemInput'; Vout: number }
 export type AnyNode = SourceNode|ConverterNode|DualOutputConverterNode|LoadNode|BusNode|NoteNode|SubsystemNode|SubsystemInputNode
