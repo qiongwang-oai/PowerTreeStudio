@@ -591,16 +591,47 @@ const assignCoordinates = (
   return coords
 }
 
+const computeParallelEdgeOffsets = (edges: Edge[]): Map<string, number> => {
+  const groups = new Map<string, Edge[]>()
+  for (const edge of edges) {
+    const key = `${edge.from}::${edge.to}`
+    const list = groups.get(key)
+    if (list) list.push(edge)
+    else groups.set(key, [edge])
+  }
+  const offsets = new Map<string, number>()
+  for (const groupEdges of groups.values()) {
+    if (groupEdges.length <= 1) continue
+    const sorted = [...groupEdges].sort((a, b) => {
+      const handleA = (a.toHandle ?? '') as string
+      const handleB = (b.toHandle ?? '') as string
+      if (handleA !== handleB) return handleA.localeCompare(handleB)
+      return a.id.localeCompare(b.id)
+    })
+    const step = 1 / (sorted.length + 1)
+    sorted.forEach((edge, index) => {
+      offsets.set(edge.id, step * (index + 1))
+    })
+  }
+  return offsets
+}
+
 const updateEdges = (
   project: Project,
-  coords: Map<string, { x: number; y: number }>
+  coords: Map<string, { x: number; y: number }>,
+  parallelOffsets: Map<string, number>
 ): Edge[] => {
   return project.edges.map(edge => {
     const next: Edge = { ...edge }
     const source = coords.get(edge.from)
     const target = coords.get(edge.to)
     if (source && target) {
-      const rawOffset = typeof edge.midpointOffset === 'number' ? edge.midpointOffset : 0.5
+      const overrideOffset = parallelOffsets.get(edge.id)
+      const rawOffset = typeof overrideOffset === 'number' && Number.isFinite(overrideOffset)
+        ? overrideOffset
+        : typeof edge.midpointOffset === 'number' && Number.isFinite(edge.midpointOffset)
+          ? edge.midpointOffset
+          : 0.5
       const clamped = Math.min(1, Math.max(0, rawOffset))
       next.midpointOffset = clamped
       const deltaX = target.x - source.x
@@ -683,7 +714,8 @@ export const autoLayoutProject = (
     if (!position) return { ...node }
     return { ...node, x: position.x, y: position.y } as AnyNode
   })
-  const edges = updateEdges(project, coords)
+  const parallelOffsets = computeParallelEdgeOffsets(project.edges)
+  const edges = updateEdges(project, coords, parallelOffsets)
 
   return { nodes, edges }
 }

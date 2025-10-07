@@ -118,6 +118,15 @@ const normalizePoint = (point: any, fallback: { x: number; y: number }): { x: nu
   }
 }
 
+const edgesShareEndpoints = (a: Edge, b: Edge): boolean => {
+  if (a.from !== b.from || a.to !== b.to) return false
+  const aFromHandle = a.fromHandle ?? null
+  const bFromHandle = b.fromHandle ?? null
+  const aToHandle = a.toHandle ?? null
+  const bToHandle = b.toHandle ?? null
+  return aFromHandle === bFromHandle && aToHandle === bToHandle
+}
+
 const normalizeSize = (size: any, fallback: { width: number; height: number }): { width: number; height: number } => {
   if (!size || typeof size !== 'object') return { ...fallback }
   const width = Math.max(1, toNumber(size.width, fallback.width))
@@ -259,7 +268,7 @@ export const useStore = create<State>((set,get)=>({
   },
   setImportedFileName: (name) => { set({ importedFileName: name }) },
   addNode: (n) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=[...p.nodes,n]; set({project:{...p}}); autosave(get().project) },
-  addEdge: (e) => { const p=get().project; ensureMarkupsInitialized(p); if (p.edges.some(x=>x.from===e.from && x.to===e.to)) return; const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
+  addEdge: (e) => { const p=get().project; ensureMarkupsInitialized(p); if (p.edges.some(x=>edgesShareEndpoints(x, e))) return; const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=[...p.edges,e]; set({project:{...p}}); autosave(get().project) },
   updateNode: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, ...patch} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
   bulkUpdateNodes: (updates) => {
     if (!Array.isArray(updates) || updates.length === 0) return
@@ -568,7 +577,7 @@ export const useStore = create<State>((set,get)=>({
     get().updateSubsystemProject(subsystemId, fn)
   }
   ,subsystemAddEdge: (subsystemId, edge) => {
-    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.some(e=>e.from===edge.from && e.to===edge.to)? proj.edges : [...proj.edges, edge] })
+    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.some(e=>edgesShareEndpoints(e, edge))? proj.edges : [...proj.edges, edge] })
     get().updateSubsystemProject(subsystemId, fn)
   }
   ,subsystemUpdateNode: (subsystemId, nodeId, patch) => {
@@ -596,7 +605,7 @@ export const useStore = create<State>((set,get)=>({
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
   ,nestedSubsystemAddEdge: (subsystemPath, edge) => {
-    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.some(e=>e.from===edge.from && e.to===edge.to)? proj.edges : [...proj.edges, edge] })
+    const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.some(e=>edgesShareEndpoints(e, edge))? proj.edges : [...proj.edges, edge] })
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
   }
   ,nestedSubsystemUpdateNode: (subsystemPath, nodeId, patch) => {

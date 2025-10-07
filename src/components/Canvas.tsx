@@ -1896,7 +1896,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }
     })()
     if (resolvedConnection.source && resolvedConnection.target && reaches(resolvedConnection.target, resolvedConnection.source)) return
-    const edgeId = `${resolvedConnection.source}-${resolvedConnection.target}`
+    if (resolvedConnection.source && resolvedConnection.target) {
+      const newFromHandle = resolvedConnection.sourceHandle ?? null
+      const newToHandle = resolvedConnection.targetHandle ?? null
+      const alreadyExists = project.edges.some(existing => {
+        if (existing.from !== resolvedConnection.source || existing.to !== resolvedConnection.target) return false
+        const existingFromHandle = (existing as any).fromHandle ?? null
+        const existingToHandle = (existing as any).toHandle ?? null
+        return existingFromHandle === newFromHandle && existingToHandle === newToHandle
+      })
+      if (alreadyExists) return
+    }
+    const edgeId = genId('edge_')
     const baseOffset = (resolvedConnection.source && resolvedConnection.target)
       ? getGroupOffset({ from: resolvedConnection.source, to: resolvedConnection.target, fromHandle: resolvedConnection.sourceHandle ?? undefined })
       : 0.5
