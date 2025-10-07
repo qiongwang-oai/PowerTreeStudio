@@ -142,5 +142,32 @@ describe('autoLayoutProject row spacing', () => {
 
     expect(looseGap).toBeGreaterThan(tightGap)
   })
+
+  it('assigns edge midpoints left-to-right based on source order', () => {
+    const project = makeTestProject()
+    const layout = autoLayoutProject(project, { columnSpacing: 300, rowSpacing: 120 })
+
+    const nodesById = new Map(layout.nodes.map(node => [node.id, node]))
+    const edgesToLoads = layout.edges.filter(edge => edge.to === 'loadA' || edge.to === 'loadB')
+
+    const sorted = edgesToLoads.slice().sort((a, b) => {
+      const ay = nodesById.get(a.from)?.y ?? 0
+      const by = nodesById.get(b.from)?.y ?? 0
+      return ay - by
+    })
+
+    let previousMid = Number.NEGATIVE_INFINITY
+    for (const edge of sorted) {
+      expect(edge.midpointX).toBeGreaterThan(previousMid)
+      previousMid = edge.midpointX ?? 0
+
+      const source = nodesById.get(edge.from)
+      const target = nodesById.get(edge.to)
+      const minX = Math.min(source?.x ?? 0, target?.x ?? 0)
+      const maxX = Math.max(source?.x ?? 0, target?.x ?? 0)
+      expect(edge.midpointX).toBeGreaterThanOrEqual(minX)
+      expect(edge.midpointX).toBeLessThanOrEqual(maxX)
+    }
+  })
 })
 

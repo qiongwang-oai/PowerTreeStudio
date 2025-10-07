@@ -123,12 +123,14 @@ const makeParallelSourcesProject = (): Project => ({
   nodes: [
     { id: 'source-a', type: 'Source', name: 'A', Vout: 48 },
     { id: 'source-b', type: 'Source', name: 'B', Vout: 48 },
+    { id: 'source-c', type: 'Source', name: 'C', Vout: 48 },
     { id: 'bus', type: 'Bus', name: 'Main Bus', V_bus: 48 },
     { id: 'load', type: 'Load', name: 'Server', Vreq: 48, I_typ: 5, I_max: 8 },
   ],
   edges: [
     { id: 'edge-a-bus', from: 'source-a', to: 'bus' },
     { id: 'edge-b-bus', from: 'source-b', to: 'bus' },
+    { id: 'edge-c-bus', from: 'source-c', to: 'bus' },
     { id: 'edge-bus-load', from: 'bus', to: 'load' },
   ],
   markups: [],
@@ -194,6 +196,31 @@ describe('autoLayoutProjectV2', () => {
     const [top, bottom] = [sourceA, sourceB].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
     const gap = Math.abs((bottom.y ?? 0) - (top.y ?? 0))
     expect(gap).toBeGreaterThanOrEqual(rowSpacing)
+  })
+
+  it('orders edge midpoints left-to-right for lower column edges', () => {
+    const project = makeParallelSourcesProject()
+    const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing: 120 })
+
+    const edgesToBus = layout.edges.filter(edge => edge.to === 'bus')
+    expect(edgesToBus).toHaveLength(3)
+
+    const nodesById = new Map(layout.nodes.map(node => [node.id, node]))
+    const sortedBySourceY = edgesToBus.slice().sort((a, b) => {
+      const ay = nodesById.get(a.from)?.y ?? 0
+      const by = nodesById.get(b.from)?.y ?? 0
+      return ay - by
+    })
+
+    let previousX = Number.NEGATIVE_INFINITY
+    for (const edge of sortedBySourceY) {
+      expect(edge.midpointX).toBeGreaterThan(previousX)
+      previousX = edge.midpointX ?? 0
+      const source = nodesById.get(edge.from)
+      const target = nodesById.get(edge.to)
+      expect(edge.midpointX).toBeGreaterThanOrEqual(Math.min(source?.x ?? 0, target?.x ?? 0))
+      expect(edge.midpointX).toBeLessThanOrEqual(Math.max(source?.x ?? 0, target?.x ?? 0))
+    }
   })
 })
 

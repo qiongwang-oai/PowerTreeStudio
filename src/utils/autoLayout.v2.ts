@@ -1,4 +1,5 @@
 import { compute } from '../calc'
+import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 import type { AnyNode, Edge, Project } from '../models'
 
 export type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
@@ -413,45 +414,6 @@ const computeColumnIndex = (depth: number, maxDepth: number): number => {
 
 const computeColumnX = (columnIndex: number, columnSpacing: number): number => COLUMN_START_X + columnIndex * columnSpacing
 
-const computeEdgeMidpoints = (
-  project: Project,
-  coords: Map<string, { x: number; y: number }>,
-  columnSpacing: number
-): Edge[] => {
-  const edgesByTarget = new Map<string, Edge[]>()
-  for (const edge of project.edges) {
-    const existing = edgesByTarget.get(edge.to)
-    if (existing) existing.push(edge)
-    else edgesByTarget.set(edge.to, [edge])
-  }
-
-  return project.edges.map(edge => {
-    const source = coords.get(edge.from)
-    const target = coords.get(edge.to)
-    if (!source || !target) return { ...edge }
-    const targetGroup = edgesByTarget.get(edge.to) ?? []
-    const sortedGroup = [...targetGroup].sort((a, b) => {
-      const ay = coords.get(a.from)?.y ?? 0
-      const by = coords.get(b.from)?.y ?? 0
-      if (ay !== by) return ay - by
-      return a.id.localeCompare(b.id)
-    })
-    const index = sortedGroup.findIndex(candidate => candidate.id === edge.id)
-    const baseMidX = (source.x + target.x) / 2
-    const shift = Math.max(0, index) * 18
-    const preferredX = target.x - columnSpacing * 0.4 - shift
-    const midpointX = Math.min(baseMidX, preferredX)
-    const delta = target.x - source.x
-    const offset = delta !== 0 ? (midpointX - source.x) / delta : 0.5
-    const clamped = Math.max(0.1, Math.min(0.9, offset))
-    return {
-      ...edge,
-      midpointOffset: clamped,
-      midpointX,
-    }
-  })
-}
-
 export const autoLayoutProjectV2 = (
   project: Project,
   options?: LayoutOptions
@@ -504,7 +466,7 @@ export const autoLayoutProjectV2 = (
     return { ...node, x: position.x, y: position.y } as AnyNode
   })
 
-  const edges = computeEdgeMidpoints(project, coords, columnSpacing)
+  const edges = computeOrderedEdgeMidpoints(project, coords)
 
   return { nodes, edges }
 }
