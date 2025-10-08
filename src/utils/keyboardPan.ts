@@ -1,7 +1,7 @@
 import type { ReactFlowInstance } from 'reactflow'
 
-export const KEYBOARD_PAN_COARSE_STEP = 160
-export const KEYBOARD_PAN_FINE_STEP = 40
+export const KEYBOARD_PAN_COARSE_STEP = 60
+export const KEYBOARD_PAN_FINE_STEP = 10
 
 export type KeyboardPanIntent = 'ArrowUp' | 'ArrowDown' | 'ArrowLeft' | 'ArrowRight'
 
