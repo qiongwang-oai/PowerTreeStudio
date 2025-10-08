@@ -364,8 +364,7 @@ const assignCoordinates = (
   const centerY = (nodeId: string): number => {
     const pos = coords.get(nodeId)
     if (!pos) return 0
-    const spanUnits = getSpanUnits(nodeId)
-    return pos.y + (spanUnits * rowSpacing) / 2
+    return pos.y + estimateNodeHeightById(nodeId) / 2
   }
 
   for (const component of components) {
@@ -566,28 +565,19 @@ const assignCoordinates = (
       })
     }
 
-    const topNodes = columnEntries
-      .map(entry => entry.nodes[0])
-      .filter((node): node is NodeInfo => !!node)
-    if (topNodes.length > 1) {
-      const referenceId = topNodes[0].id
-      const referencePos = coords.get(referenceId)
-      if (referencePos) {
-        const targetCenter = centerY(referenceId)
-        columnEntries.forEach(entry => {
-          const first = entry.nodes[0]
-          if (!first) return
-          const firstPos = coords.get(first.id)
-          if (!firstPos) return
-          const currentCenter = centerY(first.id)
-          const delta = targetCenter - currentCenter
-          if (Math.abs(delta) < 1e-3) return
-          entry.nodes.forEach(info => {
-            const pos = coords.get(info.id)
-            if (!pos) return
-            coords.set(info.id, { x: pos.x, y: pos.y + delta })
-          })
-        })
+    const componentNodeIds = component.nodeIds
+    let minPlacedY = Infinity
+    for (const nodeId of componentNodeIds) {
+      const pos = coords.get(nodeId)
+      if (!pos) continue
+      if (pos.y < minPlacedY) minPlacedY = pos.y
+    }
+    if (Number.isFinite(minPlacedY) && minPlacedY < startY) {
+      const correction = startY - minPlacedY
+      for (const nodeId of componentNodeIds) {
+        const pos = coords.get(nodeId)
+        if (!pos) continue
+        coords.set(nodeId, { x: pos.x, y: pos.y + correction })
       }
     }
 
