@@ -69,7 +69,7 @@ export default function App(){
   const [autoAlignPromptOpen, setAutoAlignPromptOpen] = React.useState<boolean>(false)
   const [autoAlignHorizontalInput, setAutoAlignHorizontalInput] = React.useState<string>('500')
   const [autoAlignVerticalInput, setAutoAlignVerticalInput] = React.useState<string>('100')
-  const [autoAlignModeSelection, setAutoAlignModeSelection] = React.useState<'legacy' | 'depthV2'>('legacy')
+  const [autoAlignModeSelection, setAutoAlignModeSelection] = React.useState<'legacy' | 'depthV2'>('depthV2')
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const [bulkEditorOpen, setBulkEditorOpen] = React.useState(false)

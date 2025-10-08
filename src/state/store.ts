@@ -254,7 +254,7 @@ export const useStore = create<State>((set,get)=>({
   past: [],
   future: [],
   quickPresets: storedQuickPresets,
-  autoAlignMode: 'legacy',
+  autoAlignMode: 'depthV2',
   setAutoAlignMode: mode => set({ autoAlignMode: mode }),
   setProject: (p) => {
     const prev = snapshotProject(get().project)

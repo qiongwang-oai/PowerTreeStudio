@@ -81,7 +81,7 @@ export default function AutoAlignPrompt({
                   onChange={() => onModeChange('legacy')}
                   className="h-3 w-3"
                 />
-                Existing algorithm
+                Align from left
               </label>
               <label className="inline-flex items-center gap-2 text-xs text-slate-700">
                 <input
@@ -92,7 +92,7 @@ export default function AutoAlignPrompt({
                   onChange={() => onModeChange('depthV2')}
                   className="h-3 w-3"
                 />
-                New depth-based algorithm
+                Align from right
               </label>
             </div>
           </fieldset>
