@@ -251,8 +251,7 @@ const computeDesiredTop = (
 ): number => {
   const downstreamHeight = estimateNodeHeight(downstreamNode)
   const downstreamCenter = downstreamTop + downstreamHeight / 2
-  const offset = handleCount <= 1 ? 0 : (handleIndex / (handleCount - 1) - 0.5) * Math.max(rowSpacing, downstreamHeight / Math.max(1, handleCount))
-  const desiredCenter = downstreamCenter + offset
+  const desiredCenter = downstreamCenter
   return desiredCenter - upstreamHeight / 2
 }
 
