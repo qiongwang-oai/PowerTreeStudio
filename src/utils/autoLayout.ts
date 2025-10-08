@@ -330,19 +330,23 @@ const assignCoordinates = (
 
   // Approximate visual heights for node types to align handle centers
   const typeBaseHeight: Record<string, number> = {
-    Source: 86,
-    Converter: 116,
-    DualOutputConverter: 116,
-    Load: 142,
-    Bus: 116,
-    Note: 120,
-    Subsystem: 170,
-    SubsystemInput: 86,
+  Source: 94,
+  Converter: 100,
+  DualOutputConverter: 118,
+  Load: 132,
+  Bus: 140,
+  Note: 120,
+  Subsystem: 170,
+  SubsystemInput: 100,
   }
 
   const estimateNodeHeightById = (nodeId: string): number => {
     const node = maps.nodesById.get(nodeId)
     if (!node) return rowSpacing
+  const explicitHeight = Number((node as any).height)
+  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
+    return explicitHeight
+  }
     let h = typeBaseHeight[node.type] ?? rowSpacing
     if (node.type === 'DualOutputConverter') {
       const outs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
@@ -360,7 +364,8 @@ const assignCoordinates = (
   const centerY = (nodeId: string): number => {
     const pos = coords.get(nodeId)
     if (!pos) return 0
-    return pos.y + estimateNodeHeightById(nodeId) / 2
+    const spanUnits = getSpanUnits(nodeId)
+    return pos.y + (spanUnits * rowSpacing) / 2
   }
 
   for (const component of components) {

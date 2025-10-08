@@ -33,18 +33,22 @@ const COLUMN_START_X = 120
 const TOP_MARGIN = 0
 
 const typeBaseHeight: Record<string, number> = {
-  Source: 86,
-  Converter: 116,
-  DualOutputConverter: 116,
-  Load: 142,
-  Bus: 116,
+  Source: 94,
+  Converter: 100,
+  DualOutputConverter: 118,
+  Load: 132,
+  Bus: 140,
   Note: 120,
   Subsystem: 170,
-  SubsystemInput: 86,
+  SubsystemInput: 100,
 }
 
 const estimateNodeHeight = (node: AnyNode | undefined): number => {
   if (!node) return DEFAULT_ROW_SPACING
+  const explicitHeight = Number((node as any).height)
+  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
+    return explicitHeight
+  }
   let height = typeBaseHeight[node.type] ?? DEFAULT_ROW_SPACING
   if (node.type === 'DualOutputConverter') {
     const outputs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
