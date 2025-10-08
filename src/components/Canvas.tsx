@@ -55,6 +55,12 @@ import {
   computeEdgeMidpointNudge,
   getKeyboardNudgeDeltaForEvent,
 } from '../utils/nudgeSelection'
+import {
+  applyKeyboardPan,
+  getKeyboardPanIntent,
+  getKeyboardPanTranslation,
+  isKeyboardPanOverrideActive,
+} from '../utils/keyboardPan'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
@@ -2763,6 +2769,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const isDelete = key === 'Delete' || key === 'Backspace'
       const isCopy = (key === 'c' || key === 'C') && (e.ctrlKey || e.metaKey)
       const isPaste = (key === 'v' || key === 'V') && (e.ctrlKey || e.metaKey)
+      const panIntent = getKeyboardPanIntent(e)
+      const panOverrideActive = panIntent ? isKeyboardPanOverrideActive(e) : false
+      const nudgeDelta = !panOverrideActive ? getKeyboardNudgeDeltaForEvent(e) : null
+      let handledArrow = false
 
       if (key === 'Escape') {
         if (markupTool) {
@@ -2785,7 +2795,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         return null
       })()
 
-      const nudgeDelta = getKeyboardNudgeDeltaForEvent(e)
       if (nudgeDelta) {
         const selectionNodes = new Set<string>()
         if (currentSelection?.nodes.length) {
@@ -2893,7 +2902,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
           if (moved || clamped) {
             e.preventDefault()
-            return
+            handledArrow = true
           }
         }
 
@@ -3057,10 +3066,23 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
             if (edgeMoved || edgeClamped) {
               e.preventDefault()
-              return
+              handledArrow = true
             }
           }
         }
+      }
+
+      if (!handledArrow && panIntent && typeof reactFlowInstance?.getViewport === 'function') {
+        const viewport = reactFlowInstance.getViewport()
+        const delta = getKeyboardPanTranslation(panIntent, e, viewport.zoom)
+        if ((delta.dx !== 0 || delta.dy !== 0) && applyKeyboardPan(reactFlowInstance, delta)) {
+          e.preventDefault()
+          return
+        }
+      }
+
+      if (handledArrow) {
+        return
       }
 
       if (isCopy && currentSelection) {
@@ -3088,7 +3110,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, expandedLayouts, handleMarkupSelect, markupTool, nestedUpdateEdge, nodePositions, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setNodes, setSubsystemViewOffset, updateEdgeStore])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, expandedLayouts, handleMarkupSelect, markupTool, nestedUpdateEdge, nodePositions, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, project.edges, project.nodes, reactFlowInstance, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setNodes, setSubsystemViewOffset, updateEdgeStore])
 
   const selectionNodeIds = activeMultiSelection?.nodes ?? []
   const contextNodeInSelection =

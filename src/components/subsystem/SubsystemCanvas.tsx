@@ -45,6 +45,12 @@ import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
 import { clampPointToBounds, DEFAULT_SUBSYSTEM_BOUNDS, getKeyboardNudgeDeltaForEvent, computeEdgeMidpointNudge } from '../../utils/nudgeSelection'
+import {
+  applyKeyboardPan,
+  getKeyboardPanIntent,
+  getKeyboardPanTranslation,
+  isKeyboardPanOverrideActive,
+} from '../../utils/keyboardPan'
 
 type PowerDisplay = { text: string; tooltip?: string }
 
@@ -1818,6 +1824,10 @@ const skipPaneClickRef = useRef(false)
       const isDelete = key === 'Delete' || key === 'Backspace'
       const isCopy = (key === 'c' || key === 'C') && (e.ctrlKey || e.metaKey)
       const isPaste = (key === 'v' || key === 'V') && (e.ctrlKey || e.metaKey)
+      const panIntent = getKeyboardPanIntent(e)
+      const panOverrideActive = panIntent ? isKeyboardPanOverrideActive(e) : false
+      const nudgeDelta = !panOverrideActive ? getKeyboardNudgeDeltaForEvent(e) : null
+      let handledArrow = false
 
       if (key === 'Escape') {
         clearMultiSelection()
@@ -1838,7 +1848,6 @@ const skipPaneClickRef = useRef(false)
         return null
       })()
 
-      const nudgeDelta = getKeyboardNudgeDeltaForEvent(e)
       if (nudgeDelta && currentSelection?.nodes.length) {
         const nodeMap = new Map<string, AnyNode>()
         for (const node of project.nodes as AnyNode[]) {
@@ -1889,7 +1898,7 @@ const skipPaneClickRef = useRef(false)
 
         if (moved || clamped) {
           e.preventDefault()
-          return
+          handledArrow = true
         }
       }
 
@@ -1985,9 +1994,22 @@ const skipPaneClickRef = useRef(false)
 
           if (edgeMoved || edgeClamped) {
             e.preventDefault()
-            return
+            handledArrow = true
           }
         }
+      }
+
+      if (!handledArrow && panIntent && typeof reactFlowInstance?.getViewport === 'function') {
+        const viewport = reactFlowInstance.getViewport()
+        const delta = getKeyboardPanTranslation(panIntent, e, viewport.zoom)
+        if ((delta.dx !== 0 || delta.dy !== 0) && applyKeyboardPan(reactFlowInstance, delta)) {
+          e.preventDefault()
+          return
+        }
+      }
+
+      if (handledArrow) {
+        return
       }
 
       if (isCopy && currentSelection) {
@@ -2015,7 +2037,7 @@ const skipPaneClickRef = useRef(false)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, path, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setEdges, setNodes, updateEdgeNested])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, path, performPaste, project.edges, project.nodes, reactFlowInstance, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setEdges, setNodes, updateEdgeNested])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
