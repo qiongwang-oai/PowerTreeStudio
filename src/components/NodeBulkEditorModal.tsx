@@ -136,12 +136,16 @@ const NODE_PARAMETER_CONFIG: Partial<Record<NodeType, NodeFieldConfig[]>> = {
     { key: 'phaseCount', label: 'Phase count', input: 'number', min: 1, coerce: value => coerceOptionalInt(value, { min: 1 }), widthClass: 'min-w-[110px]' },
     { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
     { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
+    { key: 'controllerDatasheetRef', label: 'Controller datasheet', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[220px]' },
+    { key: 'powerStageDatasheetRef', label: 'Power stage datasheet', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[230px]' },
   ],
   DualOutputConverter: [
     { key: 'Vin_min', label: 'Vin_min (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
     { key: 'Vin_max', label: 'Vin_max (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
     { key: 'controllerPartNumber', label: 'Controller part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[170px]' },
     { key: 'powerStagePartNumber', label: 'Power stage part number', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[190px]' },
+    { key: 'controllerDatasheetRef', label: 'Controller datasheet', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[220px]' },
+    { key: 'powerStageDatasheetRef', label: 'Power stage datasheet', input: 'text', coerce: coerceTrimmedString, widthClass: 'min-w-[230px]' },
   ],
   Load: [
     { key: 'Vreq', label: 'Vreq (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
@@ -363,6 +367,8 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
         topology?: string
         controllerPartNumber?: string
         powerStagePartNumber?: string
+        controllerDatasheetRef?: string
+        powerStageDatasheetRef?: string
       }
       const prev = original as typeof next
       if (next.Vin_min !== prev.Vin_min) patch.Vin_min = next.Vin_min
@@ -373,6 +379,8 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
       if (next.phaseCount !== prev.phaseCount) patch.phaseCount = next.phaseCount
       if ((next.controllerPartNumber || '') !== (prev.controllerPartNumber || '')) patch.controllerPartNumber = next.controllerPartNumber
       if ((next.powerStagePartNumber || '') !== (prev.powerStagePartNumber || '')) patch.powerStagePartNumber = next.powerStagePartNumber
+      if ((next.controllerDatasheetRef || '') !== (prev.controllerDatasheetRef || '')) patch.controllerDatasheetRef = next.controllerDatasheetRef
+      if ((next.powerStageDatasheetRef || '') !== (prev.powerStageDatasheetRef || '')) patch.powerStageDatasheetRef = next.powerStageDatasheetRef
       break
     }
     case 'DualOutputConverter': {
@@ -382,6 +390,8 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
       if (next.Vin_max !== prev.Vin_max) patch.Vin_max = next.Vin_max
       if ((next.controllerPartNumber || '') !== (prev.controllerPartNumber || '')) patch.controllerPartNumber = next.controllerPartNumber
       if ((next.powerStagePartNumber || '') !== (prev.powerStagePartNumber || '')) patch.powerStagePartNumber = next.powerStagePartNumber
+      if ((next.controllerDatasheetRef || '') !== (prev.controllerDatasheetRef || '')) patch.controllerDatasheetRef = next.controllerDatasheetRef
+      if ((next.powerStageDatasheetRef || '') !== (prev.powerStageDatasheetRef || '')) patch.powerStageDatasheetRef = next.powerStageDatasheetRef
       const nextOutputs = Array.isArray(next.outputs) ? next.outputs : []
       const prevOutputs = Array.isArray(prev.outputs) ? prev.outputs : []
       let outputsChanged = nextOutputs.length !== prevOutputs.length

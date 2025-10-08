@@ -22,6 +22,7 @@ import {
   InspectorShell,
   MetricGrid
 } from '../ui/inspector'
+import { PartNumberField } from '../inspector/PartNumberField'
 
 export default function SubsystemInspector({ subsystemId, subsystemPath, project, selected, onDeleted }:{ subsystemId:string, subsystemPath?: string[], project: Project, selected:string|null, onDeleted?:()=>void }){
   const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
@@ -130,11 +131,25 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
     ]
     if (node.type === 'Converter' || node.type === 'DualOutputConverter') {
       identityFields.push(
-        <FormField key="controller" label="Controller Part Number">
-          <input className="input" value={(node as any).controllerPartNumber || ''} onChange={e=>onChange('controllerPartNumber', e.target.value)} />
+        <FormField key="controller" label="Controller Part Number" htmlFor="embedded-controller-part-number">
+          <PartNumberField
+            id="embedded-controller-part-number"
+            value={(node as any).controllerPartNumber || ''}
+            onValueChange={v => onChange('controllerPartNumber', v)}
+            datasheetRef={(node as any).controllerDatasheetRef}
+            onDatasheetChange={v => onChange('controllerDatasheetRef', v)}
+            partLabel="Controller"
+          />
         </FormField>,
-        <FormField key="powerStage" label="Power Stage Part Number">
-          <input className="input" value={(node as any).powerStagePartNumber || ''} onChange={e=>onChange('powerStagePartNumber', e.target.value)} />
+        <FormField key="powerStage" label="Power Stage Part Number" htmlFor="embedded-power-stage-part-number">
+          <PartNumberField
+            id="embedded-power-stage-part-number"
+            value={(node as any).powerStagePartNumber || ''}
+            onValueChange={v => onChange('powerStagePartNumber', v)}
+            datasheetRef={(node as any).powerStageDatasheetRef}
+            onDatasheetChange={v => onChange('powerStageDatasheetRef', v)}
+            partLabel="Power Stage"
+          />
         </FormField>
       )
     }

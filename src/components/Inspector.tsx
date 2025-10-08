@@ -25,6 +25,7 @@ import { resolveProjectAtPath } from '../utils/subsystemPath'
 import SubsystemInspector from './subsystem/SubsystemInspector'
 import EfficiencyEditor from './EfficiencyEditor'
 import { orderSubsystemPorts, sanitizeSubsystemHandleOrder } from './SubsystemNodeLayout'
+import { PartNumberField } from './inspector/PartNumberField'
 
 export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, onSelect}:{selection:InspectorSelection|null, onDeleted?:()=>void, onOpenSubsystemEditor?:(id:string)=>void, onSelect?:(selection:InspectorSelection)=>void}){
   const project = useStore(s=>s.project)
@@ -448,11 +449,25 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
     ]
     if (node.type === 'Converter' || node.type === 'DualOutputConverter') {
       identityFields.push(
-        <FormField key="controller" label="Controller Part Number">
-          <input className="input" value={(node as any).controllerPartNumber || ''} onChange={e=>onChange('controllerPartNumber', e.target.value)} />
+        <FormField key="controller" label="Controller Part Number" htmlFor="controller-part-number">
+          <PartNumberField
+            id="controller-part-number"
+            value={(node as any).controllerPartNumber || ''}
+            onValueChange={v => onChange('controllerPartNumber', v)}
+            datasheetRef={(node as any).controllerDatasheetRef}
+            onDatasheetChange={v => onChange('controllerDatasheetRef', v)}
+            partLabel="Controller"
+          />
         </FormField>,
-        <FormField key="powerStage" label="Power Stage Part Number">
-          <input className="input" value={(node as any).powerStagePartNumber || ''} onChange={e=>onChange('powerStagePartNumber', e.target.value)} />
+        <FormField key="powerStage" label="Power Stage Part Number" htmlFor="power-stage-part-number">
+          <PartNumberField
+            id="power-stage-part-number"
+            value={(node as any).powerStagePartNumber || ''}
+            onValueChange={v => onChange('powerStagePartNumber', v)}
+            datasheetRef={(node as any).powerStageDatasheetRef}
+            onDatasheetChange={v => onChange('powerStageDatasheetRef', v)}
+            partLabel="Power Stage"
+          />
         </FormField>
       )
     }

@@ -21,6 +21,8 @@ describe('dual-output converter compute', () => {
           Vin_max: 60,
           controllerPartNumber: '',
           powerStagePartNumber: '',
+          controllerDatasheetRef: '',
+          powerStageDatasheetRef: '',
           outputs: [
             {
               id: 'outputA',

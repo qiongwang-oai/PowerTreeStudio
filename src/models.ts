@@ -17,6 +17,8 @@ export type ConverterNode = BaseNode & {
   Pout_max?: number
   controllerPartNumber?: string
   powerStagePartNumber?: string
+  controllerDatasheetRef?: string
+  powerStageDatasheetRef?: string
   phaseCount?: number
   efficiency: EfficiencyModel
 }
@@ -36,6 +38,8 @@ export type DualOutputConverterNode = BaseNode & {
   Vin_max: number
   controllerPartNumber?: string
   powerStagePartNumber?: string
+  controllerDatasheetRef?: string
+  powerStageDatasheetRef?: string
   outputs: DualOutputConverterBranch[]
 }
 export type LoadNode = BaseNode & { type: 'Load'; Vreq: number; I_typ: number; I_max: number; I_idle?: number; duty_cycle?: number; critical?: boolean; numParalleledDevices?: number; Utilization_typ?: number; Utilization_max?: number }

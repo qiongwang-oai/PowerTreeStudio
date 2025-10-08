@@ -63,6 +63,8 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
           Vout: 0.9,
           controllerPartNumber: '',
           powerStagePartNumber: '',
+        controllerDatasheetRef: '',
+        powerStageDatasheetRef: '',
           phaseCount: 1,
           efficiency: { type: 'fixed', value: 0.92 },
           x: 640,
@@ -78,6 +80,8 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
         Vout: 12,
         controllerPartNumber: '',
         powerStagePartNumber: '',
+        controllerDatasheetRef: '',
+        powerStageDatasheetRef: '',
         phaseCount: 1,
         efficiency: { type: 'fixed', value: 0.95 },
         x: 320,
@@ -93,6 +97,8 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
         Vin_max: 60,
         controllerPartNumber: '',
         powerStagePartNumber: '',
+        controllerDatasheetRef: '',
+        powerStageDatasheetRef: '',
         outputs: [
           {
             id: 'outputA',
