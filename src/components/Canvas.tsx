@@ -38,6 +38,13 @@ import {
   sanitizeSubsystemHandleOrder,
   orderSubsystemPorts,
 } from './SubsystemNodeLayout'
+import {
+  clampPointToBounds,
+  DEFAULT_CANVAS_BOUNDS,
+  DEFAULT_SUBSYSTEM_BOUNDS,
+  computeEdgeMidpointNudge,
+  getKeyboardNudgeDeltaForEvent,
+} from '../utils/nudgeSelection'
 
 const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
@@ -1032,6 +1039,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     additive: boolean
   } | null>(null)
   const activeMultiSelection = multiSelectionPreview ?? multiSelection
+  const [nudgeToast, setNudgeToast] = useState<string | null>(null)
+  const nudgeToastTimeoutRef = useRef<number | null>(null)
+
+  const showNudgeToast = useCallback((message: string) => {
+    setNudgeToast(message)
+    if (nudgeToastTimeoutRef.current !== null) {
+      window.clearTimeout(nudgeToastTimeoutRef.current)
+    }
+    nudgeToastTimeoutRef.current = window.setTimeout(() => {
+      setNudgeToast(null)
+      nudgeToastTimeoutRef.current = null
+    }, 1800)
+  }, [])
 
   const handleSingleSelectClick = useCallback(() => {
     if (markupTool !== null) {
@@ -1148,6 +1168,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       setMarqueeRect(null)
     }
   }, [selectionMode])
+
+  useEffect(() => {
+    return () => {
+      if (nudgeToastTimeoutRef.current !== null) {
+        window.clearTimeout(nudgeToastTimeoutRef.current)
+        nudgeToastTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   const handleMarkupCreate = useCallback((markup: CanvasMarkup) => {
     addMarkupStore(markup)
@@ -2536,7 +2565,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     applyMultiSelection(null)
   }, [applyMultiSelection, expandedLayouts, nestedRemoveEdge, nestedRemoveNode, removeEdge, removeMarkupStore, removeNode])
 
-  // Keyboard shortcuts for copy, paste, delete
+  // Keyboard shortcuts for copy, paste, delete, and keyboard nudging
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (openSubsystemIds && openSubsystemIds.length > 0) return
@@ -2570,6 +2599,292 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         return null
       })()
 
+      const nudgeDelta = getKeyboardNudgeDeltaForEvent(e)
+      if (nudgeDelta) {
+        const selectionNodes = new Set<string>()
+        if (currentSelection?.nodes.length) {
+          currentSelection.nodes.forEach(id => selectionNodes.add(id))
+        }
+
+        if (selectionNodes.size > 0) {
+          const rootNodeMap = new Map<string, AnyNode>()
+          for (const node of project.nodes as AnyNode[]) {
+            rootNodeMap.set(node.id, node)
+          }
+
+          const pendingUpdates: { nodeId: string; patch: Partial<AnyNode>; subsystemPath?: string[] }[] = []
+          const pendingContainerOffsets = new Map<string, { x: number; y: number }>()
+          const localNodeUpdates = new Map<string, { x: number; y: number }>()
+          let clamped = false
+          let moved = false
+
+          for (const nodeId of selectionNodes) {
+            if (nodeId.endsWith('::container')) {
+              const subsystemId = nodeId.split('::')[0]
+              const layout = expandedLayouts.get(subsystemId)
+              const subsystemNode = rootNodeMap.get(subsystemId)
+              if (!layout || !subsystemNode) continue
+              const currentPosition = layout.containerPosition
+              const nextTarget = { x: currentPosition.x + nudgeDelta.dx, y: currentPosition.y + nudgeDelta.dy }
+              const { point, clamped: wasClamped } = clampPointToBounds(nextTarget, DEFAULT_CANVAS_BOUNDS)
+              if (point.x !== currentPosition.x || point.y !== currentPosition.y) {
+                const baseX = typeof subsystemNode.x === 'number' ? subsystemNode.x : 0
+                const baseY = typeof subsystemNode.y === 'number' ? subsystemNode.y : 0
+                pendingContainerOffsets.set(subsystemId, { x: point.x - baseX, y: point.y - baseY })
+                localNodeUpdates.set(nodeId, { x: point.x, y: point.y })
+                moved = true
+              }
+              if (wasClamped) clamped = true
+              continue
+            }
+
+            const nested = parseNestedNodeId(nodeId)
+            if (nested) {
+              const layout = expandedLayouts.get(nested.subsystemId)
+              if (!layout) continue
+              const embeddedNode = (layout.embeddedProject.nodes as AnyNode[]).find(n => n.id === nested.nodeId)
+              if (!embeddedNode) continue
+              const currentX = typeof embeddedNode.x === 'number' ? embeddedNode.x : 0
+              const currentY = typeof embeddedNode.y === 'number' ? embeddedNode.y : 0
+              const nextTarget = { x: currentX + nudgeDelta.dx, y: currentY + nudgeDelta.dy }
+              const { point, clamped: wasClamped } = clampPointToBounds(nextTarget, DEFAULT_SUBSYSTEM_BOUNDS)
+              if (point.x !== currentX || point.y !== currentY) {
+                pendingUpdates.push({ nodeId: nested.nodeId, subsystemPath: layout.subsystemPath, patch: { x: point.x, y: point.y } })
+                const localPosition = {
+                  x: point.x - layout.contentOffset.x,
+                  y: point.y - layout.contentOffset.y,
+                }
+                localNodeUpdates.set(nodeId, localPosition)
+                moved = true
+              }
+              if (wasClamped) clamped = true
+              continue
+            }
+
+            const rootNode = rootNodeMap.get(nodeId)
+            if (!rootNode) continue
+            const currentX = typeof rootNode.x === 'number' ? rootNode.x : 0
+            const currentY = typeof rootNode.y === 'number' ? rootNode.y : 0
+            const nextTarget = { x: currentX + nudgeDelta.dx, y: currentY + nudgeDelta.dy }
+            const { point, clamped: wasClamped } = clampPointToBounds(nextTarget, DEFAULT_CANVAS_BOUNDS)
+            if (point.x !== currentX || point.y !== currentY) {
+              pendingUpdates.push({ nodeId, patch: { x: point.x, y: point.y } })
+              localNodeUpdates.set(nodeId, { x: point.x, y: point.y })
+              moved = true
+            }
+            if (wasClamped) clamped = true
+          }
+
+          if (localNodeUpdates.size > 0) {
+            setNodes(prev =>
+              prev.map(rn => {
+                const update = localNodeUpdates.get(rn.id)
+                if (!update) return rn
+                const samePosition = rn.position?.x === update.x && rn.position?.y === update.y
+                if (samePosition) return rn
+                const nextPosition = { x: update.x, y: update.y }
+                const nextAbsolute = rn.positionAbsolute
+                  ? { x: update.x, y: update.y }
+                  : rn.positionAbsolute
+                return {
+                  ...rn,
+                  position: nextPosition,
+                  positionAbsolute: nextAbsolute ?? rn.positionAbsolute,
+                }
+              })
+            )
+          }
+
+          if (pendingUpdates.length > 0) {
+            bulkUpdateNodesStore(pendingUpdates)
+          }
+
+          if (pendingContainerOffsets.size > 0) {
+            pendingContainerOffsets.forEach((offset, subsystemId) => {
+              setSubsystemViewOffset(subsystemId, offset)
+            })
+          }
+
+          if (clamped) {
+            showNudgeToast('Selection hit canvas bounds')
+          }
+
+          if (moved || clamped) {
+            e.preventDefault()
+            return
+          }
+        }
+
+        if (nudgeDelta.dx !== 0) {
+          const selectionEdges = new Set<string>()
+          if (currentSelection?.edges.length) {
+            currentSelection.edges.forEach(id => selectionEdges.add(id))
+          }
+          if (selectionEdges.size === 0 && selectedEdgeId) {
+            selectionEdges.add(selectedEdgeId)
+          }
+
+          if (selectionEdges.size > 0) {
+            const rfEdgeUpdates = new Map<string, { midpointX?: number; midpointOffset?: number }>()
+            const processedGroups = new Set<string>()
+            let edgeMoved = false
+            let edgeClamped = false
+
+            const applyRfUpdates = () => {
+              const setter = setEdgesRef.current
+              if (!setter || rfEdgeUpdates.size === 0) return
+              setter(prev =>
+                prev.map(edge => {
+                  const update = rfEdgeUpdates.get(edge.id)
+                  if (!update) return edge
+                  const nextData: any = { ...(edge.data || {}) }
+                  if (update.midpointOffset !== undefined) nextData.midpointOffset = update.midpointOffset
+                  if (update.midpointX !== undefined) nextData.midpointX = update.midpointX
+                  return { ...edge, data: nextData }
+                })
+              )
+            }
+
+            const processRootGroup = (edge: Edge) => {
+              if (!updateEdgeStore) return
+              const rawGroupKey = edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle })
+              const compositeKey = `root|${rawGroupKey}`
+              if (processedGroups.has(compositeKey)) return
+              processedGroups.add(compositeKey)
+
+              const sourcePos = resolveNodePosition(edge.from)
+              const targetPos = resolveNodePosition(edge.to)
+              if (!sourcePos || !targetPos) return
+
+              const startX = sourcePos.x
+              const endX = targetPos.x
+              const offsetValueRaw = Number.isFinite((edge as any).midpointOffset) ? Number((edge as any).midpointOffset) : 0.5
+              const offsetValue = Math.min(1, Math.max(0, offsetValueRaw))
+              const fallbackMidpoint = startX + (endX - startX) * offsetValue
+              const baseMidpoint = Number.isFinite((edge as any).midpointX) ? Number((edge as any).midpointX) : fallbackMidpoint
+
+              const result = computeEdgeMidpointNudge({
+                currentMidpoint: baseMidpoint,
+                deltaX: nudgeDelta.dx,
+                startX,
+                endX,
+              })
+              if (!result) return
+
+              const movedThis = Math.abs(result.midpointX - baseMidpoint) > 1e-3
+              if (!movedThis && !result.clamped) return
+
+              const patch: Partial<Edge> = {
+                midpointOffset: result.midpointOffset,
+                midpointX: result.midpointX,
+              }
+
+              for (const groupEdge of project.edges) {
+                if (edgeGroupKey({ from: groupEdge.from, fromHandle: groupEdge.fromHandle }) !== rawGroupKey) continue
+                updateEdgeStore(groupEdge.id, patch)
+                rfEdgeUpdates.set(groupEdge.id, {
+                  midpointOffset: result.midpointOffset,
+                  midpointX: result.midpointX,
+                })
+              }
+
+              if (result.clamped) edgeClamped = true
+              if (movedThis || result.clamped) edgeMoved = true
+            }
+
+            const processNestedGroup = (layout: ExpandedSubsystemLayout, edge: Edge) => {
+              const rawGroupKey = edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle })
+              const compositeKey = `${layout.subsystemPath.join('>')}|${rawGroupKey}`
+              if (processedGroups.has(compositeKey)) return
+              processedGroups.add(compositeKey)
+
+              const nodeMap = new Map<string, AnyNode>()
+              for (const node of layout.embeddedProject.nodes as AnyNode[]) {
+                nodeMap.set(node.id, node)
+              }
+
+              const sourceNode = nodeMap.get(edge.from)
+              const targetNode = nodeMap.get(edge.to)
+              if (!sourceNode || !targetNode) return
+              const startX = Number((sourceNode as any).x)
+              const endX = Number((targetNode as any).x)
+              if (!Number.isFinite(startX) || !Number.isFinite(endX)) return
+
+              const offsetValueRaw = Number.isFinite((edge as any).midpointOffset) ? Number((edge as any).midpointOffset) : 0.5
+              const offsetValue = Math.min(1, Math.max(0, offsetValueRaw))
+              const fallbackMidpoint = startX + (endX - startX) * offsetValue
+              const baseMidpoint = Number.isFinite((edge as any).midpointX) ? Number((edge as any).midpointX) : fallbackMidpoint
+
+              const result = computeEdgeMidpointNudge({
+                currentMidpoint: baseMidpoint,
+                deltaX: nudgeDelta.dx,
+                startX,
+                endX,
+              })
+              if (!result) return
+
+              const movedThis = Math.abs(result.midpointX - baseMidpoint) > 1e-3
+              if (!movedThis && !result.clamped) return
+
+              const patch: Partial<Edge> = {
+                midpointOffset: result.midpointOffset,
+                midpointX: result.midpointX,
+              }
+
+              const containerPos = nodePositions.get(layout.containerId) ?? layout.containerPosition
+              const localMidpoint = result.midpointX - layout.contentOffset.x
+              const canvasMidpoint = containerPos.x + localMidpoint
+              const hasCanvasMidpoint = Number.isFinite(canvasMidpoint)
+
+              for (const groupEdge of layout.embeddedProject.edges) {
+                if (edgeGroupKey({ from: groupEdge.from, fromHandle: groupEdge.fromHandle }) !== rawGroupKey) continue
+                nestedUpdateEdge(layout.subsystemPath, groupEdge.id, patch)
+                const rfId = `${layout.subsystemId}::edge::${groupEdge.id}`
+                const updatePayload: { midpointOffset?: number; midpointX?: number } = {
+                  midpointOffset: result.midpointOffset,
+                }
+                if (hasCanvasMidpoint) {
+                  updatePayload.midpointX = canvasMidpoint
+                }
+                rfEdgeUpdates.set(rfId, updatePayload)
+              }
+
+              if (result.clamped) edgeClamped = true
+              if (movedThis || result.clamped) edgeMoved = true
+            }
+
+            for (const edgeId of selectionEdges) {
+              const nested = parseNestedEdgeId(edgeId)
+              if (nested) {
+                const layout = expandedLayouts.get(nested.subsystemId)
+                if (!layout) continue
+                const projectEdge = (layout.embeddedProject.edges as Edge[]).find(e => e.id === nested.edgeId)
+                if (!projectEdge) continue
+                processNestedGroup(layout, projectEdge)
+                continue
+              }
+
+              const projectEdge = project.edges.find(e => e.id === edgeId)
+              if (!projectEdge) continue
+              processRootGroup(projectEdge)
+            }
+
+            if (rfEdgeUpdates.size > 0) {
+              applyRfUpdates()
+            }
+
+            if (edgeClamped) {
+              showNudgeToast('Edge midpoint hit bounds')
+            }
+
+            if (edgeMoved || edgeClamped) {
+              e.preventDefault()
+              return
+            }
+          }
+        }
+      }
+
       if (isCopy && currentSelection) {
         const payload = collectClipboardPayload(currentSelection)
         if (payload) {
@@ -2595,7 +2910,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, clearMultiSelection, collectClipboardPayload, deleteSelection, handleMarkupSelect, markupTool, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, expandedLayouts, handleMarkupSelect, markupTool, nestedUpdateEdge, nodePositions, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setNodes, setSubsystemViewOffset, showNudgeToast, updateEdgeStore])
 
   const selectionNodeIds = activeMultiSelection?.nodes ?? []
   const contextNodeInSelection =
@@ -2782,6 +3097,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             <span><span className="font-semibold text-slate-800">{multiSelection.edges.length}</span> edges</span>
             <span><span className="font-semibold text-slate-800">{multiSelection.markups.length}</span> markups</span>
             <span className="text-xs text-slate-400">Copy ⌘C / Delete ⌫ / Paste ⌘V</span>
+          </div>
+        </div>
+      )}
+      {nudgeToast && (
+        <div
+          data-export-exclude="true"
+          className="absolute bottom-12 left-1/2 z-50 -translate-x-1/2"
+        >
+          <div className="rounded-md bg-slate-900/90 px-3 py-2 text-sm font-medium text-white shadow-lg">
+            {nudgeToast}
           </div>
         </div>
       )}

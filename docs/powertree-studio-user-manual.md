@@ -97,7 +97,7 @@ PowerTree Studio is a web-based visual editor and analyzer for DC power distribu
 ## 9. Shortcuts and Tips
 
 - **Navigation**: drag to pan, scroll to zoom; use minimap and zoom controls; `Fit View` recenters the graph.
-- **Keyboard**: `⌘/Ctrl+Z` undo, `⇧⌘/Ctrl+Z` or `⌘/Ctrl+Y` redo, `⌫/Delete` remove selection, `⌘/Ctrl+C` / `⌘/Ctrl+V` copy/paste nodes/edges/markups, `Esc` clears selection or exits tools.
+- **Keyboard**: `⌘/Ctrl+Z` undo, `⇧⌘/Ctrl+Z` or `⌘/Ctrl+Y` redo, `⌫/Delete` remove selection, `⌘/Ctrl+C` / `⌘/Ctrl+V` copy/paste nodes/edges/markups, `Esc` clears selection or exits tools, `←/↑/→/↓` nudge selected nodes by 10 px (hold `Shift` for 1 px), and `←/→` adjust a selected edge’s midpoint horizontally with the same coarse/fine steps (toast appears when movement hits bounds).
 - **Inspector width**: drag its border between 220–640 px; subsystem editor provides a similar resizer.
 - **Auto alignment**: defaults to 500 px columns, 100 px rows. Enter positive numbers to override; leaving fields blank reverts to defaults.
 - **Edge midpoints**: appear when an edge is selected. Drag to avoid overlaps or align bundles; adjustments propagate to grouped edges that share a source handle.
