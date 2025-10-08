@@ -1063,19 +1063,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   } | null>(null)
   const skipPaneClickRef = useRef(false)
   const activeMultiSelection = multiSelectionPreview ?? multiSelection
-  const [nudgeToast, setNudgeToast] = useState<string | null>(null)
-  const nudgeToastTimeoutRef = useRef<number | null>(null)
-
-  const showNudgeToast = useCallback((message: string) => {
-    setNudgeToast(message)
-    if (nudgeToastTimeoutRef.current !== null) {
-      window.clearTimeout(nudgeToastTimeoutRef.current)
-    }
-    nudgeToastTimeoutRef.current = window.setTimeout(() => {
-      setNudgeToast(null)
-      nudgeToastTimeoutRef.current = null
-    }, 1800)
-  }, [])
 
   const handleSingleSelectClick = useCallback(() => {
     if (markupTool !== null) {
@@ -1355,15 +1342,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       setMarqueeRect(null)
     }
   }, [selectionMode])
-
-  useEffect(() => {
-    return () => {
-      if (nudgeToastTimeoutRef.current !== null) {
-        window.clearTimeout(nudgeToastTimeoutRef.current)
-        nudgeToastTimeoutRef.current = null
-      }
-    }
-  }, [])
 
   const handleMarkupCreate = useCallback((markup: CanvasMarkup) => {
     addMarkupStore(markup)
@@ -2913,10 +2891,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             })
           }
 
-          if (clamped) {
-            showNudgeToast('Selection hit canvas bounds')
-          }
-
           if (moved || clamped) {
             e.preventDefault()
             return
@@ -3081,10 +3055,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
               applyRfUpdates()
             }
 
-            if (edgeClamped) {
-              showNudgeToast('Edge midpoint hit bounds')
-            }
-
             if (edgeMoved || edgeClamped) {
               e.preventDefault()
               return
@@ -3118,7 +3088,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, expandedLayouts, handleMarkupSelect, markupTool, nestedUpdateEdge, nodePositions, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setNodes, setSubsystemViewOffset, showNudgeToast, updateEdgeStore])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, expandedLayouts, handleMarkupSelect, markupTool, nestedUpdateEdge, nodePositions, onMarkupToolChange, onSelect, onSelectionModeChange, openSubsystemIds, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setNodes, setSubsystemViewOffset, updateEdgeStore])
 
   const selectionNodeIds = activeMultiSelection?.nodes ?? []
   const contextNodeInSelection =
@@ -3284,16 +3254,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             <span><span className="font-semibold text-slate-800">{multiSelection.edges.length}</span> edges</span>
             <span><span className="font-semibold text-slate-800">{multiSelection.markups.length}</span> markups</span>
             <span className="text-xs text-slate-400">Copy ⌘C / Delete ⌫ / Paste ⌘V</span>
-          </div>
-        </div>
-      )}
-      {nudgeToast && (
-        <div
-          data-export-exclude="true"
-          className="absolute bottom-12 left-1/2 z-50 -translate-x-1/2"
-        >
-          <div className="rounded-md bg-slate-900/90 px-3 py-2 text-sm font-medium text-white shadow-lg">
-            {nudgeToast}
           </div>
         </div>
       )}

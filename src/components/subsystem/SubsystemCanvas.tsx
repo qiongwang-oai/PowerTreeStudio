@@ -647,28 +647,7 @@ export default function SubsystemCanvas({
   } | null>(null)
 const skipPaneClickRef = useRef(false)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
-  const [nudgeToast, setNudgeToast] = useState<string | null>(null)
-  const nudgeToastTimeoutRef = useRef<number | null>(null)
-  const showNudgeToast = useCallback((message: string) => {
-    setNudgeToast(message)
-    if (nudgeToastTimeoutRef.current !== null) {
-      window.clearTimeout(nudgeToastTimeoutRef.current)
-    }
-    nudgeToastTimeoutRef.current = window.setTimeout(() => {
-      setNudgeToast(null)
-      nudgeToastTimeoutRef.current = null
-    }, 1800)
-  }, [])
   const markups = Array.isArray(project.markups) ? project.markups : []
-
-  useEffect(() => {
-    return () => {
-      if (nudgeToastTimeoutRef.current !== null) {
-        window.clearTimeout(nudgeToastTimeoutRef.current)
-        nudgeToastTimeoutRef.current = null
-      }
-    }
-  }, [])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -1908,10 +1887,6 @@ const skipPaneClickRef = useRef(false)
           bulkUpdateNodesStore(updates)
         }
 
-        if (clamped) {
-          showNudgeToast('Selection hit canvas bounds')
-        }
-
         if (moved || clamped) {
           e.preventDefault()
           return
@@ -2008,10 +1983,6 @@ const skipPaneClickRef = useRef(false)
             applyRfUpdates()
           }
 
-          if (edgeClamped) {
-            showNudgeToast('Edge midpoint hit bounds')
-          }
-
           if (edgeMoved || edgeClamped) {
             e.preventDefault()
             return
@@ -2044,7 +2015,7 @@ const skipPaneClickRef = useRef(false)
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, path, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setEdges, setNodes, showNudgeToast, updateEdgeNested])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, path, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setEdges, setNodes, updateEdgeNested])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
@@ -2320,13 +2291,6 @@ const skipPaneClickRef = useRef(false)
             <span><span className="font-semibold text-slate-800">{multiSelection.edges.length}</span> edges</span>
             <span><span className="font-semibold text-slate-800">{multiSelection.markups.length}</span> markups</span>
             <span className="text-xs text-slate-400">Copy ⌘C / Delete ⌫ / Paste ⌘V</span>
-          </div>
-        </div>
-      )}
-      {nudgeToast && (
-        <div className="absolute bottom-12 left-1/2 z-50 -translate-x-1/2">
-          <div className="rounded-md bg-slate-900/90 px-3 py-2 text-sm font-medium text-white shadow-lg">
-            {nudgeToast}
           </div>
         </div>
       )}
