@@ -15,13 +15,23 @@ import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuic
 import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
 import { genId } from '../../utils'
 import { formatPower, powerTooltipLabel } from '../../utils/format'
-import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
+import type {
+  InspectorSelection,
+  MultiSelection,
+  SelectionMode,
+  SelectionModeChangeOptions,
+  SelectionModeSource,
+} from '../../types/selection'
 import {
+  emptyMultiSelection,
+  ensureMultiSelection,
   mergeMultiSelections,
   normalizeBounds,
   boundsIntersects,
   pointsToBounds,
   selectionHasItems,
+  toggleInMultiSelection,
+  normalizeMultiSelection,
   type Bounds,
 } from '../../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../../utils/selectionClipboard'
@@ -37,6 +47,9 @@ import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
 import { clampPointToBounds, DEFAULT_SUBSYSTEM_BOUNDS, getKeyboardNudgeDeltaForEvent, computeEdgeMidpointNudge } from '../../utils/nudgeSelection'
 
 type PowerDisplay = { text: string; tooltip?: string }
+
+const isMultiSelectModifier = (event: { metaKey?: boolean; ctrlKey?: boolean }): boolean =>
+  Boolean(event.metaKey || event.ctrlKey)
 
 function formatPowerDisplay(value: unknown): PowerDisplay {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -574,6 +587,7 @@ export default function SubsystemCanvas({
   onSelect,
   onOpenNested,
   selectionMode,
+  selectionModeSource,
   onSelectionModeChange,
 }:{
   subsystemId: string
@@ -582,7 +596,8 @@ export default function SubsystemCanvas({
   onSelect: (selection: InspectorSelection | MultiSelection | null) => void
   onOpenNested?: (id: string) => void
   selectionMode: SelectionMode
-  onSelectionModeChange: (mode: SelectionMode) => void
+  selectionModeSource: SelectionModeSource
+  onSelectionModeChange: (mode: SelectionMode, options?: SelectionModeChangeOptions) => void
 }) {
   const addEdgeStore = useStore(s=>s.nestedSubsystemAddEdge)
   const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
@@ -628,7 +643,9 @@ export default function SubsystemCanvas({
     originClient: { x: number; y: number }
     originFlow: { x: number; y: number }
     additive: boolean
+    forcedMulti: boolean
   } | null>(null)
+const skipPaneClickRef = useRef(false)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
   const [nudgeToast, setNudgeToast] = useState<string | null>(null)
   const nudgeToastTimeoutRef = useRef<number | null>(null)
@@ -770,12 +787,22 @@ export default function SubsystemCanvas({
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
-  const clearMultiSelection = useCallback(() => {
-    setMultiSelection(null)
-    setMultiSelectionPreview(null)
-    setMarqueeRect(null)
-    marqueeStateRef.current = null
-  }, [])
+  const clearMultiSelection = useCallback(
+    (options?: { preserveTemporary?: boolean }) => {
+      setMultiSelection(null)
+      setMultiSelectionPreview(null)
+      setMarqueeRect(null)
+      marqueeStateRef.current = null
+      if (
+        !options?.preserveTemporary &&
+        selectionMode === 'multi' &&
+        selectionModeSource === 'temporary'
+      ) {
+        onSelectionModeChange('single', { source: 'temporary' })
+      }
+    },
+    [onSelectionModeChange, selectionMode, selectionModeSource]
+  )
 
   const handleSingleSelectClick = useCallback(() => {
     onSelectionModeChange('single')
@@ -796,22 +823,101 @@ export default function SubsystemCanvas({
   )
 
   const applyMultiSelection = useCallback(
-    (selection: MultiSelection | null) => {
+    (selection: MultiSelection | null, options?: SelectionModeChangeOptions) => {
+      const normalized = normalizeMultiSelection(selection)
       setSelectedNodeId(null)
       setSelectedEdgeId(null)
       setSelectedMarkupId(null)
       setMultiSelectionPreview(null)
-      setMultiSelection(selection)
-      if (selection) {
+      setMultiSelection(normalized)
+      if (normalized) {
         if (selectionMode !== 'multi') {
-          onSelectionModeChange('multi')
+          onSelectionModeChange('multi', options)
         }
-        onSelect(selection)
+        onSelect(normalized)
       } else {
         onSelect(null)
+        if (selectionMode === 'multi' && selectionModeSource === 'temporary') {
+          onSelectionModeChange('single', options ?? { source: 'temporary' })
+        }
       }
     },
-    [onSelect, onSelectionModeChange, selectionMode]
+    [onSelect, onSelectionModeChange, selectionMode, selectionModeSource]
+  )
+
+  const getSelectionSeed = useCallback((): MultiSelection => {
+    if (multiSelection && selectionHasItems(multiSelection)) {
+      return ensureMultiSelection(multiSelection)
+    }
+    const seed = emptyMultiSelection()
+    if (selectedNodeId) seed.nodes.push(selectedNodeId)
+    if (selectedEdgeId) seed.edges.push(selectedEdgeId)
+    if (selectedMarkupId) seed.markups.push(selectedMarkupId)
+    return seed
+  }, [multiSelection, selectedEdgeId, selectedMarkupId, selectedNodeId])
+
+  const selectSingleNode = useCallback(
+    (nodeId: string) => {
+      onSelect({ kind: 'node', id: nodeId })
+      setSelectedNodeId(nodeId)
+      setSelectedEdgeId(null)
+      setSelectedMarkupId(null)
+    },
+    [onSelect]
+  )
+
+  const selectSingleEdge = useCallback(
+    (edgeId: string) => {
+      onSelect({ kind: 'edge', id: edgeId })
+      setSelectedEdgeId(edgeId)
+      setSelectedNodeId(null)
+      setSelectedMarkupId(null)
+    },
+    [onSelect]
+  )
+
+  const selectSingleNodeWithClear = useCallback(
+    (nodeId: string) => {
+      clearMultiSelection({ preserveTemporary: false })
+      selectSingleNode(nodeId)
+    },
+    [clearMultiSelection, selectSingleNode]
+  )
+
+  const selectSingleEdgeWithClear = useCallback(
+    (edgeId: string) => {
+      clearMultiSelection({ preserveTemporary: false })
+      selectSingleEdge(edgeId)
+    },
+    [clearMultiSelection, selectSingleEdge]
+  )
+
+  const toggleWithModifier = useCallback(
+    (
+      payload: { kind: 'node' | 'edge'; id: string },
+      fallback: () => void
+    ) => {
+      const seed = getSelectionSeed()
+      if (!selectionHasItems(seed)) {
+        fallback()
+        return
+      }
+      const toggled = toggleInMultiSelection(seed, payload)
+      const normalized = normalizeMultiSelection(toggled)
+      if (!normalized) {
+        applyMultiSelection(null, { source: 'temporary' })
+        return
+      }
+      const total =
+        normalized.nodes.length + normalized.edges.length + normalized.markups.length
+      if (total <= 1) {
+        applyMultiSelection(null, { source: 'temporary' })
+        fallback()
+        return
+      }
+      applyMultiSelection(normalized, { source: 'temporary' })
+    },
+    [applyMultiSelection, getSelectionSeed]
   )
 
   const computeSelectionWithinBounds = useCallback(
@@ -889,11 +995,11 @@ export default function SubsystemCanvas({
   )
 
   const startMarqueeSelection = useCallback(
-    (originClient: { x: number; y: number }, additive: boolean) => {
+    (originClient: { x: number; y: number }, additive: boolean, forcedMulti = false) => {
       if (!wrapperRef.current) return
       const bounds = wrapperRef.current.getBoundingClientRect()
       const originFlow = screenToFlowPosition(originClient)
-      marqueeStateRef.current = { originClient, originFlow, additive }
+      marqueeStateRef.current = { originClient, originFlow, additive, forcedMulti }
       setSelectedNodeId(null)
       setSelectedEdgeId(null)
       setSelectedMarkupId(null)
@@ -907,7 +1013,7 @@ export default function SubsystemCanvas({
 
       const handlePointerMove = (moveEvent: PointerEvent) => {
         const state = marqueeStateRef.current
-        if (!state || selectionMode !== 'multi') return
+        if (!state || (selectionMode !== 'multi' && !state.forcedMulti)) return
         const current = { x: moveEvent.clientX, y: moveEvent.clientY }
         const rectLeft = Math.min(state.originClient.x, current.x) - bounds.left
         const rectTop = Math.min(state.originClient.y, current.y) - bounds.top
@@ -937,9 +1043,10 @@ export default function SubsystemCanvas({
         setMarqueeRect(null)
         setMultiSelectionPreview(null)
         if (selectionHasItems(result)) {
-          applyMultiSelection(result)
+        skipPaneClickRef.current = true
+          applyMultiSelection(result, state.forcedMulti ? { source: 'temporary' } : undefined)
         } else if (!state.additive) {
-          applyMultiSelection(null)
+          applyMultiSelection(null, state.forcedMulti ? { source: 'temporary' } : undefined)
         }
       }
 
@@ -947,16 +1054,20 @@ export default function SubsystemCanvas({
         window.removeEventListener('pointermove', handlePointerMove)
         window.removeEventListener('pointerup', handlePointerUp)
         window.removeEventListener('pointercancel', handlePointerCancel)
+        const state = marqueeStateRef.current
         marqueeStateRef.current = null
         setMarqueeRect(null)
         setMultiSelectionPreview(null)
+        if (state?.forcedMulti) {
+          onSelectionModeChange('single', { source: 'temporary' })
+        }
       }
 
       window.addEventListener('pointermove', handlePointerMove)
       window.addEventListener('pointerup', handlePointerUp)
       window.addEventListener('pointercancel', handlePointerCancel)
     },
-    [applyMultiSelection, computeSelectionWithinBounds, mergeSelections, multiSelection, screenToFlowPosition, selectionMode]
+    [applyMultiSelection, computeSelectionWithinBounds, mergeSelections, multiSelection, onSelectionModeChange, screenToFlowPosition, selectionMode]
   )
 
   const resolveNodeSnapshotById = useCallback(
@@ -1657,14 +1768,22 @@ export default function SubsystemCanvas({
     for (const e of deleted){ removeEdge(path, e.id) }
   }, [isTopmostEditor, removeEdge, path])
 
-  const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
-    e.preventDefault()
-    setContextMenu({ type: 'node', x: e.clientX, y: e.clientY, targetId: n.id })
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: RFNode) => {
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      return
+    }
+    event.preventDefault()
+    setContextMenu({ type: 'node', x: event.clientX, y: event.clientY, targetId: node.id })
   }, [])
 
-  const onPaneContextMenu = useCallback((e: React.MouseEvent)=>{
-    e.preventDefault()
-    setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      return
+    }
+    event.preventDefault()
+    setContextMenu({ type: 'pane', x: event.clientX, y: event.clientY })
   }, [])
 
   const handleCopy = useCallback(() => {
@@ -1967,7 +2086,6 @@ export default function SubsystemCanvas({
   }, [addNodeNested, isTopmostEditor, path, quickPresets, screenToFlowPosition, setContextMenu])
 
   const handleWrapperPointerDownCapture = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (selectionMode !== 'multi') return
     if (event.button !== 0) return
     const target = event.target as HTMLElement | null
     if (!target) return
@@ -1976,11 +2094,17 @@ export default function SubsystemCanvas({
     }
     const paneEl = target.closest('.react-flow__pane')
     if (!paneEl) return
+    const modifier = isMultiSelectModifier(event)
+    if (selectionMode !== 'multi' && !modifier) return
     event.stopPropagation()
     event.preventDefault()
     setContextMenu(null)
-    startMarqueeSelection({ x: event.clientX, y: event.clientY }, event.shiftKey)
-  }, [selectionMode, setContextMenu, startMarqueeSelection])
+    const forcedMulti = selectionMode !== 'multi'
+    if (forcedMulti) {
+      onSelectionModeChange('multi', { source: 'temporary' })
+    }
+    startMarqueeSelection({ x: event.clientX, y: event.clientY }, event.shiftKey || modifier, forcedMulti)
+  }, [onSelectionModeChange, selectionMode, setContextMenu, startMarqueeSelection])
 
   const canSaveQuickPresetFromContext = contextMenu?.type === 'node' && !!(contextMenu.targetId && project.nodes.some(n => n.id === contextMenu.targetId))
 
@@ -2060,8 +2184,12 @@ export default function SubsystemCanvas({
         defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
         panOnDrag={selectionMode !== 'multi'}
         selectionOnDrag={selectionMode !== 'multi'}
-        onNodeClick={(_,n)=>{
+        onNodeClick={(event,n)=>{
           const nodeId = n.id
+          if (isMultiSelectModifier(event)) {
+            toggleWithModifier({ kind: 'node', id: nodeId }, () => selectSingleNodeWithClear(nodeId))
+            return
+          }
           const inMulti = selectionMode === 'multi' && (activeMultiSelection?.nodes.includes(nodeId) ?? false)
           if (inMulti) {
             setSelectedNodeId(nodeId)
@@ -2070,16 +2198,15 @@ export default function SubsystemCanvas({
             onSelect(activeMultiSelection)
             return
           }
-          if (selectionMode !== 'multi') {
-            clearMultiSelection()
-          }
-          onSelect({ kind: 'node', id: nodeId })
-          setSelectedNodeId(nodeId)
-          setSelectedEdgeId(null)
-          setSelectedMarkupId(null)
+          selectSingleNodeWithClear(nodeId)
         }}
-        onNodeDragStart={(_,n) => {
+        onNodeDragStart={(event,n) => {
           const nodeId = n.id
+          if (isMultiSelectModifier(event)) {
+            toggleWithModifier({ kind: 'node', id: nodeId }, () => selectSingleNodeWithClear(nodeId))
+            multiDragStateRef.current = null
+            return
+          }
           const inMulti = selectionMode === 'multi' && (activeMultiSelection?.nodes.includes(nodeId) ?? false)
           if (inMulti && activeMultiSelection) {
             setSelectedNodeId(nodeId)
@@ -2098,13 +2225,7 @@ export default function SubsystemCanvas({
             return
           }
           multiDragStateRef.current = null
-          if (selectionMode !== 'multi') {
-            clearMultiSelection()
-          }
-          setSelectedNodeId(nodeId)
-          setSelectedEdgeId(null)
-          setSelectedMarkupId(null)
-          onSelect({ kind: 'node', id: nodeId })
+          selectSingleNodeWithClear(nodeId)
         }}
         onNodeDrag={(_,n) => {
           const state = multiDragStateRef.current
@@ -2140,8 +2261,12 @@ export default function SubsystemCanvas({
           }
           multiDragStateRef.current = null
         }}
-        onEdgeClick={(_,e)=>{
+        onEdgeClick={(event,e)=>{
           const edgeId = e.id
+          if (isMultiSelectModifier(event)) {
+            toggleWithModifier({ kind: 'edge', id: edgeId }, () => selectSingleEdgeWithClear(edgeId))
+            return
+          }
           const inMulti = selectionMode === 'multi' && (activeMultiSelection?.edges.includes(edgeId) ?? false)
           if (inMulti) {
             setSelectedEdgeId(edgeId)
@@ -2150,13 +2275,7 @@ export default function SubsystemCanvas({
             onSelect(activeMultiSelection)
             return
           }
-          if (selectionMode !== 'multi') {
-            clearMultiSelection()
-          }
-          onSelect({ kind: 'edge', id: edgeId })
-          setSelectedEdgeId(edgeId)
-          setSelectedNodeId(null)
-          setSelectedMarkupId(null)
+          selectSingleEdgeWithClear(edgeId)
         }}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
@@ -2165,10 +2284,17 @@ export default function SubsystemCanvas({
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
         onPaneClick={() => {
+          if (skipPaneClickRef.current) {
+            skipPaneClickRef.current = false
+            return
+          }
           setSelectedNodeId(null)
           setSelectedEdgeId(null)
           setSelectedMarkupId(null)
-          if (selectionMode !== 'multi' || !selectionHasItems(activeMultiSelection)) {
+          if (multiSelection) {
+            applyMultiSelection(null, { source: selectionModeSource === 'temporary' ? 'temporary' : undefined })
+          } else {
+            clearMultiSelection()
             onSelect(null)
           }
         }}

@@ -223,7 +223,7 @@ export type MarkupLayerProps = {
   primarySelectedId: string | null
   multiSelectedIds: string[]
   activeTool: MarkupTool | null
-  onSelect: (id: string | null) => void
+  onSelect: (id: string | null, event?: React.PointerEvent | React.MouseEvent) => void
   onCreateMarkup: (markup: CanvasMarkup) => void
   onCommitUpdate: (id: string, next: CanvasMarkup) => void
   screenToFlow: (point: { x: number; y: number }) => { x: number; y: number }
@@ -345,7 +345,7 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
       initial: snapshot,
     })
     setDrafts(prev => ({ ...prev, [markup.id]: snapshot }))
-    onSelect(markup.id)
+    onSelect(markup.id, event)
     event.currentTarget.setPointerCapture(event.pointerId)
   }, [dragState, onSelect, screenToFlow])
 
@@ -750,7 +750,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
       >
         <div
           onPointerDown={interactive ? event => {
-            onSelect(markup.id)
+          onSelect(markup.id, event)
             startDrag(markup, { type: 'move' }, event)
           } : undefined}
           onPointerMove={interactive ? onPointerMove : undefined}
@@ -799,7 +799,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
           height={height}
           style={{ overflow: 'visible', cursor: interactive ? 'move' : 'default' }}
           onPointerDown={interactive ? event => {
-            onSelect(markup.id)
+          onSelect(markup.id, event)
             startDrag(markup, { type: 'move' }, event)
           } : undefined}
           onPointerMove={interactive ? onPointerMove : undefined}
@@ -848,7 +848,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 zIndex: Math.max(50, (markup.zIndex ?? 0) + 1),
               }}
               onPointerDown={event => {
-                onSelect(markup.id)
+                onSelect(markup.id, event)
                 startDrag(markup, { type: 'line-handle', handle: 'start' }, event)
               }}
               onPointerMove={onPointerMove}
@@ -868,7 +868,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 zIndex: Math.max(50, (markup.zIndex ?? 0) + 1),
               }}
               onPointerDown={event => {
-                onSelect(markup.id)
+                onSelect(markup.id, event)
                 startDrag(markup, { type: 'line-handle', handle: 'end' }, event)
               }}
               onPointerMove={onPointerMove}
@@ -966,7 +966,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
               redirectPointerToGraph(event, interaction.hitElement)
               return
             }
-            onSelect(markup.id)
+            onSelect(markup.id, event)
             startDrag(markup, { type: 'move' }, event)
           } : undefined}
           onPointerMove={pointerEnabled ? onPointerMove : undefined}
@@ -1006,7 +1006,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                   redirectPointerToGraph(event, interaction.hitElement)
                   return
                 }
-                onSelect(markup.id)
+                onSelect(markup.id, event)
                 startDrag(markup, { type: 'rect-resize', handle }, event)
               }}
               onPointerMove={pointerEnabled ? onPointerMove : undefined}

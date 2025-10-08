@@ -31,7 +31,7 @@ PowerTree Studio is a web-based visual editor and analyzer for DC power distribu
 - **Connect nodes**: drag from handles—sources/subsystem inputs expose outputs, converters/buses accept inputs and provide outputs, loads accept inputs only.
 - **Edge labels**: show resistance (mΩ) and scenario current (`5.0 mΩ | 12.3 A`). Warnings append to the label when upstream voltage mismatches downstream requirements or exceeds converter ranges; mismatched edges render red.
 - **Context menus**: right-click nodes to Copy, Save as quick preset…, or Delete. Right-click empty space to Paste at the pointer.
-- **Multi-selection**: enable via the markup toolbar. Drag to marquee-select; a floating HUD shows counts and shortcut hints (`⌘/Ctrl+C`, `⌘/Ctrl+V`, `Delete`).
+- **Multi-selection**: enable via the markup toolbar. Drag to marquee-select; a floating HUD shows counts and shortcut hints (`⌘/Ctrl+C`, `⌘/Ctrl+V`, `Delete`). Hold `⌘` (macOS) or `Ctrl` (Windows/Linux) while clicking nodes, edges, or markups to add or remove them without toggling the multi-select mode; clearing the temporary selection returns you to single-select automatically.
 
 ---
 

@@ -8,7 +8,13 @@ import { Tooltip } from '../ui/tooltip'
 import { useStore } from '../../state/store'
 import { ReactFlowProvider } from 'reactflow'
 import AutoAlignPrompt from '../AutoAlignPrompt'
-import type { InspectorSelection, MultiSelection, SelectionMode } from '../../types/selection'
+import type {
+  InspectorSelection,
+  MultiSelection,
+  SelectionMode,
+  SelectionModeChangeOptions,
+  SelectionModeSource,
+} from '../../types/selection'
 import { PanelsTopLeft, Eraser } from 'lucide-react'
 import { QuickPresetDialogsProvider } from '../quick-presets/QuickPresetDialogsContext'
 
@@ -16,6 +22,7 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const subsystem = projectContext.nodes.find(n=>n.id===subsystemId && (n as any).type==='Subsystem') as any
   const [selection, setSelection] = React.useState<InspectorSelection | MultiSelection | null>(null)
   const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
+  const [selectionModeSource, setSelectionModeSource] = React.useState<SelectionModeSource>('user')
   const [inspectorWidth, setInspectorWidth] = React.useState<number>(420)
   const [isResizing, setIsResizing] = React.useState<boolean>(false)
   const startXRef = React.useRef<number>(0)
@@ -34,6 +41,14 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
   const [autoAlignError, setAutoAlignError] = React.useState<string|null>(null)
   const [autoAlignAnchor, setAutoAlignAnchor] = React.useState<DOMRect|null>(null)
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
+
+  const handleSelectionModeChange = React.useCallback(
+    (mode: SelectionMode, options?: SelectionModeChangeOptions) => {
+      setSelectionMode(mode)
+      setSelectionModeSource(options?.source ?? 'user')
+    },
+    []
+  )
 
   const getCurrentSelectionForQuickPreset = React.useCallback((): InspectorSelection | null => {
     if (!selection) return null
@@ -214,7 +229,8 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 onSelect={setSelection}
                 onOpenNested={onOpenSubsystem}
                 selectionMode={selectionMode}
-                onSelectionModeChange={setSelectionMode}
+                selectionModeSource={selectionModeSource}
+                onSelectionModeChange={handleSelectionModeChange}
               />
             </ReactFlowProvider>
           </main>

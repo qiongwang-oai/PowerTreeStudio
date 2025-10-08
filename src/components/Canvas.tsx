@@ -12,7 +12,13 @@ import type { AnyNode, Edge, Project, Scenario, CanvasMarkup } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
-import type { InspectorSelection, SelectionMode, MultiSelection } from '../types/selection'
+import type {
+  InspectorSelection,
+  SelectionMode,
+  MultiSelection,
+  SelectionModeChangeOptions,
+  SelectionModeSource,
+} from '../types/selection'
 import { findSubsystemPath } from '../utils/subsystemPath'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../utils/nodePresets'
 import { exportCanvasToPdf } from '../utils/exportCanvasPdf'
@@ -23,11 +29,15 @@ import { genId } from '../utils'
 import { formatPower, powerTooltipLabel } from '../utils/format'
 import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
 import {
+  emptyMultiSelection,
+  ensureMultiSelection,
   mergeMultiSelections,
   normalizeBounds,
   boundsIntersects,
   pointsToBounds,
   selectionHasItems,
+  toggleInMultiSelection,
+  normalizeMultiSelection,
 } from '../utils/multiSelection'
 import type { Bounds } from '../utils/multiSelection'
 import { collectClipboardPayload as collectClipboardPayloadShared, applyClipboardPayload } from '../utils/selectionClipboard'
@@ -58,13 +68,17 @@ const EMBEDDED_EDGE_MARGIN_BOTTOM = 12
 const DEFAULT_EMBEDDED_NODE_WIDTH = 200
 const DEFAULT_EMBEDDED_NODE_HEIGHT = 110
 
+const isMultiSelectModifier = (event: { metaKey?: boolean; ctrlKey?: boolean }): boolean =>
+  Boolean(event.metaKey || event.ctrlKey)
+
 type CanvasProps = {
   onSelect: (selection: InspectorSelection | null) => void
   onOpenSubsystem?: (id: string) => void
   markupTool: MarkupTool | null
   onMarkupToolChange: (tool: MarkupTool | null) => void
   selectionMode: SelectionMode
-  onSelectionModeChange: (mode: SelectionMode) => void
+  selectionModeSource: SelectionModeSource
+  onSelectionModeChange: (mode: SelectionMode, options?: SelectionModeChangeOptions) => void
 }
 
 export type CanvasHandle = {
@@ -981,7 +995,15 @@ const parseNestedEdgeId = (id: string) => {
 }
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
-  { onSelect, onOpenSubsystem, markupTool, onMarkupToolChange, selectionMode, onSelectionModeChange },
+  {
+    onSelect,
+    onOpenSubsystem,
+    markupTool,
+    onMarkupToolChange,
+    selectionMode,
+    selectionModeSource,
+    onSelectionModeChange,
+  },
   ref
 ) {
   const project = useStore(s=>s.project)
@@ -1037,7 +1059,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     originClient: { x: number; y: number }
     originFlow: { x: number; y: number }
     additive: boolean
+    forcedMulti: boolean
   } | null>(null)
+  const skipPaneClickRef = useRef(false)
   const activeMultiSelection = multiSelectionPreview ?? multiSelection
   const [nudgeToast, setNudgeToast] = useState<string | null>(null)
   const nudgeToastTimeoutRef = useRef<number | null>(null)
@@ -1071,11 +1095,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const isSelectActive = selectionMode === 'single' && markupTool === null
   const isMultiActive = selectionMode === 'multi'
 
-  const clearMultiSelection = useCallback(() => {
-    setMultiSelection(null)
-    setMultiSelectionPreview(null)
-    setMarqueeRect(null)
-  }, [])
+  const clearMultiSelection = useCallback(
+    (options?: { preserveTemporary?: boolean }) => {
+      setMultiSelection(null)
+      setMultiSelectionPreview(null)
+      setMarqueeRect(null)
+      if (
+        !options?.preserveTemporary &&
+        selectionMode === 'multi' &&
+        selectionModeSource === 'temporary'
+      ) {
+        onSelectionModeChange('single', { source: 'temporary' })
+      }
+    },
+    [onSelectionModeChange, selectionMode, selectionModeSource]
+  )
 
   const mergeSelections = useCallback(
     (base: MultiSelection | null, addition: MultiSelection): MultiSelection =>
@@ -1083,23 +1117,40 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     []
   )
 
-  const applyMultiSelection = useCallback((selection: MultiSelection | null) => {
-    setSelectedNodeId(null)
-    setSelectedEdgeId(null)
-    setSelectedMarkupId(null)
-    setMultiSelection(selection)
-    if (selection) {
-      if (selectionMode !== 'multi') {
-        onSelectionModeChange('multi')
+  const applyMultiSelection = useCallback(
+    (selection: MultiSelection | null, options?: SelectionModeChangeOptions) => {
+      const normalized = normalizeMultiSelection(selection)
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+      setSelectedMarkupId(null)
+      setMultiSelection(normalized)
+      if (normalized) {
+        if (selectionMode !== 'multi') {
+          onSelectionModeChange('multi', options)
+        }
+        onSelect(normalized)
+      } else {
+        onSelect(null)
+        if (selectionMode === 'multi' && selectionModeSource === 'temporary') {
+          onSelectionModeChange('single', options ?? { source: 'temporary' })
+        }
       }
-      onSelect(selection)
-    } else {
-      onSelect(null)
+    },
+    [onSelect, onSelectionModeChange, selectionMode, selectionModeSource]
+  )
+
+  const getSelectionSeed = useCallback((): MultiSelection => {
+    if (multiSelection && selectionHasItems(multiSelection)) {
+      return ensureMultiSelection(multiSelection)
     }
-  }, [onSelect, onSelectionModeChange, selectionMode])
+    const seed = emptyMultiSelection()
+    if (selectedNodeId) seed.nodes.push(selectedNodeId)
+    if (selectedEdgeId) seed.edges.push(selectedEdgeId)
+    if (selectedMarkupId) seed.markups.push(selectedMarkupId)
+    return seed
+  }, [multiSelection, selectedEdgeId, selectedMarkupId, selectedNodeId])
 
   const emitSelectionForNode = useCallback((nodeId: string) => {
-    clearMultiSelection()
     const nested = parseNestedNodeId(nodeId)
     if (nested) {
       const layout = expandedLayouts.get(nested.subsystemId)
@@ -1114,10 +1165,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       return
     }
     onSelect({ kind: 'node', id: nodeId })
-  }, [clearMultiSelection, expandedLayouts, onSelect])
+  }, [expandedLayouts, onSelect])
 
   const emitSelectionForEdge = useCallback((edgeId: string) => {
-    clearMultiSelection()
     const nested = parseNestedEdgeId(edgeId)
     if (nested) {
       const layout = expandedLayouts.get(nested.subsystemId)
@@ -1127,24 +1177,161 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }
     }
     onSelect({ kind: 'edge', id: edgeId })
-  }, [clearMultiSelection, expandedLayouts, onSelect])
+  }, [expandedLayouts, onSelect])
 
   const emitSelectionForMarkup = useCallback((markupId: string) => {
-    clearMultiSelection()
     onSelect({ kind: 'markup', id: markupId })
-  }, [clearMultiSelection, onSelect])
+  }, [onSelect])
 
-  const handleMarkupSelect = useCallback((markupId: string | null) => {
+  const selectSingleNode = useCallback(
+    (nodeId: string) => {
+      emitSelectionForNode(nodeId)
+      setSelectedNodeId(nodeId)
+      setSelectedEdgeId(null)
+      setSelectedMarkupId(null)
+    },
+    [emitSelectionForNode]
+  )
+
+  const selectSingleEdge = useCallback(
+    (edgeId: string) => {
+      emitSelectionForEdge(edgeId)
+      setSelectedEdgeId(edgeId)
+      setSelectedNodeId(null)
+      setSelectedMarkupId(null)
+    },
+    [emitSelectionForEdge]
+  )
+
+  const selectSingleMarkup = useCallback(
+    (markupId: string) => {
+      emitSelectionForMarkup(markupId)
+      setSelectedMarkupId(markupId)
+      setSelectedNodeId(null)
+      setSelectedEdgeId(null)
+    },
+    [emitSelectionForMarkup]
+  )
+
+  const toggleWithModifier = useCallback(
+    (
+      payload: { kind: 'node' | 'edge' | 'markup'; id: string },
+      fallback: () => void
+    ) => {
+      const seed = getSelectionSeed()
+      if (!selectionHasItems(seed)) {
+        fallback()
+        return
+      }
+      const toggled = toggleInMultiSelection(seed, payload)
+      const normalized = normalizeMultiSelection(toggled)
+      if (!normalized) {
+        applyMultiSelection(null, { source: 'temporary' })
+        return
+      }
+      const total =
+        normalized.nodes.length + normalized.edges.length + normalized.markups.length
+      if (total <= 1) {
+        applyMultiSelection(null, { source: 'temporary' })
+        fallback()
+        return
+      }
+      applyMultiSelection(normalized, { source: 'temporary' })
+    },
+    [applyMultiSelection, getSelectionSeed]
+  )
+
+  const handleMarkupSelect = useCallback(
+    (markupId: string | null, event?: React.PointerEvent | React.MouseEvent) => {
+      if (markupId && event && isMultiSelectModifier(event)) {
+        toggleWithModifier(
+          { kind: 'markup', id: markupId },
+          () => selectSingleMarkup(markupId)
+        )
+        return
+      }
+
+      if (markupId) {
+        clearMultiSelection({ preserveTemporary: true })
+        selectSingleMarkup(markupId)
+      } else if (selectedMarkupId !== null) {
+        setSelectedMarkupId(null)
+        onSelect(null)
+      }
+    },
+    [clearMultiSelection, onSelect, selectSingleMarkup, selectedMarkupId, toggleWithModifier]
+  )
+
+  const selectSingleNodeWithClear = useCallback(
+    (nodeId: string) => {
+      clearMultiSelection({ preserveTemporary: true })
+      selectSingleNode(nodeId)
+    },
+    [clearMultiSelection, selectSingleNode]
+  )
+
+  const selectSingleEdgeWithClear = useCallback(
+    (edgeId: string) => {
+      clearMultiSelection({ preserveTemporary: true })
+      selectSingleEdge(edgeId)
+    },
+    [clearMultiSelection, selectSingleEdge]
+  )
+
+  const handleNodeClickById = useCallback(
+    (event: React.MouseEvent, nodeId: string) => {
+      if (isMultiSelectModifier(event)) {
+        toggleWithModifier({ kind: 'node', id: nodeId }, () => selectSingleNodeWithClear(nodeId))
+        return
+      }
+      selectSingleNodeWithClear(nodeId)
+    },
+    [selectSingleNodeWithClear, toggleWithModifier]
+  )
+
+  const handleNodeDragStartEvent = useCallback(
+    (event: React.MouseEvent, node: RFNode) => {
+      const nodeId = node.id
+      if (isMultiSelectModifier(event)) {
+        toggleWithModifier({ kind: 'node', id: nodeId }, () => selectSingleNodeWithClear(nodeId))
+        return
+      }
+      if (multiSelection && multiSelection.nodes.includes(nodeId)) {
+        return
+      }
+      selectSingleNodeWithClear(nodeId)
+    },
+    [multiSelection, selectSingleNodeWithClear, toggleWithModifier]
+  )
+
+  const handleEdgeClickById = useCallback(
+    (event: React.MouseEvent, edgeId: string) => {
+      if (isMultiSelectModifier(event)) {
+        toggleWithModifier({ kind: 'edge', id: edgeId }, () => selectSingleEdgeWithClear(edgeId))
+        return
+      }
+      selectSingleEdgeWithClear(edgeId)
+    },
+    [selectSingleEdgeWithClear, toggleWithModifier]
+  )
+
+  const handlePaneClick = useCallback(() => {
+    if (skipPaneClickRef.current) {
+      skipPaneClickRef.current = false
+      return
+    }
     setSelectedNodeId(null)
     setSelectedEdgeId(null)
-    if (markupId) {
-      setSelectedMarkupId(markupId)
-      emitSelectionForMarkup(markupId)
-    } else if (selectedMarkupId !== null) {
-      setSelectedMarkupId(null)
+    handleMarkupSelect(null)
+    if (multiSelection) {
+      applyMultiSelection(null, { source: selectionModeSource === 'temporary' ? 'temporary' : undefined })
+    } else if (selectionMode === 'multi' && selectionModeSource === 'temporary') {
+      onSelectionModeChange('single', { source: 'temporary' })
+      onSelect(null)
+    } else {
       onSelect(null)
     }
-  }, [emitSelectionForMarkup, onSelect, selectedMarkupId])
+  }, [applyMultiSelection, handleMarkupSelect, multiSelection, onSelect, onSelectionModeChange, selectionMode, selectionModeSource])
 
   useEffect(() => {
     if (selectedMarkupId && !markups.some(m => m.id === selectedMarkupId)) {
@@ -1441,13 +1628,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     return null
   }, [expandedLayouts, nodePositions])
 
-  const startMarqueeSelection = useCallback((originClient: { x: number; y: number }, additive: boolean) => {
+  const startMarqueeSelection = useCallback(
+    (originClient: { x: number; y: number }, additive: boolean, forcedMulti = false) => {
     if (!wrapperRef.current) return
     const bounds = wrapperRef.current.getBoundingClientRect()
     marqueeStateRef.current = {
       originClient,
       originFlow: screenToFlowPosition(originClient),
       additive,
+      forcedMulti,
     }
     setSelectedNodeId(null)
     setSelectedEdgeId(null)
@@ -1461,7 +1650,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
 
     const handlePointerMove = (moveEvent: PointerEvent) => {
       const state = marqueeStateRef.current
-      if (!state || selectionMode !== 'multi') return
+      if (!state || (selectionMode !== 'multi' && !state.forcedMulti)) return
       const current = { x: moveEvent.clientX, y: moveEvent.clientY }
       const rectLeft = Math.min(state.originClient.x, current.x) - bounds.left
       const rectTop = Math.min(state.originClient.y, current.y) - bounds.top
@@ -1491,9 +1680,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       setMarqueeRect(null)
       setMultiSelectionPreview(null)
       if (selectionHasItems(result)) {
-        applyMultiSelection(result)
+        skipPaneClickRef.current = true
+        applyMultiSelection(result, state.forcedMulti ? { source: 'temporary' } : undefined)
       } else if (!state.additive) {
-        applyMultiSelection(null)
+        applyMultiSelection(null, state.forcedMulti ? { source: 'temporary' } : undefined)
       }
     }
 
@@ -1501,18 +1691,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       window.removeEventListener('pointermove', handlePointerMove)
       window.removeEventListener('pointerup', handlePointerUp)
       window.removeEventListener('pointercancel', handlePointerCancel)
+      const state = marqueeStateRef.current
       marqueeStateRef.current = null
       setMarqueeRect(null)
       setMultiSelectionPreview(null)
+      if (state?.forcedMulti) {
+        onSelectionModeChange('single', { source: 'temporary' })
+      }
     }
 
     window.addEventListener('pointermove', handlePointerMove)
     window.addEventListener('pointerup', handlePointerUp)
     window.addEventListener('pointercancel', handlePointerCancel)
-  }, [applyMultiSelection, computeSelectionWithinBounds, mergeSelections, multiSelection, screenToFlowPosition, selectionMode])
+  }, [applyMultiSelection, computeSelectionWithinBounds, mergeSelections, multiSelection, onSelectionModeChange, screenToFlowPosition, selectionMode])
 
   const handleWrapperPointerDownCapture = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (selectionMode !== 'multi' || markupTool) return
+    if (markupTool) return
     if (event.button !== 0) return
     const target = event.target as HTMLElement | null
     if (!target) return
@@ -1521,11 +1715,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
     const paneEl = target.closest('.react-flow__pane')
     if (!paneEl) return
+    const modifier = isMultiSelectModifier(event)
+    if (selectionMode !== 'multi' && !modifier) return
     event.stopPropagation()
     event.preventDefault()
     setContextMenu(null)
-    startMarqueeSelection({ x: event.clientX, y: event.clientY }, event.shiftKey)
-  }, [markupTool, selectionMode, startMarqueeSelection])
+    const forcedMulti = selectionMode !== 'multi'
+    if (forcedMulti) {
+      onSelectionModeChange('multi', { source: 'temporary' })
+    }
+    startMarqueeSelection({ x: event.clientX, y: event.clientY }, event.shiftKey || modifier, forcedMulti)
+  }, [markupTool, onSelectionModeChange, selectionMode, startMarqueeSelection])
 
   const handleCanvasDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
@@ -2051,14 +2251,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     }
   }, [expandedLayouts, nestedRemoveEdge, openSubsystemIds, removeEdge])
 
-  const onNodeContextMenu = useCallback((e: React.MouseEvent, n: RFNode)=>{
-    e.preventDefault()
-    setContextMenu({ type: 'node', x: e.clientX, y: e.clientY, targetId: n.id })
+  const onNodeContextMenu = useCallback((event: React.MouseEvent, node: RFNode) => {
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      return
+    }
+    event.preventDefault()
+    setContextMenu({ type: 'node', x: event.clientX, y: event.clientY, targetId: node.id })
   }, [])
 
-  const onPaneContextMenu = useCallback((e: React.MouseEvent)=>{
-    e.preventDefault()
-    setContextMenu({ type: 'pane', x: e.clientX, y: e.clientY })
+  const onPaneContextMenu = useCallback((event: React.MouseEvent) => {
+    if (event.metaKey || event.ctrlKey) {
+      event.preventDefault()
+      return
+    }
+    event.preventDefault()
+    setContextMenu({ type: 'pane', x: event.clientX, y: event.clientY })
   }, [])
 
   const cloneNodeSnapshot = useCallback((node: AnyNode | null | undefined): AnyNode | null => {
@@ -3019,37 +3227,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         selectionOnDrag={!markupTool}
         nodesDraggable={!markupTool}
         zoomOnScroll={!markupTool}
-        onNodeClick={(_,n)=>{
-          const nodeId = n.id
-          emitSelectionForNode(nodeId)
-          setSelectedNodeId(nodeId)
-          setSelectedEdgeId(null)
-          setSelectedMarkupId(null)
-        }}
-        onNodeDragStart={(_,n)=>{
-          const nodeId = n.id
-          emitSelectionForNode(nodeId)
-          setSelectedNodeId(nodeId)
-          setSelectedEdgeId(null)
-          setSelectedMarkupId(null)
-        }}
-        onEdgeClick={(_,e)=>{
-          emitSelectionForEdge(e.id)
-          setSelectedEdgeId(e.id)
-          setSelectedNodeId(null)
-          setSelectedMarkupId(null)
-        }}
+        onNodeClick={(event, node) => handleNodeClickById(event, node.id)}
+        onNodeDragStart={handleNodeDragStartEvent}
+        onEdgeClick={(event, edge) => handleEdgeClickById(event, edge.id)}
         onNodesChange={handleNodesChange}
         onConnect={onConnect}
         onNodesDelete={onNodesDelete}
         onEdgesDelete={onEdgesDelete}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
-        onPaneClick={() => {
-          setSelectedNodeId(null)
-          setSelectedEdgeId(null)
-          handleMarkupSelect(null)
-        }}
+        onPaneClick={handlePaneClick}
         onNodeDoubleClick={(_,n)=>{
           const nodeId = n.id
           if (nodeId.endsWith('::container')) {

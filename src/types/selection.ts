@@ -1,5 +1,11 @@
 export type SelectionMode = 'single' | 'multi'
 
+export type SelectionModeSource = 'user' | 'temporary'
+
+export type SelectionModeChangeOptions = {
+  source?: SelectionModeSource
+}
+
 export type MultiSelection = {
   kind: 'multi'
   nodes: string[]

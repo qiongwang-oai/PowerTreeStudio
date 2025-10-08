@@ -13,10 +13,14 @@ import { download, importProjectFile, serializeProject } from './io'
 import { exportReport } from './report'
 import ReportDialog from './components/report/ReportDialog'
 import AutoAlignPrompt from './components/AutoAlignPrompt'
-import type { InspectorSelection } from './types/selection'
+import type {
+  InspectorSelection,
+  SelectionMode,
+  SelectionModeChangeOptions,
+  SelectionModeSource,
+} from './types/selection'
 import { QuickPresetDialogsProvider } from './components/quick-presets/QuickPresetDialogsContext'
 import MarkupToolbar from './components/markups/MarkupToolbar'
-import type { SelectionMode } from './types/selection'
 import type { MarkupTool } from './components/markups/MarkupLayer'
 import NodeBulkEditorModal from './components/NodeBulkEditorModal'
 import {
@@ -78,18 +82,22 @@ export default function App(){
   const quickPresets = useStore(s => s.quickPresets)
   const [markupTool, setMarkupTool] = React.useState<MarkupTool | null>(null)
   const [selectionMode, setSelectionMode] = React.useState<SelectionMode>('single')
+  const [selectionModeSource, setSelectionModeSource] = React.useState<SelectionModeSource>('user')
   const handleMarkupToolChange = React.useCallback((tool: MarkupTool | null) => {
     setMarkupTool(tool)
     if (tool !== null) {
       setSelectionMode('single')
+      setSelectionModeSource('user')
     }
-  }, [setSelectionMode, setMarkupTool])
-  const handleSelectionModeChange = React.useCallback((mode: SelectionMode) => {
+  }, [])
+  const handleSelectionModeChange = React.useCallback((mode: SelectionMode, options?: SelectionModeChangeOptions) => {
     setSelectionMode(mode)
+    const source = options?.source ?? 'user'
+    setSelectionModeSource(source)
     if (mode === 'multi') {
       setMarkupTool(null)
     }
-  }, [setMarkupTool, setSelectionMode])
+  }, [])
   const minRight = 220, maxRight = 640
   const autoAlignButtonRef = React.useRef<HTMLButtonElement|null>(null)
   const canvasRef = React.useRef<CanvasHandle | null>(null)
@@ -353,6 +361,7 @@ export default function App(){
           markupTool={markupTool}
           onMarkupToolChange={handleMarkupToolChange}
           selectionMode={selectionMode}
+          selectionModeSource={selectionModeSource}
           onSelectionModeChange={handleSelectionModeChange}
         /></ReactFlowProvider></main>
         <aside className="relative border-l bg-white overflow-auto side-panel">
