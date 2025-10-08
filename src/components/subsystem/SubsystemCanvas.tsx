@@ -34,6 +34,7 @@ import {
 import { Button } from '../ui/button'
 import { Tooltip } from '../ui/tooltip'
 import { MousePointer, BoxSelect, Undo2, Redo2 } from 'lucide-react'
+import { clampPointToBounds, DEFAULT_SUBSYSTEM_BOUNDS, getKeyboardNudgeDeltaForEvent, computeEdgeMidpointNudge } from '../../utils/nudgeSelection'
 
 type PowerDisplay = { text: string; tooltip?: string }
 
@@ -589,6 +590,7 @@ export default function SubsystemCanvas({
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
   const addNodeNested = useStore(s=>s.nestedSubsystemAddNode)
+  const bulkUpdateNodesStore = useStore(s=>s.bulkUpdateNodes)
   const quickPresets = useStore(s=>s.quickPresets)
   const quickPresetDialogs = useQuickPresetDialogs()
   const clipboard = useStore(s=>s.clipboard)
@@ -628,7 +630,28 @@ export default function SubsystemCanvas({
     additive: boolean
   } | null>(null)
   const wrapperRef = useRef<HTMLDivElement | null>(null)
+  const [nudgeToast, setNudgeToast] = useState<string | null>(null)
+  const nudgeToastTimeoutRef = useRef<number | null>(null)
+  const showNudgeToast = useCallback((message: string) => {
+    setNudgeToast(message)
+    if (nudgeToastTimeoutRef.current !== null) {
+      window.clearTimeout(nudgeToastTimeoutRef.current)
+    }
+    nudgeToastTimeoutRef.current = window.setTimeout(() => {
+      setNudgeToast(null)
+      nudgeToastTimeoutRef.current = null
+    }, 1800)
+  }, [])
   const markups = Array.isArray(project.markups) ? project.markups : []
+
+  useEffect(() => {
+    return () => {
+      if (nudgeToastTimeoutRef.current !== null) {
+        window.clearTimeout(nudgeToastTimeoutRef.current)
+        nudgeToastTimeoutRef.current = null
+      }
+    }
+  }, [])
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
@@ -1717,6 +1740,166 @@ export default function SubsystemCanvas({
         return null
       })()
 
+      const nudgeDelta = getKeyboardNudgeDeltaForEvent(e)
+      if (nudgeDelta && currentSelection?.nodes.length) {
+        const nodeMap = new Map<string, AnyNode>()
+        for (const node of project.nodes as AnyNode[]) {
+          nodeMap.set(node.id, node)
+        }
+
+        const updates: { nodeId: string; patch: Partial<AnyNode>; subsystemPath?: string[] }[] = []
+        const localNodeUpdates = new Map<string, { x: number; y: number }>()
+        let clamped = false
+        let moved = false
+
+        for (const nodeId of currentSelection.nodes) {
+          const node = nodeMap.get(nodeId)
+          if (!node) continue
+          const currentX = typeof node.x === 'number' ? node.x : 0
+          const currentY = typeof node.y === 'number' ? node.y : 0
+          const target = { x: currentX + nudgeDelta.dx, y: currentY + nudgeDelta.dy }
+          const { point, clamped: wasClamped } = clampPointToBounds(target, DEFAULT_SUBSYSTEM_BOUNDS)
+          if (point.x !== currentX || point.y !== currentY) {
+            updates.push({ nodeId, subsystemPath: path, patch: { x: point.x, y: point.y } })
+            localNodeUpdates.set(nodeId, { x: point.x, y: point.y })
+            moved = true
+          }
+          if (wasClamped) clamped = true
+        }
+
+        if (localNodeUpdates.size > 0) {
+          setNodes(prev =>
+            prev.map(rn => {
+              const update = localNodeUpdates.get(rn.id)
+              if (!update) return rn
+              const samePosition = rn.position?.x === update.x && rn.position?.y === update.y
+              if (samePosition) return rn
+              const nextPosition = { x: update.x, y: update.y }
+              const nextAbsolute = rn.positionAbsolute ? { x: update.x, y: update.y } : rn.positionAbsolute
+              return {
+                ...rn,
+                position: nextPosition,
+                positionAbsolute: nextAbsolute ?? rn.positionAbsolute,
+              }
+            })
+          )
+        }
+
+        if (updates.length > 0) {
+          bulkUpdateNodesStore(updates)
+        }
+
+        if (clamped) {
+          showNudgeToast('Selection hit canvas bounds')
+        }
+
+        if (moved || clamped) {
+          e.preventDefault()
+          return
+        }
+      }
+
+      if (nudgeDelta && nudgeDelta.dx !== 0) {
+        const selectionEdges = new Set<string>()
+        if (currentSelection?.edges.length) {
+          currentSelection.edges.forEach(id => selectionEdges.add(id))
+        }
+        if (selectionEdges.size === 0 && selectedEdgeId) {
+          selectionEdges.add(selectedEdgeId)
+        }
+
+        if (selectionEdges.size > 0) {
+          const nodeMap = new Map<string, AnyNode>()
+          for (const node of project.nodes as AnyNode[]) {
+            nodeMap.set(node.id, node)
+          }
+
+          const rfEdgeUpdates = new Map<string, { midpointX?: number; midpointOffset?: number }>()
+          const processedGroups = new Set<string>()
+          let edgeMoved = false
+          let edgeClamped = false
+
+          const applyRfUpdates = () => {
+            if (rfEdgeUpdates.size === 0) return
+            setEdges(prev =>
+              prev.map(edge => {
+                const update = rfEdgeUpdates.get(edge.id)
+                if (!update) return edge
+                const nextData: any = { ...(edge.data || {}) }
+                if (update.midpointOffset !== undefined) nextData.midpointOffset = update.midpointOffset
+                if (update.midpointX !== undefined) nextData.midpointX = update.midpointX
+                return { ...edge, data: nextData }
+              })
+            )
+          }
+
+          const processGroup = (edge: Edge) => {
+            const rawGroupKey = edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle })
+            if (processedGroups.has(rawGroupKey)) return
+            processedGroups.add(rawGroupKey)
+
+            const sourceNode = nodeMap.get(edge.from)
+            const targetNode = nodeMap.get(edge.to)
+            if (!sourceNode || !targetNode) return
+            const startX = Number((sourceNode as any).x)
+            const endX = Number((targetNode as any).x)
+            if (!Number.isFinite(startX) || !Number.isFinite(endX)) return
+
+            const offsetRaw = Number.isFinite((edge as any).midpointOffset) ? Number((edge as any).midpointOffset) : 0.5
+            const offsetValue = Math.min(1, Math.max(0, offsetRaw))
+            const fallbackMidpoint = startX + (endX - startX) * offsetValue
+            const baseMidpoint = Number.isFinite((edge as any).midpointX) ? Number((edge as any).midpointX) : fallbackMidpoint
+
+            const result = computeEdgeMidpointNudge({
+              currentMidpoint: baseMidpoint,
+              deltaX: nudgeDelta.dx,
+              startX,
+              endX,
+            })
+            if (!result) return
+
+            const movedThis = Math.abs(result.midpointX - baseMidpoint) > 1e-3
+            if (!movedThis && !result.clamped) return
+
+            const patch: Partial<Edge> = {
+              midpointOffset: result.midpointOffset,
+              midpointX: result.midpointX,
+            }
+
+            for (const groupEdge of project.edges) {
+              if (edgeGroupKey({ from: groupEdge.from, fromHandle: groupEdge.fromHandle }) !== rawGroupKey) continue
+              updateEdgeNested(path, groupEdge.id, patch)
+              rfEdgeUpdates.set(groupEdge.id, {
+                midpointOffset: result.midpointOffset,
+                midpointX: result.midpointX,
+              })
+            }
+
+            if (result.clamped) edgeClamped = true
+            if (movedThis || result.clamped) edgeMoved = true
+          }
+
+          for (const edgeId of selectionEdges) {
+            const projectEdge = project.edges.find(e => e.id === edgeId)
+            if (!projectEdge) continue
+            processGroup(projectEdge)
+          }
+
+          if (rfEdgeUpdates.size > 0) {
+            applyRfUpdates()
+          }
+
+          if (edgeClamped) {
+            showNudgeToast('Edge midpoint hit bounds')
+          }
+
+          if (edgeMoved || edgeClamped) {
+            e.preventDefault()
+            return
+          }
+        }
+      }
+
       if (isCopy && currentSelection) {
         const payload = collectClipboardPayload(currentSelection)
         if (payload) {
@@ -1742,7 +1925,7 @@ export default function SubsystemCanvas({
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [activeMultiSelection, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, performPaste, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard])
+  }, [activeMultiSelection, bulkUpdateNodesStore, clearMultiSelection, collectClipboardPayload, deleteSelection, isTopmostEditor, onSelect, onSelectionModeChange, path, performPaste, project.edges, project.nodes, screenToFlowPosition, selectedEdgeId, selectedMarkupId, selectedNodeId, setClipboard, setEdges, setNodes, showNudgeToast, updateEdgeNested])
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     if (!dataTransferHasNodePreset(e.dataTransfer) && !dataTransferHasQuickPreset(e.dataTransfer)) return
@@ -2011,6 +2194,13 @@ export default function SubsystemCanvas({
             <span><span className="font-semibold text-slate-800">{multiSelection.edges.length}</span> edges</span>
             <span><span className="font-semibold text-slate-800">{multiSelection.markups.length}</span> markups</span>
             <span className="text-xs text-slate-400">Copy ⌘C / Delete ⌫ / Paste ⌘V</span>
+          </div>
+        </div>
+      )}
+      {nudgeToast && (
+        <div className="absolute bottom-12 left-1/2 z-50 -translate-x-1/2">
+          <div className="rounded-md bg-slate-900/90 px-3 py-2 text-sm font-medium text-white shadow-lg">
+            {nudgeToast}
           </div>
         </div>
       )}
