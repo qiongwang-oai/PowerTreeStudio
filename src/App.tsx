@@ -256,7 +256,7 @@ export default function App(){
                       <FolderOpen className="h-5 w-5" />
                     </Button>
                   </Tooltip>
-                  <Tooltip label="Save as JSON">
+                  <Tooltip label="Save as YAML">
                     <Button
                       variant="outline"
                       size="icon"
