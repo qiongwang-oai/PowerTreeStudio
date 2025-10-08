@@ -2120,7 +2120,6 @@ const skipPaneClickRef = useRef(false)
               type="button"
               onClick={handleSingleSelectClick}
               aria-label="Select nodes"
-              title="Select nodes"
               aria-pressed={isSelectActive}
             >
               <MousePointer className="h-5 w-5" />
@@ -2133,7 +2132,6 @@ const skipPaneClickRef = useRef(false)
               type="button"
               onClick={handleMultiSelectClick}
               aria-label="Toggle multi-select"
-              title="Toggle multi-select"
               aria-pressed={isMultiActive}
             >
               <BoxSelect className="h-5 w-5" />
@@ -2148,7 +2146,6 @@ const skipPaneClickRef = useRef(false)
               onClick={undo}
               disabled={pastLen === 0}
               aria-label="Undo"
-              title="Undo"
             >
               <Undo2 className="h-5 w-5" />
             </Button>
@@ -2161,7 +2158,6 @@ const skipPaneClickRef = useRef(false)
               onClick={redo}
               disabled={futureLen === 0}
               aria-label="Redo"
-              title="Redo"
             >
               <Redo2 className="h-5 w-5" />
             </Button>

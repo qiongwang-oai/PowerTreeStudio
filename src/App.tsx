@@ -259,7 +259,6 @@ export default function App(){
                       type="button"
                       onClick={()=>fileInputRef.current?.click()}
                       aria-label="Open project"
-                      title="Open project"
                     >
                       <FolderOpen className="h-5 w-5" />
                     </Button>
@@ -271,7 +270,6 @@ export default function App(){
                       type="button"
                       onClick={onExport}
                       aria-label="Save project"
-                      title="Save project"
                     >
                       <Save className="h-5 w-5" />
                     </Button>
@@ -283,7 +281,6 @@ export default function App(){
                       type="button"
                       onClick={onExportPdf}
                       aria-label="Export PDF"
-                      title="Export PDF"
                     >
                       <FileDown className="h-5 w-5" />
                     </Button>
@@ -297,7 +294,6 @@ export default function App(){
                       type="button"
                       onClick={openAutoAlignPrompt}
                       aria-label="Auto alignment"
-                      title="Auto alignment"
                     >
                       <PanelsTopLeft className="h-5 w-5" />
                     </Button>
@@ -309,7 +305,6 @@ export default function App(){
                       type="button"
                       onClick={() => setBulkEditorOpen(true)}
                       aria-label="Edit nodes"
-                      title="Edit nodes"
                     >
                       <PencilRuler className="h-5 w-5" />
                     </Button>
@@ -321,7 +316,6 @@ export default function App(){
                       type="button"
                       onClick={onReport}
                       aria-label="Open report"
-                      title="Open report"
                     >
                       <FileBarChart2 className="h-5 w-5" />
                     </Button>
@@ -333,7 +327,6 @@ export default function App(){
                       type="button"
                       onClick={onClear}
                       aria-label="Clear canvas"
-                      title="Clear canvas"
                     >
                       <Eraser className="h-5 w-5" />
                     </Button>

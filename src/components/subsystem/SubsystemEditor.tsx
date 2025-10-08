@@ -199,7 +199,6 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 type="button"
                 onClick={openAutoAlignPrompt}
                 aria-label="Auto alignment"
-                title="Auto alignment"
               >
                 <PanelsTopLeft className="h-5 w-5" />
               </Button>
@@ -211,7 +210,6 @@ export default function SubsystemEditor({ subsystemId, subsystemPath, projectCon
                 type="button"
                 onClick={handleClear}
                 aria-label="Clear subsystem"
-                title="Clear subsystem"
               >
                 <Eraser className="h-5 w-5" />
               </Button>

@@ -40,7 +40,6 @@ const MarkupToolbar: React.FC<MarkupToolbarProps> = ({
                 onSelectionModeChange(isActive ? selectionMode : 'single')
               }}
               aria-label={label}
-              title={label}
               aria-pressed={isActive}
             >
               <Icon className="h-5 w-5" />
