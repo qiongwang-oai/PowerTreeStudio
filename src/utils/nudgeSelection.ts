@@ -14,17 +14,17 @@ export type CanvasBounds = {
 }
 
 export const DEFAULT_CANVAS_BOUNDS: CanvasBounds = {
-  minX: 0,
-  minY: 0,
-  maxX: 40000,
-  maxY: 40000,
+  minX: -100000,
+  minY: -100000,
+  maxX: 100000,
+  maxY: 100000,
 }
 
 export const DEFAULT_SUBSYSTEM_BOUNDS: CanvasBounds = {
-  minX: 0,
-  minY: 0,
-  maxX: 20000,
-  maxY: 20000,
+  minX: -50000,
+  minY: -50000,
+  maxX: 50000,
+  maxY: 50000,
 }
 
 export function getKeyboardNudgeDeltaForEvent(event: KeyboardEvent): KeyboardNudgeDelta | null {
