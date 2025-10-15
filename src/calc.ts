@@ -610,6 +610,13 @@ export function compute(project: Project): ComputeResult {
     const R_total=e.interconnect?.R_milliohm? e.interconnect.R_milliohm/1000 : 0
     const upV = parent?.type==='Source'? (parent as any).Vout
       : parent?.type==='Converter'? (parent as any).Vout
+      : parent?.type==='DualOutputConverter'? (() => {
+          const outputs = Array.isArray((parent as any).outputs) ? (parent as any).outputs : []
+          const fallback = outputs.length > 0 ? outputs[0] : undefined
+          const handleId = (e as any).fromHandle as string | undefined
+          const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+          return (branch || fallback)?.Vout
+        })()
       : parent?.type==='Bus'? (parent as any).V_bus
       : parent?.type==='SubsystemInput'? (parent as any).Vout
       : undefined
