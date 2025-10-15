@@ -661,11 +661,24 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
     }
 
     if (node.type === 'Bus') {
+      const busAnalysis = analysis.nodes[node.id] as any
       sections.push(
-        <InspectorSection key="bus" title="Bus">
+        <InspectorSection key="bus" title="Efuse/Resistor">
           <FormGrid columns={2}>
             <Field label="V_bus (V)" value={(node as any).V_bus} onChange={v=>onChange('V_bus', v)} />
+            <Field label="R (mΩ)" value={(node as any).R_milliohm ?? 0} onChange={v=>onChange('R_milliohm', Math.max(0, v))} />
           </FormGrid>
+        </InspectorSection>
+      )
+      sections.push(
+        <InspectorSection key="bus-computed" title="Computed">
+          <MetricGrid
+            items={[
+              { label: 'Input power', value: renderPowerDisplay(busAnalysis?.P_in) },
+              { label: 'Output power', value: renderPowerDisplay(busAnalysis?.P_out) },
+              { label: 'Dissipation', value: renderPowerDisplay(busAnalysis?.loss) },
+            ]}
+          />
         </InspectorSection>
       )
     }

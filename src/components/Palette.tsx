@@ -40,7 +40,7 @@ export default function Palette(){
         <Button variant="outline" className={`${buttonBase} ${styleByType.Converter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Converter' })} onClick={()=>onAdd({ type: 'Converter' })}>Converter</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.DualOutputConverter}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'DualOutputConverter' })} onClick={()=>onAdd({ type: 'DualOutputConverter' })}>Dual-output Converter</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.Load}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Load' })} onClick={()=>onAdd({ type: 'Load' })}>Load</Button>
-        <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Bus' })} onClick={()=>onAdd({ type: 'Bus' })}>Bus/Net</Button>
+        <Button variant="outline" className={`${buttonBase} ${styleByType.Bus}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Bus' })} onClick={()=>onAdd({ type: 'Bus' })}>Efuse/Resistor</Button>
         <div className="h-px bg-slate-200 my-1" aria-hidden="true" />
         <Button variant="outline" className={`${buttonBase} ${styleByType.Subsystem}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'Subsystem' })} onClick={()=>onAdd({ type: 'Subsystem' })}>Subsystem</Button>
         <Button variant="outline" className={`${buttonBase} ${styleByType.SubsystemInput}`} draggable onDragStart={(e)=>onDragStart(e, { type: 'SubsystemInput' })} onClick={()=>onAdd({ type: 'SubsystemInput' })}>Subsystem Input Port</Button>

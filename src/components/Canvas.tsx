@@ -553,6 +553,7 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
   const pinValue = nodeResult?.P_in
   const poutValue = nodeResult?.P_out
   const pinSingleValue = (nodeResult as any)?.P_in_single ?? (node as any)?.P_in_single
+  const lossValue = nodeResult?.loss
   const outputMetrics: Record<string, any> = (nodeResult as any)?.__outputs || {}
   const formatPowerValue = (value: unknown) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
@@ -618,6 +619,28 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                   return '—'
                 })()}</div>
               </div>,
+              [
+                buildPowerEntry('P_in', pinValue),
+                buildPowerEntry('P_out', poutValue),
+              ]
+            )
+          ) : node.type === 'Bus' ? (
+            withPower(
+              (() => {
+                const resistance = Number((node as any).R_milliohm ?? 0)
+                const resistanceText = Number.isFinite(resistance)
+                  ? `${resistance.toLocaleString(undefined, { maximumFractionDigits: 2 })} mΩ`
+                  : '—'
+                const lossDisplay = formatPowerValue(lossValue)
+                return (
+                  <div>
+                    <div style={{ fontSize: '11px', color: '#555' }}>R: {resistanceText}</div>
+                    <div style={{ fontSize: '11px', color: '#555' }}>
+                      Dissipation: <span title={lossDisplay.tooltip}>{lossDisplay.text}</span>
+                    </div>
+                  </div>
+                )
+              })(),
               [
                 buildPowerEntry('P_in', pinValue),
                 buildPowerEntry('P_out', poutValue),

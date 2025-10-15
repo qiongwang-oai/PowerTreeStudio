@@ -1,5 +1,5 @@
 import { ComputeResult, compute, ComputeEdge, ComputeNode } from './calc'
-import { AnyNode, ConverterNode, DualOutputConverterNode, Project, SubsystemNode } from './models'
+import { AnyNode, BusNode, ConverterNode, DualOutputConverterNode, Project, SubsystemNode } from './models'
 import { clamp } from './utils'
 
 export type ConverterSummaryBranch = {
@@ -20,7 +20,7 @@ export type ConverterSummaryEntry = {
   id: string
   key: string
   name: string
-  nodeType: 'Converter' | 'DualOutputConverter'
+  nodeType: 'Converter' | 'DualOutputConverter' | 'Efuse/Resistor'
   topology?: ConverterNode['topology'] | DualOutputConverterNode['topology']
   vinMin?: number
   vinMax?: number
@@ -323,6 +323,39 @@ export function buildConverterSummary(project: Project, result?: ComputeResult):
           locationPath: [...pathNames],
           location,
           outputs,
+        })
+      } else if (rawNode.type === 'Bus') {
+        const node = rawNode as BusNode
+        const computed = projResult.nodes[node.id] || {}
+        const basePin = safePower((computed as any).P_in)
+        const basePout = safePower((computed as any).P_out)
+        const baseLoss = safePower((computed as any).loss)
+        const baseIout = safeCurrent((computed as any).I_out)
+        const pin = basePin * multiplier
+        const pout = basePout * multiplier
+        const loss = baseLoss * multiplier
+        const iout = baseIout * multiplier
+        const efficiency = pin > 0 ? clamp(pout / pin, 0, 1) : 0
+        const location = pathNames.length ? pathNames.join(' / ') : 'System'
+        const key = [...pathIds, node.id].join('>') || node.id
+        const outgoingEdges = adjacency.get(node.id) || []
+        const visitedEdges = new Set<string>()
+        let downstreamLoss = 0
+        for (const edge of outgoingEdges) downstreamLoss += sumEdgeLoss(edge, multiplier, projectContext, visitedEdges, getSubsystemInfo)
+        entries.push({
+          id: node.id,
+          key,
+          name: node.name || 'Efuse/Resistor',
+          nodeType: 'Efuse/Resistor',
+          vout: toNumber(node.V_bus),
+          iout,
+          pin,
+          pout,
+          loss,
+          efficiency,
+          edgeLoss: downstreamLoss,
+          locationPath: [...pathNames],
+          location,
         })
       }
     }

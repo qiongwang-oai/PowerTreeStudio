@@ -55,13 +55,13 @@ export function buildLevelPieData(project: Project, result?: ComputeResult): Lev
   let levelEdgeLoss = 0
   let levelConvLoss = 0
   for (const rn of Object.values(res.nodes)) {
-    if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') levelConvLoss += ((rn as any).loss || 0)
+    if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter' || (rn as any).type === 'Bus') levelConvLoss += ((rn as any).loss || 0)
   }
   for (const e of Object.values(res.edges)) levelEdgeLoss += (e.P_loss_edge || 0)
   const losses = levelEdgeLoss + levelConvLoss
 
   if (losses > 0) {
-    baseSlices.push({ id: '__losses__', label: 'Copper traces and power converters', value: losses, color: '#ef4444' })
+    baseSlices.push({ id: '__losses__', label: 'Copper traces, inline resistors, and power converters', value: losses, color: '#ef4444' })
   }
 
   // Attach colors

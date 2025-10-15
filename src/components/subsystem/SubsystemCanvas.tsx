@@ -1431,6 +1431,21 @@ const skipPaneClickRef = useRef(false)
                 }
               })()}</div>
             </div>
+          ) : n.type === 'Bus' ? (
+            (() => {
+              const nodeResult = computeResult.nodes[n.id];
+              const resistance = Number((n as any).R_milliohm ?? 0);
+              const resistanceText = Number.isFinite(resistance)
+                ? `${resistance.toLocaleString(undefined, { maximumFractionDigits: 2 })} mΩ`
+                : '—';
+              const lossDisplay = formatPowerDisplay(nodeResult?.loss);
+              return (
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>R: {resistanceText}</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>Dissipation: <span title={lossDisplay.tooltip}>{lossDisplay.text}</span></div>
+                </div>
+              );
+            })()
           ) : n.type === 'DualOutputConverter' ? (
             (() => {
               const nodeResult = computeResult.nodes[n.id] as any

@@ -43,7 +43,7 @@ export type DualOutputConverterNode = BaseNode & {
   outputs: DualOutputConverterBranch[]
 }
 export type LoadNode = BaseNode & { type: 'Load'; Vreq: number; I_typ: number; I_max: number; I_idle?: number; duty_cycle?: number; critical?: boolean; numParalleledDevices?: number; Utilization_typ?: number; Utilization_max?: number }
-export type BusNode = BaseNode & { type: 'Bus'; V_bus: number }
+export type BusNode = BaseNode & { type: 'Bus'; V_bus: number; R_milliohm?: number }
 export type NoteNode = BaseNode & { type: 'Note'; text: string }
 export type SubsystemNode = BaseNode & {
   type: 'Subsystem'

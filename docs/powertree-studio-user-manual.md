@@ -43,7 +43,7 @@ PowerTree Studio is a web-based visual editor and analyzer for DC power distribu
 - **Converters**: configure `Vin_min`, `Vin_max`, `Vout`, current/power limits, phase count, and efficiency model. The efficiency editor supports fixed η or curve data, per-phase scaling, and plots the operating point.
 - **Dual-output converters**: manage each branch’s voltage, limits, phase count, and efficiency. Branch metrics list per-handle power/current; warnings cite branch labels.
 - **Loads**: define required voltage, typical/max/idle currents, utilization factors, and parallel devices. Toggle **Critical Load** to include/exclude from Σ Loads. Inspector flags voltage margin shortfalls.
-- **Buses & Notes**: set `V_bus` for validation or edit note text (multi-line supported).
+- **Efuse/Resistor & Notes**: set `V_bus`, adjust inline resistance, or edit note text (multi-line supported).
 - **Subsystems**: set parallel count, import/export embedded projects, adjust container color, expand/collapse inline views, and reorder input handles from the inspector (with a one-click sync to the embedded layout). Inspector links to the subsystem editor.
 - **Subsystem inputs**: specify handoff voltage to validate upstream connections.
 

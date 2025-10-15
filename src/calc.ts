@@ -185,7 +185,7 @@ export function compute(project: Project): ComputeResult {
       ;(dual as any).__outputs = metrics
     }
     else if (node.type==='Bus'){
-      // Treat Bus as an ideal pass-through converter: η = 100%, Vin == Vout == V_bus, no limits
+      // Treat Efuse/Resistor as an inline resistor with no voltage drop (Vin == Vout == V_bus)
       const bus = node as any as ComputeNode
       const outEdges = (outgoing[bus.id]||[]).filter(e=>{
         const h = (e as any).fromHandle
@@ -213,10 +213,17 @@ export function compute(project: Project): ComputeResult {
         }
       }
       const Vbus = Math.max(((bus as any).V_bus || 0), 1e-9)
+      const R_milliohm = Number.isFinite((bus as any).R_milliohm) ? Math.max(0, ((bus as any).R_milliohm as number)) : 0
+      const R_ohm = R_milliohm / 1000
       if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
       const P_out = childInputSum + edgeLossSum
-      const P_in = P_out // ideal
-      bus.P_out = P_out; bus.P_in = P_in; (bus as any).I_out = I_out; bus.I_in = I_out; (bus as any).loss = 0
+      const P_loss = I_out * I_out * R_ohm
+      const P_in = P_out + P_loss
+      bus.P_out = P_out
+      bus.P_in = P_in
+      ;(bus as any).I_out = I_out
+      bus.I_in = I_out
+      ;(bus as any).loss = P_loss
     }
     else if (node.type==='Subsystem'){
       const sub = node as any as SubsystemNode & ComputeNode
@@ -492,14 +499,17 @@ export function compute(project: Project): ComputeResult {
         }
       }
       const Vbus = Math.max(((bus as any).V_bus || 0), 1e-9)
+      const R_milliohm = Number.isFinite((bus as any).R_milliohm) ? Math.max(0, ((bus as any).R_milliohm as number)) : 0
+      const R_ohm = R_milliohm / 1000
       if (I_out === 0) I_out = (childInputSum + edgeLossSum) / Vbus
       const P_out = childInputSum + edgeLossSum
-      const P_in = P_out
+      const P_loss = I_out * I_out * R_ohm
+      const P_in = P_out + P_loss
       bus.P_out = P_out
       bus.P_in = P_in
       ;(bus as any).I_out = I_out
       bus.I_in = I_out
-      ;(bus as any).loss = 0
+      ;(bus as any).loss = P_loss
     }
     else if (node.type === 'Converter'){
       const conv = node as any as ConverterNode & ComputeNode
@@ -1012,7 +1022,7 @@ export function computeDeepAggregates(project: Project): DeepAggregates {
         const pout = node.P_out || 0
         if (isNonCritical) nonCriticalLoadPower += pout
         else criticalLoadPower += pout
-      } else if (node.type === 'Converter' || node.type === 'DualOutputConverter'){
+      } else if (node.type === 'Converter' || node.type === 'DualOutputConverter' || node.type === 'Bus'){
         converterLoss += (node.loss || 0)
       }
     }

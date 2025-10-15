@@ -142,8 +142,9 @@ export function createNodePreset<T extends NodeType>(descriptor: NodePresetDescr
       return {
         id,
         type,
-        name: 'Bus',
+        name: 'Efuse/Resistor',
         V_bus: 12,
+        R_milliohm: 0,
         x: 420,
         y: 220,
       } as AnyNode

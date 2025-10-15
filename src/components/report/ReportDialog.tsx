@@ -24,6 +24,7 @@ function formatTopology(value?: string | null): string {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 function formatTypeTopology(entry: ConverterSummaryEntry): string {
+  if (entry.nodeType === 'Efuse/Resistor') return 'Efuse/Resistor'
   const typeLabel = entry.nodeType === 'Converter' ? 'Converter' : 'Dual-output converter'
   const topo = formatTopology(entry.topology as string | undefined)
   return topo ? `${typeLabel} / ${topo}` : typeLabel
@@ -42,7 +43,7 @@ function formatVinRange(min?: number, max?: number): string {
   return '—'
 }
 function formatVoutSummary(entry: ConverterSummaryEntry): string {
-  if (entry.nodeType === 'Converter') return formatVoltage(entry.vout)
+  if (entry.nodeType === 'Converter' || entry.nodeType === 'Efuse/Resistor') return formatVoltage(entry.vout)
   if (!entry.vouts || entry.vouts.length === 0) return '—'
   return entry.vouts.map(v => {
     const value = formatVoltage(v.value)
@@ -141,13 +142,13 @@ const renderSection = (proj: Project, res: ComputeResult, depth: number, path: s
               const pout = (rn as any).P_out || 0
               if (isNonCritical) tlNonCritical += pout; else tlCritical += pout
             }
-            if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') tlConvLoss += ((rn as any).loss || 0)
+          if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter' || (rn as any).type === 'Bus') tlConvLoss += ((rn as any).loss || 0)
           }
           for (const e of Object.values(innerResult.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
           const tlTotalIn = tlCritical + tlNonCritical + tlConvLoss + tlEdgeLoss
           const summaryRows = [
             <tr key={`inner-top-${key}`} className="border-b" style={{ backgroundColor: bgColor }}>
-              <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: (depth+1)? (depth+1)*12 : undefined}}>Copper traces and power converters</td>
+              <td className="px-2 py-2 text-left whitespace-nowrap" style={{paddingLeft: (depth+1)? (depth+1)*12 : undefined}}>Copper traces, inline resistors, and power converters</td>
               <td className="px-2 py-2 text-right">—</td>
               <td className="px-2 py-2 text-right">{formatNumber(0)}</td>
               <td className="px-2 py-2 text-right">{formatNumber(0)}</td>
@@ -284,7 +285,7 @@ const renderSection = (proj: Project, res: ComputeResult, depth: number, path: s
         const pout = (rn as any).P_out || 0
         if (isNonCritical) tlNonCritical += pout; else tlCritical += pout
       }
-      if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter') tlConvLoss += ((rn as any).loss || 0)
+      if ((rn as any).type === 'Converter' || (rn as any).type === 'DualOutputConverter' || (rn as any).type === 'Bus') tlConvLoss += ((rn as any).loss || 0)
     }
     for (const e of Object.values(result.edges)) tlEdgeLoss += (e.P_loss_edge || 0)
     const tlTotalIn = tlCritical + tlNonCritical + tlConvLoss + tlEdgeLoss

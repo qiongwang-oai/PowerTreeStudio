@@ -39,6 +39,17 @@ const NODE_TYPE_OPTIONS: NodeType[] = [
   'Note',
 ]
 
+const NODE_TYPE_LABELS: Record<NodeType, string> = {
+  Source: 'Source',
+  Converter: 'Converter',
+  DualOutputConverter: 'Dual-output Converter',
+  Load: 'Load',
+  Bus: 'Efuse/Resistor',
+  Subsystem: 'Subsystem',
+  SubsystemInput: 'Subsystem Input',
+  Note: 'Note',
+}
+
 const compareNodes = (nodeA?: AnyNode, nodeB?: AnyNode): number => {
   if (!nodeA && !nodeB) return 0
   if (!nodeA) return -1
@@ -98,6 +109,13 @@ const coerceTrimmedString = (value: string | boolean): string | undefined => {
 const coerceOptionalNumber = (value: string | boolean): number | undefined => {
   if (typeof value !== 'string') return undefined
   return coerceNumber(value)
+}
+
+const coerceOptionalNonNegativeNumber = (value: string | boolean): number | undefined => {
+  const num = coerceOptionalNumber(value)
+  if (num === undefined) return undefined
+  if (!Number.isFinite(num)) return undefined
+  return Math.max(0, num as number)
 }
 
 const coerceOptionalInt = (value: string | boolean, options?: { min?: number }): number | undefined => {
@@ -167,6 +185,7 @@ const NODE_PARAMETER_CONFIG: Partial<Record<NodeType, NodeFieldConfig[]>> = {
   ],
   Bus: [
     { key: 'V_bus', label: 'V_bus (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
+    { key: 'R_milliohm', label: 'R (mΩ)', input: 'number', step: 0.1, min: 0, coerce: coerceOptionalNonNegativeNumber, widthClass: 'min-w-[110px]' },
   ],
   SubsystemInput: [
     { key: 'Vout', label: 'Vout (V)', input: 'number', step: 0.1, coerce: coerceOptionalNumber, widthClass: 'min-w-[110px]' },
@@ -445,9 +464,10 @@ const buildPatch = (original: AnyNode, draft: AnyNode): Partial<AnyNode> => {
       break
     }
     case 'Bus': {
-      const next = draft as AnyNode & { V_bus?: number }
-      const prev = original as AnyNode & { V_bus?: number }
+      const next = draft as AnyNode & { V_bus?: number; R_milliohm?: number }
+      const prev = original as AnyNode & { V_bus?: number; R_milliohm?: number }
       if (next.V_bus !== prev.V_bus) patch.V_bus = next.V_bus
+      if (next.R_milliohm !== prev.R_milliohm) patch.R_milliohm = next.R_milliohm
       break
     }
     case 'SubsystemInput': {
@@ -545,7 +565,7 @@ function NodeBulkEditorModal({ isOpen, onClose }: NodeBulkEditorModalProps) {
       case 'Load':
         return { id, type: 'Load', name: 'New Load', Vreq: 5, I_typ: 1, I_max: 2 }
       case 'Bus':
-        return { id, type: 'Bus', name: 'New Bus', V_bus: 12 }
+        return { id, type: 'Bus', name: 'New Efuse/Resistor', V_bus: 12, R_milliohm: 0 }
       case 'Subsystem':
         return {
           id,
@@ -1335,7 +1355,7 @@ function GroupSection({
                       onChange={e => changeNewNodeType(draft.tempId, e.target.value as NodeType)}
                     >
                       {NODE_TYPE_OPTIONS.map(option => (
-                        <option key={option} value={option}>{option}</option>
+                        <option key={option} value={option}>{NODE_TYPE_LABELS[option]}</option>
                       ))}
                     </select>
                   </div>
@@ -1363,7 +1383,7 @@ function GroupSection({
                     <div className="pt-1 text-[11px] uppercase tracking-wide text-slate-400">{entry.nodeId}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
-                    <div className="font-medium text-slate-700">{draftNode.type}</div>
+                    <div className="font-medium text-slate-700">{NODE_TYPE_LABELS[draftNode.type]}</div>
                   </td>
                   <td className="px-3 py-3 align-top">
                     {renderParameters(key, draftNode, updater => updateDraft(key, updater))}

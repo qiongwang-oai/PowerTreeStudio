@@ -18,6 +18,7 @@ function topologyLabel(value?: string | null): string {
 }
 
 function converterTypeLabel(entry: ConverterSummaryEntry): string {
+  if (entry.nodeType === 'Efuse/Resistor') return 'Efuse/Resistor'
   const base = entry.nodeType === 'Converter' ? 'Converter' : 'Dual-output converter'
   const topo = topologyLabel(entry.topology as string | undefined)
   return topo ? `${base} / ${topo}` : base
@@ -42,7 +43,7 @@ function vinRangeLabel(min?: number, max?: number): string {
 }
 
 function voutLabel(entry: ConverterSummaryEntry): string {
-  if (entry.nodeType === 'Converter') return voltageText(entry.vout)
+  if (entry.nodeType === 'Converter' || entry.nodeType === 'Efuse/Resistor') return voltageText(entry.vout)
   if (!entry.vouts || entry.vouts.length === 0) return ''
   return entry.vouts
     .map(v => {
