@@ -679,16 +679,18 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
               ]
             )
           ) : node.type === 'Load' && 'Vreq' in node && 'I_typ' in node && 'I_max' in node ? (
-            withPower(
-              <div>
-                <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(node as any).I_typ}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>I_max: {(node as any).I_max}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((node as any).numParalleledDevices ?? 1)}</div>
-              </div>,
-              [
-                buildPowerEntry('P_in', pinValue),
-              ]
-            )
+            (() => {
+              const parallelCount = Math.max(1, Math.round((node as any).numParalleledDevices ?? 1))
+              const entries: PowerEntry[] = [buildPowerEntry('P_in', pinValue)]
+              entries.push({ label: 'Paralleled', text: `${parallelCount}`, tooltip: 'Number of paralleled devices' })
+              return withPower(
+                <div>
+                  <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(node as any).I_typ}A</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>I_max: {(node as any).I_max}A</div>
+                </div>,
+                entries
+              )
+            })()
           ) : node.type === 'Subsystem' ? (
             withPower(
               <div>

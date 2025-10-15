@@ -1479,17 +1479,22 @@ const skipPaneClickRef = useRef(false)
               )
             })()
           ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
-            <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-              <div className="text-left">
-                <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
-              </div>
-              <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-              <div className="text-left" style={{minWidth:70}}>
-                <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
-              </div>
-            </div>
+            (() => {
+              const parallelCount = Math.max(1, Math.round((n as any).numParalleledDevices ?? 1))
+              return (
+                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                  <div className="text-left">
+                    <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                  </div>
+                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                  <div className="text-left" style={{minWidth:70}}>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
+                    <div style={{fontSize:'11px',color:'#1e293b'}}>Paralleled: {parallelCount}</div>
+                  </div>
+                </div>
+              )
+            })()
           ) : n.type === 'Subsystem' ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Inputs: {((n as any).project?.nodes?.filter((x:any)=>x.type==='SubsystemInput')?.map((x:any)=>`${x.Vout}V`).join(', ') || '—')}</div>
