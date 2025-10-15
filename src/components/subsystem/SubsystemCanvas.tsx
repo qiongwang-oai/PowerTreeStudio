@@ -284,6 +284,7 @@ function CustomNode(props: NodeProps) {
               </div>
             </>
           )
+          const handleTranslateX = count > 1 ? '-150%' : '-50%'
           return (
             <>
               {ports.map((p:any, idx:number) => {
@@ -306,7 +307,7 @@ function CustomNode(props: NodeProps) {
                       type="target"
                       position={Position.Left}
                       id={p.id}
-                      style={{ background: '#555', top: `${pct}%`, transform: 'translate(-50%, -50%)' }}
+                      style={{ background: '#555', top: `${pct}%`, transform: `translate(${handleTranslateX}, -50%)` }}
                     />
                     <div
                       style={{

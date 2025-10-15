@@ -1,6 +1,6 @@
 export const SUBSYSTEM_BASE_HEIGHT = 64
 export const SUBSYSTEM_PORT_HEIGHT = 24
-export const SUBSYSTEM_PORT_SPACING_PX = 45
+export const SUBSYSTEM_PORT_SPACING_PX = 70
 export const SUBSYSTEM_PORT_MARGIN_MAX_PX = 50
 
 export function sanitizeSubsystemHandleOrder(portIds: string[], stored?: unknown): string[] {
