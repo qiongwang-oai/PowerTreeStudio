@@ -1253,7 +1253,7 @@ const skipPaneClickRef = useRef(false)
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
-    const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+    const strokeWidth = 3
     const parent = project.nodes.find(n=>n.id===e.from) as any
     const child = project.nodes.find(n=>n.id===e.to) as any
     const parentV = parent?.type==='Source'? parent?.Vout
@@ -1587,7 +1587,7 @@ const skipPaneClickRef = useRef(false)
       const prevById = new Map(prev.map(p => [p.id, p]))
       return project.edges.map(e => {
         const I = computeResult.edges[e.id]?.I_edge ?? 0
-        const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+        const strokeWidth = 3
         const parent = project.nodes.find(n => n.id === e.from) as any
         const child = project.nodes.find(n => n.id === e.to) as any
         let parentV: number | undefined
@@ -1745,7 +1745,7 @@ const skipPaneClickRef = useRef(false)
       sourceHandle: resolvedConnection.sourceHandle,
       targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
-      style: { strokeWidth: 2, stroke: defaultColor },
+      style: { strokeWidth: 3, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
@@ -2190,7 +2190,7 @@ const skipPaneClickRef = useRef(false)
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
+        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 3 } }}
         panOnDrag={selectionMode !== 'multi'}
         selectionOnDrag={selectionMode !== 'multi'}
         onNodeClick={(event,n)=>{

@@ -1897,7 +1897,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const expandedIds = new Set(expandedLayouts.keys())
     for (const e of project.edges) {
       const I = computeResult.edges[e.id]?.I_edge ?? 0
-      const strokeWidth = Math.max(2, 2 + 3 * Math.log10(I + 1e-3))
+      const strokeWidth = 3
       const parent = project.nodes.find(n=>n.id===e.from) as any
       const child = project.nodes.find(n=>n.id===e.to) as any
       let parentV: number | undefined
@@ -1992,7 +1992,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       for (const e of embeddedEdges) {
         const localEdgeResult = layout.analysis.edges[e.id] || {}
         const I = localEdgeResult.I_edge ?? 0
-        const strokeWidth = Math.max(1.5, 1.5 + 2 * Math.log10(I + 1e-3))
+        const strokeWidth = 3
         const parent = layout.embeddedProject.nodes.find(n=>n.id===e.from) as any
         let parentV: number | undefined
         if (parent?.type==='Source') parentV = parent?.Vout
@@ -2211,7 +2211,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       sourceHandle: resolvedConnection.sourceHandle,
       targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
-      style: { strokeWidth: 2, stroke: defaultColor },
+      style: { strokeWidth: 3, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
@@ -3235,7 +3235,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         fitView
-        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 2 } }}
+        defaultEdgeOptions={{ type: 'orthogonal', style: { strokeWidth: 3 } }}
         panOnDrag={!markupTool && selectionMode !== 'multi'}
         selectionOnDrag={!markupTool}
         nodesDraggable={!markupTool}
