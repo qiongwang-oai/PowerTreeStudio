@@ -2014,6 +2014,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         const midpointX = typeof meta.localMidpoint === 'number'
           ? containerPos.x + meta.localMidpoint
           : undefined
+        const embeddedGroupKey = edgeGroupKey({ from: e.from, fromHandle: (e as any)?.fromHandle })
         edges.push({
           id: `${layout.subsystemId}::edge::${e.id}`,
           type: 'orthogonal',
@@ -2029,6 +2030,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             midpointOffset,
             ...(typeof midpointX === 'number' ? { midpointX } : {}),
             defaultColor: edgeColor,
+            groupKey: embeddedGroupKey,
           },
           selectable: true,
         })
