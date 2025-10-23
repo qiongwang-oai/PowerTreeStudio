@@ -3234,6 +3234,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         </div>
       </div>
       <ReactFlow
+        id={project?.id ? `project-${project.id}` : 'project-main'}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}

@@ -2187,6 +2187,7 @@ const skipPaneClickRef = useRef(false)
         </div>
       </div>
       <ReactFlow
+        id={`subsystem-${path.join('__')}`}
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
