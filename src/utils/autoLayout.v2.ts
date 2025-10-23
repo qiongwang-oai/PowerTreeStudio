@@ -1,5 +1,6 @@
 import { compute } from '../calc'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
+import { estimateNodeHeight } from './nodeDimensions'
 import type { AnyNode, Edge, Project } from '../models'
 
 export type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
@@ -31,37 +32,6 @@ const DEFAULT_COLUMN_SPACING = 500
 const DEFAULT_ROW_SPACING = 100
 const COLUMN_START_X = 120
 const TOP_MARGIN = 0
-
-const typeBaseHeight: Record<string, number> = {
-  Source: 94,
-  Converter: 100,
-  DualOutputConverter: 118,
-  Load: 132,
-  Bus: 140,
-  Note: 120,
-  Subsystem: 170,
-  SubsystemInput: 100,
-}
-
-const estimateNodeHeight = (node: AnyNode | undefined): number => {
-  if (!node) return DEFAULT_ROW_SPACING
-  const explicitHeight = Number((node as any).height)
-  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
-    return explicitHeight
-  }
-  let height = typeBaseHeight[node.type] ?? DEFAULT_ROW_SPACING
-  if (node.type === 'DualOutputConverter') {
-    const outputs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
-    if (outputs.length > 1) height += (outputs.length - 1) * 14
-  }
-  if (node.type === 'Subsystem') {
-    const ports = Array.isArray((node as any).project?.nodes)
-      ? (node as any).project.nodes.filter((p: any) => p?.type === 'SubsystemInput')
-      : []
-    if (ports.length > 1) height += (ports.length - 1) * 14
-  }
-  return height
-}
 
 const buildMaps = (project: Project): NodeMaps => {
   const nodesById = new Map<string, AnyNode>()
@@ -281,7 +251,8 @@ const placeNode = (
   const minTop = tracker.nextTop
   const top = Math.max(proposedTop, minTop)
   coords.set(node.id, { x, y: top })
-  tracker.nextTop = top + rowSpacing
+  const height = estimateNodeHeight(node)
+  tracker.nextTop = top + height + rowSpacing
 }
 
 const placeLoadColumn = (
@@ -297,7 +268,8 @@ const placeLoadColumn = (
     const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
     const top = Math.max(cursor, tracker.nextTop)
     coords.set(node.id, { x, y: top })
-    tracker.nextTop = top + rowSpacing
+    const height = estimateNodeHeight(node)
+    tracker.nextTop = top + height + rowSpacing
     cursor = tracker.nextTop
   }
 }
