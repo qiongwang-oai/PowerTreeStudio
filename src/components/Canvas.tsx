@@ -2031,6 +2031,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             ...(typeof midpointX === 'number' ? { midpointX } : {}),
             defaultColor: edgeColor,
             groupKey: embeddedGroupKey,
+            enableCrossMarkers: false,
           },
           selectable: true,
         })

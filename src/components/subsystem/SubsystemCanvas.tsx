@@ -1295,6 +1295,7 @@ const skipPaneClickRef = useRef(false)
       defaultColor,
       extendMidpointRange: true,
       groupKey: key,
+      enableCrossMarkers: false,
     }
     return ({
       id: e.id,

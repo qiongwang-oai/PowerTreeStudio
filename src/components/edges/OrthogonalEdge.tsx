@@ -20,6 +20,7 @@ type OrthogonalEdgeData = {
   defaultColor?: string
   extendMidpointRange?: boolean
   groupKey?: string
+  enableCrossMarkers?: boolean
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value))
@@ -227,6 +228,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   const labelY = targetY - 6
 
   const groupKey = typeof data?.groupKey === 'string' ? data?.groupKey : undefined
+  const markersEnabled = data?.enableCrossMarkers !== false
 
   const rfIdFromStore = useStore((state) => state.rfId)
   const rfId = rfIdFromStore ?? 'default'
@@ -258,12 +260,19 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   }, [edgesState])
 
   const markers = useMemo(
-    () => computeMarkers(id, geometry, groupKey, registryEntries, edgeOrderMap),
-    [geometry, groupKey, id, registryEntries, edgeOrderMap]
+    () => (markersEnabled ? computeMarkers(id, geometry, groupKey, registryEntries, edgeOrderMap) : []),
+    [markersEnabled, id, geometry, groupKey, registryEntries, edgeOrderMap]
   )
 
   useEffect(() => {
     const registry = getRegistry(rfId)
+    if (!markersEnabled) {
+      if (registry.edges.delete(id)) {
+        notifyRegistry(rfId)
+      }
+      return
+    }
+
     const signature = `${geometry.path}|${groupKey ?? ''}`
     const existing = registry.edges.get(id)
     const record: RegisteredEdgeRecord = existing && existing.signature === signature
@@ -280,13 +289,14 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
         notifyRegistry(rfId)
       }
     }
-  }, [geometry, groupKey, id, rfId])
+  }, [geometry, groupKey, id, markersEnabled, rfId])
 
   useEffect(() => {
+    if (!markersEnabled) return
     if (import.meta.env.DEV && markers.length > 0) {
       console.debug('orthogonal markers', id, markers)
     }
-  }, [id, markers])
+  }, [id, markers, markersEnabled])
 
   const pointerIdRef = useRef<number | null>(null)
   const lastDragRef = useRef<{ offset: number; absoluteAxisCoord?: number; axis: 'x' | 'y' } | null>(null)
@@ -376,7 +386,7 @@ export default function OrthogonalEdge(props: EdgeProps<OrthogonalEdgeData>) {
   return (
     <>
       <BaseEdge path={path} style={{ ...style, stroke: strokeColor }} markerEnd={markerEnd} />
-      {markers.length > 0 && (
+      {markersEnabled && markers.length > 0 && (
         <EdgeLabelRenderer>
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
             {markers.map((marker) => (
