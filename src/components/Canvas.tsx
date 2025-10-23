@@ -1096,6 +1096,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     forcedMulti: boolean
   } | null>(null)
   const skipPaneClickRef = useRef(false)
+  const nodeSyncDisabledRef = useRef(false)
   const activeMultiSelection = multiSelectionPreview ?? multiSelection
 
   const handleSingleSelectClick = useCallback(() => {
@@ -2046,6 +2047,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   setEdgesRef.current = setEdges
 
   useEffect(() => {
+    if (nodeSyncDisabledRef.current) return
     setNodes(rfNodesInit)
   }, [rfNodesInit, setNodes])
 
@@ -2088,6 +2090,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
     for (const ch of changes){
+      if (ch.type === 'position' && ch.dragging === true) {
+        nodeSyncDisabledRef.current = true
+      }
       if (ch.type === 'dimensions') {
         const dims = ch.dimensions || (ch as any).dimensions
         if (!dims) continue
@@ -2114,13 +2119,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         const nested = parseNestedNodeId(ch.id)
         if (nested) {
           const layout = expandedLayouts.get(nested.subsystemId)
-          if (!layout) continue
+          if (!layout) {
+            nodeSyncDisabledRef.current = false
+            continue
+          }
           const stateNode = nodes.find(x=>x.id === ch.id)
           const pos = ch.position || stateNode?.position
-          if (!pos) continue
+          if (!pos) {
+            nodeSyncDisabledRef.current = false
+            continue
+          }
           const actualX = pos.x + layout.contentOffset.x
           const actualY = pos.y + layout.contentOffset.y
           nestedUpdateNodePos(layout.subsystemPath, nested.nodeId, actualX, actualY)
+          nodeSyncDisabledRef.current = false
           continue
         }
         if (ch.id.endsWith('::container')) {
@@ -2132,11 +2144,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
             const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
             setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
           }
+          nodeSyncDisabledRef.current = false
           continue
         }
         const n = nodes.find(x=>x.id===ch.id)
         const pos = n?.position || ch.position
-        if (pos) updatePos(ch.id, pos.x, pos.y)
+        if (pos) {
+          updatePos(ch.id, pos.x, pos.y)
+        }
+        nodeSyncDisabledRef.current = false
       }
     }
   }, [expandedLayouts, nestedUpdateNode, nestedUpdateNodePos, nodes, project.nodes, setSubsystemViewOffset, updateNode, updatePos])
