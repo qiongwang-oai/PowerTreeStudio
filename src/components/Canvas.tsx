@@ -1042,11 +1042,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const addEdgeStore = useStore(s=>s.addEdge)
   const addNodeStore = useStore(s=>s.addNode)
   const updatePos = useStore(s=>s.updateNodePos)
+  const updateNode = useStore(s=>s.updateNode)
   const removeNode = useStore(s=>s.removeNode)
   const removeEdge = useStore(s=>s.removeEdge)
   const updateEdgeStore = useStore(s=>s.updateEdge)
   const nestedAddNode = useStore(s=>s.nestedSubsystemAddNode)
   const nestedUpdateNodePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
+  const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
   const bulkUpdateNodesStore = useStore(s=>s.bulkUpdateNodes)
   const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
@@ -2086,35 +2088,58 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
     for (const ch of changes){
-      if (ch.type !== 'position' || ch.dragging !== false) continue
-      const nested = parseNestedNodeId(ch.id)
-      if (nested) {
-        const layout = expandedLayouts.get(nested.subsystemId)
-        if (!layout) continue
-        const stateNode = nodes.find(x=>x.id === ch.id)
-        const pos = ch.position || stateNode?.position
-        if (!pos) continue
-        const actualX = pos.x + layout.contentOffset.x
-        const actualY = pos.y + layout.contentOffset.y
-        nestedUpdateNodePos(layout.subsystemPath, nested.nodeId, actualX, actualY)
-        continue
-      }
-      if (ch.id.endsWith('::container')) {
-        const subsystemId = ch.id.split('::')[0]
-        const subsystem = project.nodes.find(n=>n.id===subsystemId)
-        const pos = ch.position || nodes.find(x=>x.id===ch.id)?.position
-        if (subsystem && pos) {
-          const baseX = typeof subsystem.x === 'number' ? subsystem.x : 0
-          const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
-          setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
+      if (ch.type === 'dimensions') {
+        const dims = ch.dimensions || (ch as any).dimensions
+        if (!dims) continue
+        const width = Number(dims.width)
+        const height = Number(dims.height)
+        const patch: Record<string, number> = {}
+        if (Number.isFinite(width)) patch.width = width
+        if (Number.isFinite(height)) patch.height = height
+        if (Object.keys(patch).length === 0) continue
+        const nested = parseNestedNodeId(ch.id)
+        if (nested) {
+          const layout = expandedLayouts.get(nested.subsystemId)
+          if (!layout) continue
+          nestedUpdateNode(layout.subsystemPath, nested.nodeId, patch)
+          continue
         }
+        if (ch.id.endsWith('::container')) {
+          continue
+        }
+        updateNode(ch.id, patch)
         continue
       }
-      const n = nodes.find(x=>x.id===ch.id)
-      const pos = n?.position || ch.position
-      if (pos) updatePos(ch.id, pos.x, pos.y)
+      if (ch.type === 'position' && ch.dragging === false) {
+        const nested = parseNestedNodeId(ch.id)
+        if (nested) {
+          const layout = expandedLayouts.get(nested.subsystemId)
+          if (!layout) continue
+          const stateNode = nodes.find(x=>x.id === ch.id)
+          const pos = ch.position || stateNode?.position
+          if (!pos) continue
+          const actualX = pos.x + layout.contentOffset.x
+          const actualY = pos.y + layout.contentOffset.y
+          nestedUpdateNodePos(layout.subsystemPath, nested.nodeId, actualX, actualY)
+          continue
+        }
+        if (ch.id.endsWith('::container')) {
+          const subsystemId = ch.id.split('::')[0]
+          const subsystem = project.nodes.find(n=>n.id===subsystemId)
+          const pos = ch.position || nodes.find(x=>x.id===ch.id)?.position
+          if (subsystem && pos) {
+            const baseX = typeof subsystem.x === 'number' ? subsystem.x : 0
+            const baseY = typeof subsystem.y === 'number' ? subsystem.y : 0
+            setSubsystemViewOffset(subsystemId, { x: pos.x - baseX, y: pos.y - baseY })
+          }
+          continue
+        }
+        const n = nodes.find(x=>x.id===ch.id)
+        const pos = n?.position || ch.position
+        if (pos) updatePos(ch.id, pos.x, pos.y)
+      }
     }
-  }, [expandedLayouts, nestedUpdateNodePos, nodes, project.nodes, setSubsystemViewOffset, updatePos])
+  }, [expandedLayouts, nestedUpdateNode, nestedUpdateNodePos, nodes, project.nodes, setSubsystemViewOffset, updateNode, updatePos])
 
   const onConnect = useCallback((c: Connection)=>{
     const reaches = (start:string, goal:string)=>{

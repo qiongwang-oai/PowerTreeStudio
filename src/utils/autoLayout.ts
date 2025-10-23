@@ -557,18 +557,15 @@ const assignCoordinates = (
 
       let previousBottom: number | null = null
       for (const node of decorated) {
-        let top = node.y
-        if (previousBottom !== null) {
-          const minTop = previousBottom + rowSpacing
-          if (top < minTop) {
-            top = minTop
-          }
+        if (previousBottom === null) {
+          previousBottom = node.y + node.height
+          continue
         }
-        if (Math.abs(top - node.y) > 1e-3) {
-          coords.set(node.id, { x: node.x, y: top })
-          node.y = top
-        }
-        previousBottom = top + node.height
+
+        const desiredTop = previousBottom + rowSpacing
+        coords.set(node.id, { x: node.x, y: desiredTop })
+        node.y = desiredTop
+        previousBottom = desiredTop + node.height
       }
     }
 

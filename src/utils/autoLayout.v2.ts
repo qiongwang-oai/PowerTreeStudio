@@ -1,47 +1,58 @@
-import { compute } from '../calc'
+import { AnyNode, Edge, Project } from '../models'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 import { estimateNodeHeight } from './nodeDimensions'
-import type { AnyNode, Edge, Project } from '../models'
 
-export type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
+type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
 
-type LayoutOptions = {
-  columnSpacing?: number
-  rowSpacing?: number
-}
+type Position = { x: number; y: number }
 
 type NodeMaps = {
   nodesById: Map<string, AnyNode>
   incoming: Map<string, Edge[]>
   outgoing: Map<string, Edge[]>
-}
-
-type DepthMap = Map<string, number>
-
-type HandleDescriptor = {
-  nodeId: string
-  handleId: string | null
-  order: number
-}
-
-type ColumnTracker = {
-  nextTop: number
+  existingPositions: Map<string, { x?: number; y?: number }>
 }
 
 const DEFAULT_COLUMN_SPACING = 500
-const DEFAULT_ROW_SPACING = 100
 const COLUMN_START_X = 120
-const TOP_MARGIN = 0
+const DEFAULT_ROW_SPACING = 100
+const BASE_COMPONENT_GAP = 200
+
+const typePriority = (type: AnyNode['type']): number => {
+  switch (type) {
+    case 'Load':
+      return 0
+    case 'Subsystem':
+      return 1
+    case 'Bus':
+      return 2
+    case 'Converter':
+    case 'DualOutputConverter':
+      return 3
+    case 'Source':
+    case 'SubsystemInput':
+      return 4
+    case 'Note':
+      return 5
+    default:
+      return 10
+  }
+}
 
 const buildMaps = (project: Project): NodeMaps => {
   const nodesById = new Map<string, AnyNode>()
   const incoming = new Map<string, Edge[]>()
   const outgoing = new Map<string, Edge[]>()
+  const existingPositions = new Map<string, { x?: number; y?: number }>()
 
   for (const node of project.nodes) {
     nodesById.set(node.id, node)
     incoming.set(node.id, [])
     outgoing.set(node.id, [])
+    existingPositions.set(node.id, {
+      x: typeof node.x === 'number' ? node.x : undefined,
+      y: typeof node.y === 'number' ? node.y : undefined,
+    })
   }
 
   for (const edge of project.edges) {
@@ -50,52 +61,47 @@ const buildMaps = (project: Project): NodeMaps => {
     outgoing.get(edge.from)!.push(edge)
   }
 
-  return { nodesById, incoming, outgoing }
+  return { nodesById, incoming, outgoing, existingPositions }
 }
 
-const isSinkNode = (node: AnyNode): boolean => node.type === 'Load' || node.type === 'Subsystem'
-
-const initializeDepths = (project: Project, maps: NodeMaps): DepthMap => {
-  const depthMap: DepthMap = new Map()
+const computeDepths = (project: Project, maps: NodeMaps): Map<string, number> => {
+  const depthMap = new Map<string, number>()
   const queue: string[] = []
+  const anchored = new Set<string>()
 
-  // initialize sinks and orphan nodes
+  const seedDepth = (nodeId: string, depth: number, lock: boolean) => {
+    const current = depthMap.get(nodeId)
+    if (current === undefined || depth > current) {
+      depthMap.set(nodeId, depth)
+      queue.push(nodeId)
+    }
+    if (lock) {
+      anchored.add(nodeId)
+    }
+  }
+
   for (const node of project.nodes) {
-    if (isSinkNode(node)) {
-      depthMap.set(node.id, 1)
-      queue.push(node.id)
+    const outputs = maps.outgoing.get(node.id) ?? []
+    const isAnchor = node.type === 'Load' || node.type === 'Subsystem' || outputs.length === 0
+    if (isAnchor) {
+      seedDepth(node.id, 1, true)
     }
   }
 
-  // ensure we have at least one seed to avoid empty traversal
-  if (queue.length === 0 && project.nodes.length) {
-    const fallback = project.nodes[0]
-    depthMap.set(fallback.id, 1)
-    queue.push(fallback.id)
-  }
-
-  const guardLimit = project.nodes.length * 8
-  let guard = guardLimit
-
-  while (queue.length && guard > 0) {
-    guard -= 1
-    const currentId = queue.shift()!
-    const currentDepth = depthMap.get(currentId) ?? 1
-    const incomingEdges = maps.incoming.get(currentId) ?? []
-    for (const edge of incomingEdges) {
-      const upstreamId = edge.from
-      const upstreamNode = maps.nodesById.get(upstreamId)
-      if (upstreamNode && isSinkNode(upstreamNode)) continue
-      const prev = depthMap.get(upstreamId)
-      const candidate = currentDepth + 1
-      if (prev === undefined || candidate > prev) {
-        depthMap.set(upstreamId, candidate)
-        queue.push(upstreamId)
-      }
+  while (queue.length) {
+    const childId = queue.shift()!
+    const childDepth = depthMap.get(childId) ?? 1
+    const parents = maps.incoming.get(childId) ?? []
+    for (const edge of parents) {
+      const parentId = edge.from
+      if (anchored.has(parentId)) continue
+      const candidate = childDepth + 1
+      if ((depthMap.get(parentId) ?? 0) >= candidate) continue
+      depthMap.set(parentId, candidate)
+      queue.push(parentId)
     }
   }
 
-  // clamp unresolved / orphan upstream nodes to depth 1 so they share the leftmost column
   for (const node of project.nodes) {
     if (!depthMap.has(node.id)) {
       depthMap.set(node.id, 1)
@@ -105,346 +111,171 @@ const initializeDepths = (project: Project, maps: NodeMaps): DepthMap => {
   return depthMap
 }
 
-const computePowerByNode = (project: Project): Map<string, number> => {
-  const result = compute(project)
-  const powerByNode = new Map<string, number>()
-  const nodeMetrics = (result && (result as any).nodes) || {}
-
-  const candidatesFromMetrics = (metrics: any): number[] => {
-    const scores: number[] = []
-    const maybeAdd = (val: unknown) => {
-      if (typeof val === 'number' && Number.isFinite(val)) scores.push(val)
-    }
-    maybeAdd(metrics?.P_in_total)
-    maybeAdd(metrics?.P_in)
-    maybeAdd(metrics?.P_out_total)
-    maybeAdd(metrics?.P_out)
-    return scores
-  }
+const buildComponents = (project: Project, maps: NodeMaps): string[][] => {
+  const visited = new Set<string>()
+  const components: string[][] = []
 
   for (const node of project.nodes) {
-    const metrics = nodeMetrics[node.id]
-    const scores = candidatesFromMetrics(metrics)
-    if (Array.isArray(metrics?.__outputs)) {
-      for (const sub of metrics.__outputs) {
-        const maybeVal = Number(sub?.P_out)
-        if (Number.isFinite(maybeVal)) scores.push(maybeVal)
+    if (visited.has(node.id)) continue
+    const stack = [node.id]
+    const members: string[] = []
+    visited.add(node.id)
+
+    while (stack.length) {
+      const current = stack.pop()!
+      members.push(current)
+
+      const neighbours = [
+        ...(maps.outgoing.get(current) ?? []).map(edge => edge.to),
+        ...(maps.incoming.get(current) ?? []).map(edge => edge.from),
+      ]
+
+      for (const neighbour of neighbours) {
+        if (visited.has(neighbour)) continue
+        visited.add(neighbour)
+        stack.push(neighbour)
       }
     }
-    if (scores.length) {
-      powerByNode.set(node.id, Math.max(...scores))
-    }
+
+    components.push(members)
   }
 
-  return powerByNode
+  return components
 }
 
-const sortLoadAndSubsystemColumn = (
-  project: Project,
-  depthMap: DepthMap,
-  maps: NodeMaps,
-  powerByNode: Map<string, number>
-): AnyNode[] => {
-  const loads = project.nodes.filter(node => node.type === 'Load' || node.type === 'Subsystem')
-
-  const rankByClosestUpstreamDepth = (nodeId: string): number => {
-    const incomingEdges = maps.incoming.get(nodeId) ?? []
-    let best = Infinity
-    for (const edge of incomingEdges) {
-      const upstreamDepth = depthMap.get(edge.from)
-      if (typeof upstreamDepth === 'number' && upstreamDepth < best) {
-        best = upstreamDepth
+const sortComponents = (components: string[][], depthMap: Map<string, number>, maps: NodeMaps): string[][] => {
+  return components
+    .map(nodeIds => {
+      let minDepth = Infinity
+      let minY = Infinity
+      for (const nodeId of nodeIds) {
+        const depth = depthMap.get(nodeId) ?? 0
+        if (depth < minDepth) minDepth = depth
+        const pos = maps.existingPositions.get(nodeId)
+        if (pos?.y !== undefined && pos.y < minY) {
+          minY = pos.y
+        }
       }
-    }
-    return Number.isFinite(best) ? best : Infinity
-  }
-
-  const byPower = (nodeId: string): number => powerByNode.get(nodeId) ?? 0
-
-  return [...loads].sort((a, b) => {
-    const depthDiff = rankByClosestUpstreamDepth(a.id) - rankByClosestUpstreamDepth(b.id)
-    if (depthDiff !== 0) return depthDiff
-    const powerDiff = byPower(b.id) - byPower(a.id)
-    if (Math.abs(powerDiff) > 1e-6) return powerDiff
-    return a.name.localeCompare(b.name)
-  })
-}
-
-const resolveHandleOrder = (
-  node: AnyNode,
-  incomingEdges: Edge[]
-): HandleDescriptor[] => {
-  const relevantEdges = [...incomingEdges]
-  const grouped = new Map<string, { handleId: string | null; edges: Edge[] }>()
-  for (const edge of relevantEdges) {
-    const handleId = (edge.toHandle ?? null) as string | null
-    const key = handleId ?? '__default__'
-    const bucket = grouped.get(key)
-    if (bucket) bucket.edges.push(edge)
-    else grouped.set(key, { handleId, edges: [edge] })
-  }
-
-  const totals = Array.from(grouped.values())
-  const storedOrder: string[] | undefined = Array.isArray((node as any).inputHandleOrder)
-    ? ((node as any).inputHandleOrder as string[])
-    : undefined
-
-  const orderIndex = (handleId: string | null): number => {
-    if (!storedOrder) return Number.MAX_SAFE_INTEGER
-    if (handleId === null) return storedOrder.length + 1
-    const index = storedOrder.indexOf(handleId)
-    return index === -1 ? storedOrder.length + 1 : index
-  }
-
-  return totals
-    .map(bucket => ({
-      nodeId: node.id,
-      handleId: bucket.handleId,
-      order: orderIndex(bucket.handleId),
-    }))
-    .sort((a, b) => {
-      if (a.order !== b.order) return a.order - b.order
-      // fallback deterministic order
-      const aKey = a.handleId ?? ''
-      const bKey = b.handleId ?? ''
-      return aKey.localeCompare(bKey)
+      if (!Number.isFinite(minDepth)) minDepth = 0
+      if (!Number.isFinite(minY)) minY = 0
+      return { nodeIds, minDepth, minY }
     })
-}
-
-const computeDesiredTop = (
-  downstreamNode: AnyNode,
-  downstreamTop: number,
-  handleIndex: number,
-  handleCount: number,
-  upstreamHeight: number,
-  rowSpacing: number
-): number => {
-  const downstreamHeight = estimateNodeHeight(downstreamNode)
-  const downstreamCenter = downstreamTop + downstreamHeight / 2
-  const desiredCenter = downstreamCenter
-  return desiredCenter - upstreamHeight / 2
-}
-
-const ensureColumnTracker = (
-  trackers: Map<number, ColumnTracker>,
-  columnIndex: number,
-  startTop: number
-): ColumnTracker => {
-  let tracker = trackers.get(columnIndex)
-  if (!tracker) {
-    tracker = { nextTop: startTop }
-    trackers.set(columnIndex, tracker)
-  }
-  return tracker
-}
-
-const placeNode = (
-  node: AnyNode,
-  columnIndex: number,
-  x: number,
-  proposedTop: number,
-  trackers: Map<number, ColumnTracker>,
-  coords: Map<string, { x: number; y: number }>,
-  rowSpacing: number
-) => {
-  const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
-  const minTop = tracker.nextTop
-  const top = Math.max(proposedTop, minTop)
-  coords.set(node.id, { x, y: top })
-  const height = estimateNodeHeight(node)
-  tracker.nextTop = top + height + rowSpacing
-}
-
-const placeLoadColumn = (
-  nodes: AnyNode[],
-  columnIndex: number,
-  x: number,
-  coords: Map<string, { x: number; y: number }>,
-  trackers: Map<number, ColumnTracker>,
-  rowSpacing: number
-) => {
-  let cursor = TOP_MARGIN
-  for (const node of nodes) {
-    const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
-    const top = Math.max(cursor, tracker.nextTop)
-    coords.set(node.id, { x, y: top })
-    const height = estimateNodeHeight(node)
-    tracker.nextTop = top + height + rowSpacing
-    cursor = tracker.nextTop
-  }
-}
-
-const groupHandlesForDepth = (
-  downstreamNodes: AnyNode[],
-  depthMap: DepthMap,
-  maps: NodeMaps,
-  currentDepth: number,
-  coords: Map<string, { x: number; y: number }>
-): HandleDescriptor[] => {
-  const entries: HandleDescriptor[] = []
-  for (const node of downstreamNodes) {
-    const incoming = maps.incoming.get(node.id) ?? []
-    const relevant = incoming.filter(edge => depthMap.get(edge.from) === currentDepth)
-    if (relevant.length === 0) continue
-    const descriptors = resolveHandleOrder(node, relevant)
-    let orderIndex = 0
-    for (const descriptor of descriptors) {
-      entries.push({ ...descriptor, order: orderIndex })
-      orderIndex += 1
-    }
-  }
-
-  return entries.sort((a, b) => {
-    const posA = coords.get(a.nodeId)
-    const posB = coords.get(b.nodeId)
-    const yA = posA ? posA.y : 0
-    const yB = posB ? posB.y : 0
-    if (yA !== yB) return yA - yB
-    if (a.order !== b.order) return a.order - b.order
-    const aKey = a.handleId ?? ''
-    const bKey = b.handleId ?? ''
-    return aKey.localeCompare(bKey)
-  })
-}
-
-const processColumnForDepth = (
-  depth: number,
-  depthMap: DepthMap,
-  maps: NodeMaps,
-  coords: Map<string, { x: number; y: number }>,
-  trackers: Map<number, ColumnTracker>,
-  columnIndex: number,
-  columnX: number,
-  rowSpacing: number
-) => {
-  const nodesAtDepth = Array.from(depthMap.entries())
-    .filter(([, depthValue]) => depthValue === depth)
-    .map(([nodeId]) => maps.nodesById.get(nodeId)!)
-
-  const downstreamNodes = Array.from(depthMap.entries())
-    .filter(([, depthValue]) => depthValue === depth - 1)
-    .map(([nodeId]) => maps.nodesById.get(nodeId)!)
     .sort((a, b) => {
-      const posA = coords.get(a.id)
-      const posB = coords.get(b.id)
-      const yA = posA ? posA.y : 0
-      const yB = posB ? posB.y : 0
-      return yA - yB
+      if (a.minDepth !== b.minDepth) return a.minDepth - b.minDepth
+      if (a.minY !== b.minY) return a.minY - b.minY
+      return a.nodeIds[0].localeCompare(b.nodeIds[0])
     })
+    .map(item => item.nodeIds)
+}
 
-  const remaining = new Set(nodesAtDepth.map(node => node.id))
-  const handleEntries = groupHandlesForDepth(downstreamNodes, depthMap, maps, depth, coords)
+const columnComparator = (maps: NodeMaps) => (aId: string, bId: string): number => {
+  const nodeA = maps.nodesById.get(aId)!
+  const nodeB = maps.nodesById.get(bId)!
 
-  for (const entry of handleEntries) {
-    const downstreamNode = maps.nodesById.get(entry.nodeId)!
-    const handleId = entry.handleId
-    const targetEdges = (maps.incoming.get(entry.nodeId) ?? []).filter(edge =>
-      depthMap.get(edge.from) === depth && (handleId === null ? edge.toHandle == null : edge.toHandle === handleId)
-    )
-    if (targetEdges.length === 0) continue
-    const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
-    const downstreamPos = coords.get(entry.nodeId)
-    const baseTop = downstreamPos ? downstreamPos.y : tracker.nextTop
-    const handleCount = Math.max(1, targetEdges.length)
-    let index = 0
-    for (const edge of targetEdges) {
-      const upstreamNode = maps.nodesById.get(edge.from)
-      if (!upstreamNode || !remaining.has(upstreamNode.id)) {
-        index += 1
-        continue
+  const priorityDiff = typePriority(nodeA.type) - typePriority(nodeB.type)
+  if (priorityDiff !== 0) return priorityDiff
+
+  const posA = maps.existingPositions.get(aId)?.y
+  const posB = maps.existingPositions.get(bId)?.y
+  if (posA !== undefined && posB !== undefined && Math.abs(posA - posB) > 1e-3) {
+    return posA - posB
+  }
+
+  return nodeA.name.localeCompare(nodeB.name) || aId.localeCompare(bId)
+}
+
+const layoutComponent = (
+  nodeIds: string[],
+  maps: NodeMaps,
+  depthMap: Map<string, number>,
+  columnSpacing: number,
+  rowSpacing: number,
+  baseY: number
+): { positions: Map<string, Position>; bottom: number } => {
+  const positions = new Map<string, Position>()
+  if (nodeIds.length === 0) {
+    return { positions, bottom: baseY }
+  }
+
+  let maxDepth = 1
+  for (const nodeId of nodeIds) {
+    const depth = depthMap.get(nodeId) ?? 1
+    if (depth > maxDepth) maxDepth = depth
+  }
+
+  const columnMap = new Map<number, string[]>()
+  for (const nodeId of nodeIds) {
+    const depth = depthMap.get(nodeId) ?? 1
+    const column = maxDepth - depth
+    const list = columnMap.get(column) ?? []
+    list.push(nodeId)
+    columnMap.set(column, list)
+  }
+
+  const sortedColumns = Array.from(columnMap.keys()).sort((a, b) => a - b)
+  const compare = columnComparator(maps)
+  let componentBottom = baseY
+
+  for (const column of sortedColumns) {
+    const entries = columnMap.get(column) ?? []
+    const sortedEntries = entries.slice().sort(compare)
+    const baseX = COLUMN_START_X + column * columnSpacing
+    let previousBottom: number | null = null
+
+    for (const nodeId of sortedEntries) {
+      const node = maps.nodesById.get(nodeId)
+      if (!node) continue
+      const height = estimateNodeHeight(node)
+      const top = previousBottom === null ? baseY : previousBottom + rowSpacing
+      positions.set(nodeId, { x: baseX, y: top })
+      previousBottom = top + height
+      if (previousBottom > componentBottom) {
+        componentBottom = previousBottom
       }
-      const upstreamHeight = estimateNodeHeight(upstreamNode)
-      const desiredTop = computeDesiredTop(
-        downstreamNode,
-        baseTop,
-        index,
-        handleCount,
-        upstreamHeight,
-        rowSpacing
-      )
-      const trackerMin = tracker.nextTop
-      const finalTop = Math.max(desiredTop, trackerMin)
-      placeNode(upstreamNode, columnIndex, columnX, finalTop, trackers, coords, rowSpacing)
-      remaining.delete(upstreamNode.id)
-      index += 1
     }
   }
 
-  if (remaining.size > 0) {
-    const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
-    const sorted = Array.from(remaining.values())
-      .map(id => maps.nodesById.get(id)!)
-      .sort((a, b) => a.name.localeCompare(b.name))
-    for (const node of sorted) {
-      const finalTop = tracker.nextTop
-      placeNode(node, columnIndex, columnX, finalTop, trackers, coords, rowSpacing)
-    }
-  }
+  return { positions, bottom: componentBottom }
 }
-
-const computeColumnIndex = (depth: number, maxDepth: number): number => {
-  const clampedDepth = Math.max(1, Math.min(depth, maxDepth))
-  return maxDepth - clampedDepth
-}
-
-const computeColumnX = (columnIndex: number, columnSpacing: number): number => COLUMN_START_X + columnIndex * columnSpacing
 
 export const autoLayoutProjectV2 = (
   project: Project,
-  options?: LayoutOptions
+  options?: { columnSpacing?: number; rowSpacing?: number }
 ): LayoutResult => {
-  const columnSpacing = typeof options?.columnSpacing === 'number' && options.columnSpacing > 0
-    ? options.columnSpacing
+  const maps = buildMaps(project)
+  const depthMap = computeDepths(project, maps)
+  const rawColumnSpacing = options?.columnSpacing
+  const columnSpacing = typeof rawColumnSpacing === 'number' && Number.isFinite(rawColumnSpacing) && rawColumnSpacing > 0
+    ? rawColumnSpacing
     : DEFAULT_COLUMN_SPACING
-  const rowSpacing = typeof options?.rowSpacing === 'number' && options.rowSpacing > 0
-    ? options.rowSpacing
+
+  const rawRowSpacing = options?.rowSpacing
+  const rowSpacing = typeof rawRowSpacing === 'number' && Number.isFinite(rawRowSpacing) && rawRowSpacing > 0
+    ? rawRowSpacing
     : DEFAULT_ROW_SPACING
 
-  if (project.nodes.length === 0) {
-    return { nodes: [], edges: [...project.edges] }
-  }
+  const spacingScale = rowSpacing / DEFAULT_ROW_SPACING
+  const componentGap = Math.max(rowSpacing, BASE_COMPONENT_GAP * spacingScale)
 
-  const maps = buildMaps(project)
-  const depthMap = initializeDepths(project, maps)
-  const maxDepth = Math.max(...depthMap.values())
-  const powerByNode = computePowerByNode(project)
-  const coords = new Map<string, { x: number; y: number }>()
-  const trackers = new Map<number, ColumnTracker>()
+  const components = sortComponents(buildComponents(project, maps), depthMap, maps)
+  const coords = new Map<string, Position>()
 
-  const loadNodes = sortLoadAndSubsystemColumn(project, depthMap, maps, powerByNode)
-  const loadColumnIndex = computeColumnIndex(1, maxDepth)
-  const loadColumnX = computeColumnX(loadColumnIndex, columnSpacing)
-  placeLoadColumn(loadNodes, loadColumnIndex, loadColumnX, coords, trackers, rowSpacing)
-
-  for (const [nodeId, depth] of depthMap.entries()) {
-    const node = maps.nodesById.get(nodeId)
-    if (!node) continue
-    if (node.type === 'Load' || node.type === 'Subsystem') continue
-    if (depth === 1 && !coords.has(nodeId)) {
-      const columnIndex = computeColumnIndex(1, maxDepth)
-      const x = computeColumnX(columnIndex, columnSpacing)
-      const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
-      const top = tracker.nextTop
-      placeNode(node, columnIndex, x, top, trackers, coords, rowSpacing)
+  let currentY = 0
+  for (const component of components) {
+    const { positions, bottom } = layoutComponent(component, maps, depthMap, columnSpacing, rowSpacing, currentY)
+    for (const [nodeId, pos] of positions.entries()) {
+      coords.set(nodeId, pos)
     }
-  }
-
-  for (let depth = 2; depth <= maxDepth; depth += 1) {
-    const columnIndex = computeColumnIndex(depth, maxDepth)
-    const columnX = computeColumnX(columnIndex, columnSpacing)
-    processColumnForDepth(depth, depthMap, maps, coords, trackers, columnIndex, columnX, rowSpacing)
+    currentY = bottom + componentGap
   }
 
   const nodes = project.nodes.map(node => {
-    const position = coords.get(node.id)
-    if (!position) return { ...node }
-    return { ...node, x: position.x, y: position.y } as AnyNode
+    const pos = coords.get(node.id)
+    if (!pos) return { ...node }
+    return { ...node, x: pos.x, y: pos.y } as AnyNode
   })
 
   const edges = computeOrderedEdgeMidpoints(project, coords)
 
   return { nodes, edges }
 }
-
-export type { LayoutOptions }
-

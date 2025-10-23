@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 
 import { autoLayoutProjectV2 } from '../utils/autoLayout.v2'
+import { estimateNodeHeight } from '../utils/nodeDimensions'
 import type { AnyNode, Project, SourceNode, ConverterNode, LoadNode, SubsystemNode } from '../models'
 
 const makeLinearProject = (): Project => {
@@ -142,6 +143,19 @@ const getNode = (nodes: AnyNode[], id: string): AnyNode => {
   return found
 }
 
+const verticalSpacingBetween = (nodes: AnyNode[], idA: string, idB: string): number => {
+  const first = getNode(nodes, idA)
+  const second = getNode(nodes, idB)
+  if (typeof first.y !== 'number' || typeof second.y !== 'number') {
+    throw new Error('Missing coordinates for spacing measurement')
+  }
+  const ordered = [first, second].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+  const top = ordered[0]
+  const bottom = ordered[1]
+  const topHeight = estimateNodeHeight(top)
+  return (bottom.y ?? 0) - ((top.y ?? 0) + topHeight)
+}
+
 describe('autoLayoutProjectV2', () => {
   it('places downstream loads to the right of their upstream sources respecting spacing', () => {
     const project = makeLinearProject()
@@ -167,8 +181,8 @@ describe('autoLayoutProjectV2', () => {
     expect(converterX).toBeGreaterThan(sourceX)
 
     // Loads maintain the configured vertical spacing or greater
-    const verticalGap = Math.abs((loadSecondary.y ?? 0) - (loadPrimary.y ?? 0))
-    expect(verticalGap).toBeGreaterThanOrEqual(140)
+    const verticalGap = verticalSpacingBetween(layout.nodes as AnyNode[], 'load-primary', 'load-secondary')
+    expect(verticalGap).toBeCloseTo(140, 3)
   })
 
   it('keeps floating sources in the load column when no path to a load exists', () => {
@@ -193,9 +207,8 @@ describe('autoLayoutProjectV2', () => {
     const sourceA = getNode(layout.nodes, 'source-a')
     const sourceB = getNode(layout.nodes, 'source-b')
 
-    const [top, bottom] = [sourceA, sourceB].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
-    const gap = Math.abs((bottom.y ?? 0) - (top.y ?? 0))
-    expect(gap).toBeGreaterThanOrEqual(rowSpacing)
+    const gap = verticalSpacingBetween(layout.nodes as AnyNode[], 'source-a', 'source-b')
+    expect(gap).toBeCloseTo(rowSpacing, 3)
   })
 
   it('orders edge midpoints left-to-right for lower column edges', () => {

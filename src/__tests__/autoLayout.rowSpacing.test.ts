@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 
 import { autoLayoutProject } from '../utils/autoLayout'
-import type { Project, SubsystemInputNode, ConverterNode, LoadNode } from '../models'
+import { estimateNodeHeight } from '../utils/nodeDimensions'
+import type { Project, SubsystemInputNode, ConverterNode, LoadNode, AnyNode } from '../models'
 
 const makeTestProject = (): Project => {
   const input: SubsystemInputNode = {
@@ -63,6 +64,22 @@ const yById = (nodes: Project['nodes'], id: string): number => {
   return found.y
 }
 
+const verticalSpacingBetween = (nodes: AnyNode[], idA: string, idB: string): number => {
+  const first = nodes.find(node => node.id === idA)
+  const second = nodes.find(node => node.id === idB)
+  if (!first || !second) {
+    throw new Error(`Expected nodes ${idA} and ${idB} in layout result`)
+  }
+  if (typeof first.y !== 'number' || typeof second.y !== 'number') {
+    throw new Error('Missing coordinates for spacing measurement')
+  }
+  const ordered = [first, second].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+  const top = ordered[0]
+  const bottom = ordered[1]
+  const topHeight = estimateNodeHeight(top)
+  return (bottom.y ?? 0) - ((top.y ?? 0) + topHeight)
+}
+
 const makeDisconnectedProject = (): Project => {
   const inputA: SubsystemInputNode = {
     id: 'inputA',
@@ -118,12 +135,15 @@ describe('autoLayoutProject row spacing', () => {
 
     const defaultLayout = autoLayoutProject(base, { rowSpacing: 100 })
     const customLayout = autoLayoutProject(base, { rowSpacing: 320 })
+    const tinyLayout = autoLayoutProject(base, { rowSpacing: 1 })
 
-    const defaultGap = Math.abs(yById(defaultLayout.nodes, 'loadB') - yById(defaultLayout.nodes, 'loadA'))
-    const customGap = Math.abs(yById(customLayout.nodes, 'loadB') - yById(customLayout.nodes, 'loadA'))
+    const defaultGap = verticalSpacingBetween(defaultLayout.nodes as AnyNode[], 'loadA', 'loadB')
+    const customGap = verticalSpacingBetween(customLayout.nodes as AnyNode[], 'loadA', 'loadB')
+    const tinyGap = verticalSpacingBetween(tinyLayout.nodes as AnyNode[], 'loadA', 'loadB')
 
-    expect(defaultGap).toBeGreaterThan(0)
-    expect(customGap).toBeGreaterThan(defaultGap)
+    expect(defaultGap).toBeCloseTo(100, 3)
+    expect(customGap).toBeCloseTo(320, 3)
+    expect(tinyGap).toBeCloseTo(1, 3)
   })
 
   it('scales spacing between disconnected components when row spacing changes', () => {

@@ -608,6 +608,7 @@ export default function SubsystemCanvas({
 }) {
   const addEdgeStore = useStore(s=>s.nestedSubsystemAddEdge)
   const updatePos = useStore(s=>s.nestedSubsystemUpdateNodePos)
+  const updateNodeNested = useStore(s=>s.nestedSubsystemUpdateNode)
   const removeNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const removeEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const updateEdgeNested = useStore(s=>s.nestedSubsystemUpdateEdge)
@@ -1671,13 +1672,25 @@ const skipPaneClickRef = useRef(false)
   const handleNodesChange = useCallback((changes:any)=>{
     setNodes(nds=>applyNodeChanges(changes, nds))
     for (const ch of changes){
+      if (ch.type === 'dimensions') {
+        const dims = ch.dimensions || (ch as any).dimensions
+        if (!dims) continue
+        const width = Number(dims.width)
+        const height = Number(dims.height)
+        const patch: Record<string, number> = {}
+        if (Number.isFinite(width)) patch.width = width
+        if (Number.isFinite(height)) patch.height = height
+        if (Object.keys(patch).length === 0) continue
+        updateNodeNested(path, ch.id, patch)
+        continue
+      }
       if (ch.type === 'position' && ch.dragging === false){
         const n = nodes.find(x=>x.id===ch.id)
         const pos = n?.position || ch.position
         if (pos) updatePos(path, ch.id, pos.x, pos.y)
       }
     }
-  }, [nodes, path, updatePos])
+  }, [nodes, path, updateNodeNested, updatePos])
 
   const onConnect = useCallback((c: Connection)=>{
     const reaches = (start:string, goal:string)=>{
