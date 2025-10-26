@@ -57,6 +57,70 @@ const makeTestProject = (): Project => {
   }
 }
 
+const makeBranchingProject = (): Project => {
+  const input: SubsystemInputNode = {
+    id: 'input',
+    type: 'SubsystemInput',
+    name: 'Input',
+    Vout: 12,
+  }
+
+  const converterA: ConverterNode = {
+    id: 'converterA',
+    type: 'Converter',
+    name: 'Converter A',
+    Vin_min: 10,
+    Vin_max: 14,
+    Vout: 5,
+    efficiency: { type: 'fixed', value: 0.92 },
+  }
+
+  const converterB: ConverterNode = {
+    id: 'converterB',
+    type: 'Converter',
+    name: 'Converter B',
+    Vin_min: 10,
+    Vin_max: 14,
+    Vout: 3.3,
+    efficiency: { type: 'fixed', value: 0.9 },
+  }
+
+  const loadA: LoadNode = {
+    id: 'loadA',
+    type: 'Load',
+    name: 'Load A',
+    Vreq: 5,
+    I_typ: 2,
+    I_max: 3,
+  }
+
+  const loadB: LoadNode = {
+    id: 'loadB',
+    type: 'Load',
+    name: 'Load B',
+    Vreq: 3.3,
+    I_typ: 1.5,
+    I_max: 2,
+  }
+
+  return {
+    id: 'branching',
+    name: 'Branching',
+    units: { voltage: 'V', current: 'A', power: 'W', resistance: 'mΩ' },
+    defaultMargins: { currentPct: 0.1, powerPct: 0.1, voltageDropPct: 0.1, voltageMarginPct: 0.1 },
+    scenarios: ['Typical'],
+    currentScenario: 'Typical',
+    nodes: [input, converterA, converterB, loadA, loadB],
+    edges: [
+      { id: 'e1', from: 'input', to: 'converterA' },
+      { id: 'e2', from: 'input', to: 'converterB' },
+      { id: 'e3', from: 'converterA', to: 'loadA' },
+      { id: 'e4', from: 'converterB', to: 'loadB' },
+    ],
+    markups: [],
+  }
+}
+
 const yById = (nodes: Project['nodes'], id: string): number => {
   const found = nodes.find(node => node.id === id)
   if (!found) throw new Error(`Node ${id} not found in layout result`)
@@ -144,6 +208,14 @@ describe('autoLayoutProject row spacing', () => {
     expect(defaultGap).toBeCloseTo(100, 3)
     expect(customGap).toBeCloseTo(320, 3)
     expect(tinyGap).toBeCloseTo(1, 3)
+  })
+
+  it('enforces the minimum gap for non-rightmost columns', () => {
+    const project = makeBranchingProject()
+    const layout = autoLayoutProject(project, { rowSpacing: 1 })
+
+    const gap = verticalSpacingBetween(layout.nodes as AnyNode[], 'converterA', 'converterB')
+    expect(gap).toBeGreaterThanOrEqual(1 - 1e-6)
   })
 
   it('scales spacing between disconnected components when row spacing changes', () => {

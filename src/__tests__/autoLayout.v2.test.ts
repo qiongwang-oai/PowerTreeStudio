@@ -57,6 +57,70 @@ const makeLinearProject = (): Project => {
   }
 }
 
+const makeBranchingProject = (): Project => {
+  const source: SourceNode = {
+    id: 'source',
+    type: 'Source',
+    name: 'Battery',
+    Vout: 48,
+  }
+
+  const converterA: ConverterNode = {
+    id: 'converter-a',
+    type: 'Converter',
+    name: 'Converter A',
+    Vin_min: 40,
+    Vin_max: 60,
+    Vout: 12,
+    efficiency: { type: 'fixed', value: 0.95 },
+  }
+
+  const converterB: ConverterNode = {
+    id: 'converter-b',
+    type: 'Converter',
+    name: 'Converter B',
+    Vin_min: 40,
+    Vin_max: 60,
+    Vout: 5,
+    efficiency: { type: 'fixed', value: 0.93 },
+  }
+
+  const loadA: LoadNode = {
+    id: 'load-a',
+    type: 'Load',
+    name: 'Load A',
+    Vreq: 12,
+    I_typ: 4,
+    I_max: 6,
+  }
+
+  const loadB: LoadNode = {
+    id: 'load-b',
+    type: 'Load',
+    name: 'Load B',
+    Vreq: 5,
+    I_typ: 3,
+    I_max: 4,
+  }
+
+  return {
+    id: 'branching-project-v2',
+    name: 'Branching Project',
+    units: { voltage: 'V', current: 'A', power: 'W', resistance: 'mΩ' },
+    defaultMargins: { currentPct: 0.1, powerPct: 0.1, voltageDropPct: 0.1, voltageMarginPct: 0.1 },
+    scenarios: ['Typical'],
+    currentScenario: 'Typical',
+    nodes: [source, converterA, converterB, loadA, loadB],
+    edges: [
+      { id: 'e-source-a', from: 'source', to: 'converter-a' },
+      { id: 'e-source-b', from: 'source', to: 'converter-b' },
+      { id: 'e-a-load', from: 'converter-a', to: 'load-a' },
+      { id: 'e-b-load', from: 'converter-b', to: 'load-b' },
+    ],
+    markups: [],
+  }
+}
+
 const makeFloatingSourceProject = (): Project => {
   const sourceA: SourceNode = {
     id: 'source-a',
@@ -185,6 +249,22 @@ describe('autoLayoutProjectV2', () => {
     expect(verticalGap).toBeCloseTo(140, 3)
   })
 
+  it('honors 1px spacing in the rightmost column', () => {
+    const project = makeLinearProject()
+    const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing: 1 })
+
+    const gap = verticalSpacingBetween(layout.nodes as AnyNode[], 'load-primary', 'load-secondary')
+    expect(gap).toBeCloseTo(1, 1e-6)
+  })
+
+  it('maintains the configured minimum gap for upstream columns', () => {
+    const project = makeBranchingProject()
+    const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing: 1 })
+
+    const gap = verticalSpacingBetween(layout.nodes as AnyNode[], 'converter-a', 'converter-b')
+    expect(gap).toBeGreaterThanOrEqual(1 - 1e-6)
+  })
+
   it('keeps floating sources in the load column when no path to a load exists', () => {
     const project = makeFloatingSourceProject()
     const layout = autoLayoutProjectV2(project, { columnSpacing: 280, rowSpacing: 120 })
@@ -203,9 +283,6 @@ describe('autoLayoutProjectV2', () => {
     const project = makeParallelSourcesProject()
     const rowSpacing = 160
     const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing })
-
-    const sourceA = getNode(layout.nodes, 'source-a')
-    const sourceB = getNode(layout.nodes, 'source-b')
 
     const gap = verticalSpacingBetween(layout.nodes as AnyNode[], 'source-a', 'source-b')
     expect(gap).toBeCloseTo(rowSpacing, 3)
