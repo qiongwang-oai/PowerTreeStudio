@@ -48,6 +48,7 @@ import {
   sanitizeSubsystemHandleOrder,
   orderSubsystemPorts,
 } from './SubsystemNodeLayout'
+import { estimateNodeHeight } from '../utils/nodeSizing'
 import {
   clampPointToBounds,
   DEFAULT_CANVAS_BOUNDS,
@@ -62,7 +63,6 @@ import {
   isKeyboardPanOverrideActive,
 } from '../utils/keyboardPan'
 
-const SUBSYSTEM_EMBEDDED_MIN_HEIGHT = 96
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
 const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
 const EMBEDDED_NODE_MARGIN_X = 48
@@ -852,58 +852,50 @@ type ExpandedSubsystemLayout = {
 
 function estimateEmbeddedNodeSize(node: AnyNode): { width: number; height: number } {
   const rawWidth = Number((node as any).width)
-  const rawHeight = Number((node as any).height)
   const hasWidth = Number.isFinite(rawWidth) && rawWidth > 0
-  const hasHeight = Number.isFinite(rawHeight) && rawHeight > 0
+  const fallbackHeight = estimateNodeHeight(node)
+  const height = fallbackHeight
+
   switch (node.type) {
     case 'Load':
       return {
         width: hasWidth ? rawWidth : 236,
-        // Align closer to the rendered card height so container padding stays tight.
-        height: hasHeight ? rawHeight : 108,
+        height,
       }
     case 'Converter':
       return {
         width: hasWidth ? rawWidth : 210,
-        height: hasHeight ? rawHeight : 102,
+        height,
       }
     case 'Source':
       return {
         width: hasWidth ? rawWidth : 190,
-        height: hasHeight ? rawHeight : 94,
+        height,
       }
     case 'SubsystemInput':
       return {
         width: hasWidth ? rawWidth : 200,
-        height: hasHeight ? rawHeight : 100,
+        height,
       }
-    case 'Subsystem': {
-      const ports = Array.isArray((node as any).project?.nodes)
-        ? (node as any).project.nodes.filter((n: any) => n.type === 'SubsystemInput')
-        : []
-      const estimatedHeight = computeSubsystemNodeMinHeight(ports.length)
+    case 'Subsystem':
       return {
         width: hasWidth ? rawWidth : 240,
-        height: hasHeight ? rawHeight : Math.max(estimatedHeight, SUBSYSTEM_EMBEDDED_MIN_HEIGHT),
+        height,
       }
-    }
     case 'Bus':
       return {
         width: hasWidth ? rawWidth : 200,
-        height: hasHeight ? rawHeight : 102,
+        height,
       }
-    case 'Note': {
-      const text = String((node as any).text ?? '')
-      const lines = text.length ? Math.min(text.split(/\r?\n/g).length, 6) : 1
+    case 'Note':
       return {
         width: hasWidth ? rawWidth : 240,
-        height: hasHeight ? rawHeight : 96 + lines * 18,
+        height,
       }
-    }
     default:
       return {
         width: hasWidth ? rawWidth : DEFAULT_EMBEDDED_NODE_WIDTH,
-        height: hasHeight ? rawHeight : DEFAULT_EMBEDDED_NODE_HEIGHT,
+        height,
       }
   }
 }

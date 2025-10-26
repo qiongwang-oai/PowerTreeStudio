@@ -2,6 +2,8 @@ import { compute } from '../calc'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 import type { AnyNode, Edge, Project } from '../models'
 
+import { estimateNodeHeight } from './nodeSizing'
+
 export type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
 
 type LayoutOptions = {
@@ -31,37 +33,6 @@ const DEFAULT_COLUMN_SPACING = 500
 const DEFAULT_ROW_SPACING = 100
 const COLUMN_START_X = 120
 const TOP_MARGIN = 0
-
-const typeBaseHeight: Record<string, number> = {
-  Source: 94,
-  Converter: 100,
-  DualOutputConverter: 118,
-  Load: 132,
-  Bus: 140,
-  Note: 120,
-  Subsystem: 170,
-  SubsystemInput: 100,
-}
-
-const estimateNodeHeight = (node: AnyNode | undefined): number => {
-  if (!node) return DEFAULT_ROW_SPACING
-  const explicitHeight = Number((node as any).height)
-  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
-    return explicitHeight
-  }
-  let height = typeBaseHeight[node.type] ?? DEFAULT_ROW_SPACING
-  if (node.type === 'DualOutputConverter') {
-    const outputs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
-    if (outputs.length > 1) height += (outputs.length - 1) * 14
-  }
-  if (node.type === 'Subsystem') {
-    const ports = Array.isArray((node as any).project?.nodes)
-      ? (node as any).project.nodes.filter((p: any) => p?.type === 'SubsystemInput')
-      : []
-    if (ports.length > 1) height += (ports.length - 1) * 14
-  }
-  return height
-}
 
 const buildMaps = (project: Project): NodeMaps => {
   const nodesById = new Map<string, AnyNode>()
@@ -275,13 +246,15 @@ const placeNode = (
   proposedTop: number,
   trackers: Map<number, ColumnTracker>,
   coords: Map<string, { x: number; y: number }>,
-  rowSpacing: number
+  rowSpacing: number,
+  isRightmostColumn: boolean
 ) => {
   const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
   const minTop = tracker.nextTop
   const top = Math.max(proposedTop, minTop)
   coords.set(node.id, { x, y: top })
-  tracker.nextTop = top + rowSpacing
+  const increment = isRightmostColumn ? estimateNodeHeight(node) + rowSpacing : rowSpacing
+  tracker.nextTop = top + increment
 }
 
 const placeLoadColumn = (
@@ -297,7 +270,8 @@ const placeLoadColumn = (
     const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
     const top = Math.max(cursor, tracker.nextTop)
     coords.set(node.id, { x, y: top })
-    tracker.nextTop = top + rowSpacing
+    const increment = estimateNodeHeight(node) + rowSpacing
+    tracker.nextTop = top + increment
     cursor = tracker.nextTop
   }
 }
@@ -343,7 +317,8 @@ const processColumnForDepth = (
   trackers: Map<number, ColumnTracker>,
   columnIndex: number,
   columnX: number,
-  rowSpacing: number
+  rowSpacing: number,
+  rightmostColumnIndex: number
 ) => {
   const nodesAtDepth = Array.from(depthMap.entries())
     .filter(([, depthValue]) => depthValue === depth)
@@ -392,7 +367,7 @@ const processColumnForDepth = (
       )
       const trackerMin = tracker.nextTop
       const finalTop = Math.max(desiredTop, trackerMin)
-      placeNode(upstreamNode, columnIndex, columnX, finalTop, trackers, coords, rowSpacing)
+      placeNode(upstreamNode, columnIndex, columnX, finalTop, trackers, coords, rowSpacing, columnIndex === rightmostColumnIndex)
       remaining.delete(upstreamNode.id)
       index += 1
     }
@@ -405,7 +380,7 @@ const processColumnForDepth = (
       .sort((a, b) => a.name.localeCompare(b.name))
     for (const node of sorted) {
       const finalTop = tracker.nextTop
-      placeNode(node, columnIndex, columnX, finalTop, trackers, coords, rowSpacing)
+      placeNode(node, columnIndex, columnX, finalTop, trackers, coords, rowSpacing, columnIndex === rightmostColumnIndex)
     }
   }
 }
@@ -453,14 +428,14 @@ export const autoLayoutProjectV2 = (
       const x = computeColumnX(columnIndex, columnSpacing)
       const tracker = ensureColumnTracker(trackers, columnIndex, TOP_MARGIN)
       const top = tracker.nextTop
-      placeNode(node, columnIndex, x, top, trackers, coords, rowSpacing)
+      placeNode(node, columnIndex, x, top, trackers, coords, rowSpacing, columnIndex === loadColumnIndex)
     }
   }
 
   for (let depth = 2; depth <= maxDepth; depth += 1) {
     const columnIndex = computeColumnIndex(depth, maxDepth)
     const columnX = computeColumnX(columnIndex, columnSpacing)
-    processColumnForDepth(depth, depthMap, maps, coords, trackers, columnIndex, columnX, rowSpacing)
+    processColumnForDepth(depth, depthMap, maps, coords, trackers, columnIndex, columnX, rowSpacing, loadColumnIndex)
   }
 
   const nodes = project.nodes.map(node => {

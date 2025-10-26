@@ -2,6 +2,8 @@ import { AnyNode, Edge, Project } from '../models'
 import { compute } from '../calc'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 
+import { estimateNodeHeight } from './nodeSizing'
+
 type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
 
 type NodeInfo = {
@@ -328,37 +330,9 @@ const assignCoordinates = (
     return span
   }
 
-  // Approximate visual heights for node types to align handle centers
-  const typeBaseHeight: Record<string, number> = {
-  Source: 94,
-  Converter: 100,
-  DualOutputConverter: 118,
-  Load: 132,
-  Bus: 140,
-  Note: 120,
-  Subsystem: 170,
-  SubsystemInput: 100,
-  }
-
   const estimateNodeHeightById = (nodeId: string): number => {
     const node = maps.nodesById.get(nodeId)
-    if (!node) return rowSpacing
-  const explicitHeight = Number((node as any).height)
-  if (Number.isFinite(explicitHeight) && explicitHeight > 0) {
-    return explicitHeight
-  }
-    let h = typeBaseHeight[node.type] ?? rowSpacing
-    if (node.type === 'DualOutputConverter') {
-      const outs = Array.isArray((node as any).outputs) ? (node as any).outputs : []
-      if (outs.length > 1) h += (outs.length - 1) * 14
-    }
-    if (node.type === 'Subsystem') {
-      const ports = Array.isArray((node as any).project?.nodes)
-        ? (node as any).project.nodes.filter((p: any) => p?.type === 'SubsystemInput')
-        : []
-      if (ports.length > 1) h += (ports.length - 1) * 14
-    }
-    return h
+    return estimateNodeHeight(node)
   }
 
   const centerY = (nodeId: string): number => {
@@ -497,6 +471,43 @@ const assignCoordinates = (
       })
     })
 
+    const rightmostColumn = columnEntries.reduce<number>((max, entry) => (
+      entry.column > max ? entry.column : max
+    ), Number.NEGATIVE_INFINITY)
+
+    if (Number.isFinite(rightmostColumn)) {
+      const rightmostNodes = columnEntries
+        .filter(entry => entry.column === rightmostColumn)
+        .flatMap(entry => entry.nodes)
+        .map(info => {
+          const pos = coords.get(info.id)
+          if (!pos) return null
+          return {
+            id: info.id,
+            pos,
+            height: estimateNodeHeightById(info.id),
+          }
+        })
+        .filter((value): value is { id: string; pos: { x: number; y: number }; height: number } => !!value)
+        .sort((a, b) => a.pos.y - b.pos.y)
+
+      if (rightmostNodes.length > 1) {
+        let previousTop = rightmostNodes[0].pos.y
+        let previousHeight = rightmostNodes[0].height
+        for (let index = 1; index < rightmostNodes.length; index += 1) {
+          const current = rightmostNodes[index]
+          const desiredTop = previousTop + previousHeight + rowSpacing
+          if (Math.abs(current.pos.y - desiredTop) > 1e-3) {
+            const nextPosition = { x: current.pos.x, y: desiredTop }
+            coords.set(current.id, nextPosition)
+            current.pos = nextPosition
+          }
+          previousTop = current.pos.y
+          previousHeight = current.height
+        }
+      }
+    }
+
     for (let idx = columnEntries.length - 2; idx >= 0; idx--) {
       const { nodes } = columnEntries[idx]
       for (const info of nodes) {
@@ -523,6 +534,7 @@ const assignCoordinates = (
     }
 
     for (const entry of columnEntries) {
+      if (entry.column === rightmostColumn) continue
       if (entry.nodes.length <= 1) continue
       const decorated = entry.nodes
         .map(info => {
@@ -567,10 +579,13 @@ const assignCoordinates = (
 
     const componentNodeIds = component.nodeIds
     let minPlacedY = Infinity
+    let maxPlacedBottom = startY
     for (const nodeId of componentNodeIds) {
       const pos = coords.get(nodeId)
       if (!pos) continue
       if (pos.y < minPlacedY) minPlacedY = pos.y
+      const bottom = pos.y + estimateNodeHeightById(nodeId)
+      if (bottom > maxPlacedBottom) maxPlacedBottom = bottom
     }
     if (Number.isFinite(minPlacedY) && minPlacedY < startY) {
       const correction = startY - minPlacedY
@@ -579,9 +594,11 @@ const assignCoordinates = (
         if (!pos) continue
         coords.set(nodeId, { x: pos.x, y: pos.y + correction })
       }
+      maxPlacedBottom += correction
     }
 
-    currentY = startY + componentHeight + componentGap
+    const effectiveComponentHeight = Math.max(componentHeight, maxPlacedBottom - startY)
+    currentY = startY + effectiveComponentHeight + componentGap
   }
 
   return coords

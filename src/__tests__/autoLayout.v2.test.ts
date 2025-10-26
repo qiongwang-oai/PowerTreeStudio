@@ -30,6 +30,8 @@ const makeLinearProject = (): Project => {
     I_max: 12,
   }
 
+  ;(loadPrimary as any).height = 130
+
   const loadSecondary: LoadNode = {
     id: 'load-secondary',
     type: 'Load',
@@ -38,6 +40,8 @@ const makeLinearProject = (): Project => {
     I_typ: 5,
     I_max: 7,
   }
+
+  ;(loadSecondary as any).height = 130
 
   return {
     id: 'linear-project',
@@ -168,7 +172,24 @@ describe('autoLayoutProjectV2', () => {
 
     // Loads maintain the configured vertical spacing or greater
     const verticalGap = Math.abs((loadSecondary.y ?? 0) - (loadPrimary.y ?? 0))
+    const [upper, lower] = [loadPrimary, loadSecondary].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+    const upperHeight = Number((upper as any).height) || 0
+    const bottomToTopGap = (lower.y ?? 0) - ((upper.y ?? 0) + upperHeight)
     expect(verticalGap).toBeGreaterThanOrEqual(140)
+    expect(bottomToTopGap).toBeCloseTo(140, 1e-3)
+  })
+
+  it('honors 1px spacing in the rightmost column', () => {
+    const project = makeLinearProject()
+    const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing: 1 })
+
+    const loadPrimary = getNode(layout.nodes, 'load-primary')
+    const loadSecondary = getNode(layout.nodes, 'load-secondary')
+    const [upper, lower] = [loadPrimary, loadSecondary].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+    const upperHeight = Number((upper as any).height) || 0
+    const gap = (lower.y ?? 0) - ((upper.y ?? 0) + upperHeight)
+
+    expect(gap).toBeCloseTo(1, 1e-6)
   })
 
   it('keeps floating sources in the load column when no path to a load exists', () => {

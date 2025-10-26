@@ -30,6 +30,8 @@ const makeTestProject = (): Project => {
     I_max: 3,
   }
 
+  ;(loadA as any).height = 120
+
   const loadB: LoadNode = {
     id: 'loadB',
     type: 'Load',
@@ -38,6 +40,8 @@ const makeTestProject = (): Project => {
     I_typ: 1.5,
     I_max: 2,
   }
+
+  ;(loadB as any).height = 120
 
   return {
     id: 'test-project',
@@ -61,6 +65,21 @@ const yById = (nodes: Project['nodes'], id: string): number => {
   if (!found) throw new Error(`Node ${id} not found in layout result`)
   if (typeof found.y !== 'number') throw new Error(`Node ${id} missing y coordinate`)
   return found.y
+}
+
+const gapBetweenLoads = (nodes: Project['nodes'], idA: string, idB: string): number => {
+  const candidates = [idA, idB]
+    .map(id => {
+      const node = nodes.find(entry => entry.id === id)
+      if (!node) throw new Error(`Node ${id} not found in layout result`)
+      const top = typeof node.y === 'number' ? node.y : 0
+      const height = Number((node as any).height)
+      return { node, top, height: Number.isFinite(height) ? height : 0 }
+    })
+    .sort((a, b) => a.top - b.top)
+  const upper = candidates[0]
+  const lower = candidates[1]
+  return (lower.top ?? 0) - (upper.top + upper.height)
 }
 
 const makeDisconnectedProject = (): Project => {
@@ -119,11 +138,20 @@ describe('autoLayoutProject row spacing', () => {
     const defaultLayout = autoLayoutProject(base, { rowSpacing: 100 })
     const customLayout = autoLayoutProject(base, { rowSpacing: 320 })
 
-    const defaultGap = Math.abs(yById(defaultLayout.nodes, 'loadB') - yById(defaultLayout.nodes, 'loadA'))
-    const customGap = Math.abs(yById(customLayout.nodes, 'loadB') - yById(customLayout.nodes, 'loadA'))
+    const defaultGap = gapBetweenLoads(defaultLayout.nodes, 'loadA', 'loadB')
+    const customGap = gapBetweenLoads(customLayout.nodes, 'loadA', 'loadB')
 
-    expect(defaultGap).toBeGreaterThan(0)
-    expect(customGap).toBeGreaterThan(defaultGap)
+    expect(defaultGap).toBeCloseTo(100, 1e-3)
+    expect(customGap).toBeCloseTo(320, 1e-3)
+  })
+
+  it('honors 1px row spacing in the rightmost column', () => {
+    const base = makeTestProject()
+
+    const tightLayout = autoLayoutProject(base, { rowSpacing: 1 })
+    const gap = gapBetweenLoads(tightLayout.nodes, 'loadA', 'loadB')
+
+    expect(gap).toBeCloseTo(1, 1e-6)
   })
 
   it('scales spacing between disconnected components when row spacing changes', () => {
