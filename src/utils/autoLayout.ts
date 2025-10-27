@@ -538,10 +538,30 @@ const assignCoordinates = (
           nextY = minY
         }
         if (Math.abs(nextY - item.pos.y) > 1e-3) {
-          coords.set(item.id, { x: item.pos.x, y: nextY })
+          const adjusted = { x: item.pos.x, y: nextY }
+          coords.set(item.id, adjusted)
+          item.pos = adjusted
+        } else {
+          item.pos = { ...item.pos }
         }
-        previousY = nextY
+        previousY = item.pos.y
       })
+
+      let previousBottom = decorated[0].pos.y + estimateNodeHeightById(decorated[0].id)
+      for (let idx = 1; idx < decorated.length; idx += 1) {
+        const current = decorated[idx]
+        const currentPos = coords.get(current.id)
+        if (!currentPos) continue
+        const minTop = previousBottom + rowSpacing
+        if (currentPos.y < minTop) {
+          const adjusted = { x: currentPos.x, y: minTop }
+          coords.set(current.id, adjusted)
+          current.pos = adjusted
+        } else {
+          current.pos = currentPos
+        }
+        previousBottom = current.pos.y + estimateNodeHeightById(current.id)
+      }
     }
 
     const enforceColumnSpacing = (entry: { nodes: NodeInfo[] }) => {
