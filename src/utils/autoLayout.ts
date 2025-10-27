@@ -2,6 +2,7 @@ import { AnyNode, Edge, Project } from '../models'
 import { compute } from '../calc'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 
+import { getInputHandleTopOffset, getOutputHandleTopOffset } from './handleOffsets'
 import { estimateNodeHeight } from './nodeSizing'
 
 type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
@@ -508,73 +509,88 @@ const assignCoordinates = (
       }
     }
 
-    for (let idx = columnEntries.length - 2; idx >= 0; idx--) {
-      const { nodes } = columnEntries[idx]
-      for (const info of nodes) {
-        const parentPos = coords.get(info.id)
-        if (!parentPos) continue
-        const outgoing = maps.outgoing.get(info.id) ?? []
-        let bestChildId: string | null = null
-        let bestChildY: number | null = null
-        for (const edge of outgoing) {
-          const childPos = coords.get(edge.to)
-          if (!childPos) continue
-          if (bestChildY === null || childPos.y < bestChildY) {
-            bestChildY = childPos.y
-            bestChildId = edge.to
-          }
-        }
-        if (!bestChildId) continue
-        const parentCenter = centerY(info.id)
-        const childCenter = centerY(bestChildId)
-        const shift = childCenter - parentCenter
-        if (Math.abs(shift) < 1e-3) continue
-        coords.set(info.id, { x: parentPos.x, y: parentPos.y + shift })
-      }
-    }
-
-    for (const entry of columnEntries) {
-      if (entry.column === rightmostColumn) continue
-      if (entry.nodes.length <= 1) continue
-      const decorated = entry.nodes
+    for (let idx = columnEntries.length - 2; idx >= 0; idx -= 1) {
+      const { column, nodes } = columnEntries[idx]
+      const decorated = nodes
         .map(info => {
           const pos = coords.get(info.id)
           if (!pos) return null
+          const node = maps.nodesById.get(info.id)
+          if (!node) return null
           const depth = depthMap.get(info.id) ?? 0
-          const children = (maps.outgoing.get(info.id) ?? []).filter(edge => {
-            const targetDepth = depthMap.get(edge.to)
-            return typeof targetDepth === 'number' && targetDepth > depth
-          })
-          return {
-            id: info.id,
-            pos,
-            hasForwardChildren: children.length > 0,
-          }
+          return { id: info.id, pos, node, depth }
         })
-        .filter((value): value is { id: string; pos: { x: number; y: number }; hasForwardChildren: boolean } => !!value)
+        .filter((value): value is { id: string; pos: { x: number; y: number }; node: AnyNode; depth: number } => !!value)
         .sort((a, b) => a.pos.y - b.pos.y)
 
-      if (decorated.length <= 1) continue
-      const baseY = decorated[0].pos.y
-      let previousY = baseY - rowSpacing
+      let previousBottom: number | null = null
 
-      decorated.forEach((item, index) => {
-        let nextY = item.pos.y
-        if (!item.hasForwardChildren) {
-          const desiredY = baseY + index * rowSpacing
-          if (nextY > desiredY) {
-            nextY = desiredY
+      for (const item of decorated) {
+        const currentPos = coords.get(item.id)
+        if (!currentPos) continue
+        const nodeHeight = estimateNodeHeightById(item.id)
+        const outgoing = (maps.outgoing.get(item.id) ?? []).filter(edge => {
+          const targetDepth = depthMap.get(edge.to)
+          if (typeof targetDepth !== 'number') return false
+          const targetColumn = depthToColumn.get(targetDepth)
+          return typeof targetColumn === 'number' && targetColumn > column
+        })
+
+        let desiredTop = currentPos.y
+
+        if (outgoing.length > 0) {
+          let topmostDownstreamY: number | null = null
+          for (const edge of outgoing) {
+            const targetPos = coords.get(edge.to)
+            const targetNode = maps.nodesById.get(edge.to)
+            if (!targetPos || !targetNode) continue
+            const handleOffset = getInputHandleTopOffset(targetNode, (edge.toHandle as string | null) ?? null)
+            if (!Number.isFinite(handleOffset)) continue
+            const handleY = targetPos.y + handleOffset
+            if (!Number.isFinite(handleY)) continue
+            if (topmostDownstreamY === null || handleY < topmostDownstreamY) {
+              topmostDownstreamY = handleY
+            }
+          }
+
+          let topmostOutputOffset: number | null = null
+          for (const edge of outgoing) {
+            const offset = getOutputHandleTopOffset(item.node, (edge.fromHandle as string | null) ?? null)
+            if (!Number.isFinite(offset)) continue
+            if (topmostOutputOffset === null || offset < topmostOutputOffset) {
+              topmostOutputOffset = offset
+            }
+          }
+          if (topmostOutputOffset === null) {
+            const fallbackOffset = getOutputHandleTopOffset(item.node, null)
+            if (Number.isFinite(fallbackOffset)) {
+              topmostOutputOffset = fallbackOffset
+            }
+          }
+
+          if (topmostDownstreamY !== null && topmostOutputOffset !== null) {
+            desiredTop = topmostDownstreamY - topmostOutputOffset
           }
         }
-        const minY = previousY + rowSpacing
-        if (nextY < minY) {
-          nextY = minY
+
+        const minAllowedTop = previousBottom !== null ? previousBottom + 1 : Number.NEGATIVE_INFINITY
+        if (desiredTop < minAllowedTop) {
+          desiredTop = minAllowedTop
         }
-        if (Math.abs(nextY - item.pos.y) > 1e-3) {
-          coords.set(item.id, { x: item.pos.x, y: nextY })
+
+        if (Math.abs(desiredTop - currentPos.y) > 1e-3) {
+          const nextPosition = { x: currentPos.x, y: desiredTop }
+          coords.set(item.id, nextPosition)
+          item.pos = nextPosition
+        } else {
+          item.pos = currentPos
         }
-        previousY = nextY
-      })
+
+        const finalPos = coords.get(item.id)
+        if (finalPos) {
+          previousBottom = finalPos.y + nodeHeight
+        }
+      }
     }
 
     const componentNodeIds = component.nodeIds
