@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest'
 
 import { autoLayoutProjectV2 } from '../utils/autoLayout.v2'
-import type { AnyNode, Project, SourceNode, ConverterNode, LoadNode, SubsystemNode } from '../models'
+import { getInputHandleTopOffset, getOutputHandleTopOffset } from '../utils/handleOffsets'
+import type {
+  AnyNode,
+  Project,
+  SourceNode,
+  ConverterNode,
+  LoadNode,
+  SubsystemNode,
+  DualOutputConverterNode,
+  SubsystemInputNode,
+} from '../models'
 
 const makeLinearProject = (): Project => {
   const source: SourceNode = {
@@ -140,6 +150,88 @@ const makeParallelSourcesProject = (): Project => ({
   markups: [],
 })
 
+const makeHandleAlignmentProject = (): Project => {
+  const sourceTop: SourceNode = {
+    id: 'source-top',
+    type: 'Source',
+    name: 'Source Top',
+    Vout: 12,
+  }
+  ;(sourceTop as any).height = 160
+
+  const sourceBottom: SourceNode = {
+    id: 'source-bottom',
+    type: 'Source',
+    name: 'Source Bottom',
+    Vout: 12,
+  }
+  ;(sourceBottom as any).height = 160
+
+  const dual: DualOutputConverterNode = {
+    id: 'dual',
+    type: 'DualOutputConverter',
+    name: 'Dual',
+    Vin_min: 10,
+    Vin_max: 14,
+    outputs: [
+      { id: 'out-top', label: 'Top', Vout: 5, efficiency: { type: 'fixed', value: 0.92 } },
+      { id: 'out-bottom', label: 'Bottom', Vout: 5, efficiency: { type: 'fixed', value: 0.92 } },
+    ],
+    efficiency: { type: 'fixed', value: 0.9 },
+  }
+  ;(dual as any).height = 220
+
+  const portTop: SubsystemInputNode = {
+    id: 'port-top',
+    type: 'SubsystemInput',
+    name: 'Top Port',
+    Vout: 5,
+  }
+
+  const portBottom: SubsystemInputNode = {
+    id: 'port-bottom',
+    type: 'SubsystemInput',
+    name: 'Bottom Port',
+    Vout: 5,
+  }
+
+  const subsystem: SubsystemNode = {
+    id: 'subsystem',
+    type: 'Subsystem',
+    name: 'Subsystem',
+    inputV_nom: 5,
+    project: {
+      id: 'embedded',
+      name: 'embedded',
+      units: { voltage: 'V', current: 'A', power: 'W', resistance: 'mΩ' },
+      defaultMargins: { currentPct: 0.1, powerPct: 0.1, voltageDropPct: 0.1, voltageMarginPct: 0.1 },
+      scenarios: ['Typical'],
+      currentScenario: 'Typical',
+      nodes: [portTop, portBottom],
+      edges: [],
+      markups: [],
+    },
+  }
+  ;(subsystem as any).inputHandleOrder = ['port-top', 'port-bottom']
+
+  return {
+    id: 'handle-alignment',
+    name: 'Handle Alignment',
+    units: { voltage: 'V', current: 'A', power: 'W', resistance: 'mΩ' },
+    defaultMargins: { currentPct: 0.1, powerPct: 0.1, voltageDropPct: 0.1, voltageMarginPct: 0.1 },
+    scenarios: ['Typical'],
+    currentScenario: 'Typical',
+    nodes: [sourceTop, sourceBottom, dual, subsystem],
+    edges: [
+      { id: 'edge-source-top', from: 'source-top', to: 'dual', toHandle: 'input' },
+      { id: 'edge-source-bottom', from: 'source-bottom', to: 'dual', toHandle: 'input' },
+      { id: 'edge-dual-top', from: 'dual', to: 'subsystem', fromHandle: 'out-top', toHandle: 'port-top' },
+      { id: 'edge-dual-bottom', from: 'dual', to: 'subsystem', fromHandle: 'out-bottom', toHandle: 'port-bottom' },
+    ],
+    markups: [],
+  }
+}
+
 const getNode = (nodes: AnyNode[], id: string): AnyNode => {
   const found = nodes.find(node => node.id === id)
   if (!found) throw new Error(`Expected node ${id} in layout result`)
@@ -216,7 +308,7 @@ describe('autoLayoutProjectV2', () => {
 
     const [top, bottom] = [sourceA, sourceB].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
     const gap = Math.abs((bottom.y ?? 0) - (top.y ?? 0))
-    expect(gap).toBeGreaterThanOrEqual(rowSpacing)
+    expect(gap).toBeGreaterThanOrEqual(1)
   })
 
   it('orders edge midpoints left-to-right for lower column edges', () => {
@@ -242,6 +334,39 @@ describe('autoLayoutProjectV2', () => {
       expect(edge.midpointX).toBeGreaterThanOrEqual(Math.min(source?.x ?? 0, target?.x ?? 0))
       expect(edge.midpointX).toBeLessThanOrEqual(Math.max(source?.x ?? 0, target?.x ?? 0))
     }
+  })
+
+  it('aligns upstream handles with downstream ports and enforces 1px separation in non-rightmost columns', () => {
+    const project = makeHandleAlignmentProject()
+    const layout = autoLayoutProjectV2(project, { columnSpacing: 320, rowSpacing: 120 })
+
+    const nodesById = new Map(layout.nodes.map(node => [node.id, node]))
+    const subsystem = nodesById.get('subsystem')
+    const dual = nodesById.get('dual')
+    const sourceTop = nodesById.get('source-top')
+    const sourceBottom = nodesById.get('source-bottom')
+
+    expect(subsystem).toBeDefined()
+    expect(dual).toBeDefined()
+    expect(sourceTop).toBeDefined()
+    expect(sourceBottom).toBeDefined()
+    if (!subsystem || !dual || !sourceTop || !sourceBottom) return
+
+    const subsystemTopHandleY = (subsystem.y ?? 0) + getInputHandleTopOffset(subsystem as AnyNode, 'port-top')
+    const dualTopOutputY = (dual.y ?? 0) + getOutputHandleTopOffset(dual as AnyNode, 'out-top')
+    const diffTop = Math.abs(subsystemTopHandleY - dualTopOutputY)
+    expect(diffTop).toBeLessThan(1e-3)
+
+    const dualInputY = (dual.y ?? 0) + getInputHandleTopOffset(dual as AnyNode, 'input')
+    const sourceTopOutputY = (sourceTop.y ?? 0) + getOutputHandleTopOffset(sourceTop as AnyNode, null)
+    const sourceBottomOutputY = (sourceBottom.y ?? 0) + getOutputHandleTopOffset(sourceBottom as AnyNode, null)
+    expect(Math.abs(sourceTopOutputY - dualInputY)).toBeLessThan(1e-3)
+    expect(sourceBottomOutputY).toBeGreaterThanOrEqual(dualInputY)
+
+    const [upper, lower] = [sourceTop, sourceBottom].sort((a, b) => (a.y ?? 0) - (b.y ?? 0))
+    const upperHeight = Number((upper as any).height) || 0
+    const gap = (lower.y ?? 0) - ((upper.y ?? 0) + upperHeight)
+    expect(gap).toBeCloseTo(1, 1e-6)
   })
 })
 

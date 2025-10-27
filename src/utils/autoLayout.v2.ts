@@ -2,6 +2,7 @@ import { compute } from '../calc'
 import { computeOrderedEdgeMidpoints } from './edgeMidpoints'
 import type { AnyNode, Edge, Project } from '../models'
 
+import { getInputHandleTopOffset, getOutputHandleTopOffset } from './handleOffsets'
 import { estimateNodeHeight } from './nodeSizing'
 
 export type LayoutResult = { nodes: AnyNode[]; edges: Edge[] }
@@ -436,6 +437,99 @@ export const autoLayoutProjectV2 = (
     const columnIndex = computeColumnIndex(depth, maxDepth)
     const columnX = computeColumnX(columnIndex, columnSpacing)
     processColumnForDepth(depth, depthMap, maps, coords, trackers, columnIndex, columnX, rowSpacing, loadColumnIndex)
+  }
+
+  const columnToNodeIds = new Map<number, string[]>()
+  for (const [nodeId, depth] of depthMap.entries()) {
+    const columnIndex = computeColumnIndex(depth, maxDepth)
+    const list = columnToNodeIds.get(columnIndex) ?? []
+    list.push(nodeId)
+    columnToNodeIds.set(columnIndex, list)
+  }
+
+  const orderedColumns = Array.from(columnToNodeIds.keys())
+    .filter(columnIndex => columnIndex !== loadColumnIndex)
+    .sort((a, b) => b - a)
+
+  for (const columnIndex of orderedColumns) {
+    const nodeIds = columnToNodeIds.get(columnIndex)
+    if (!nodeIds) continue
+    const decorated = nodeIds
+      .map(id => {
+        const node = maps.nodesById.get(id)
+        const pos = coords.get(id)
+        const depth = depthMap.get(id) ?? 0
+        if (!node || !pos) return null
+        return { id, node, pos, depth }
+      })
+      .filter((value): value is { id: string; node: AnyNode; pos: { x: number; y: number }; depth: number } => !!value)
+      .sort((a, b) => a.pos.y - b.pos.y)
+
+    let previousBottom: number | null = null
+
+    for (const item of decorated) {
+      const currentPos = coords.get(item.id)
+      if (!currentPos) continue
+      const nodeHeight = estimateNodeHeight(item.node)
+      const outgoing = (maps.outgoing.get(item.id) ?? []).filter(edge => {
+        const targetDepth = depthMap.get(edge.to)
+        if (typeof targetDepth !== 'number') return false
+        const targetColumn = computeColumnIndex(targetDepth, maxDepth)
+        return targetColumn > columnIndex
+      })
+
+      let desiredTop = currentPos.y
+
+      if (outgoing.length > 0) {
+        let topmostDownstreamY: number | null = null
+        for (const edge of outgoing) {
+          const targetPos = coords.get(edge.to)
+          const targetNode = maps.nodesById.get(edge.to)
+          if (!targetPos || !targetNode) continue
+          const handleOffset = getInputHandleTopOffset(targetNode, (edge.toHandle as string | null) ?? null)
+          if (!Number.isFinite(handleOffset)) continue
+          const handleY = targetPos.y + handleOffset
+          if (!Number.isFinite(handleY)) continue
+          if (topmostDownstreamY === null || handleY < topmostDownstreamY) {
+            topmostDownstreamY = handleY
+          }
+        }
+
+        let topmostOutputOffset: number | null = null
+        for (const edge of outgoing) {
+          const offset = getOutputHandleTopOffset(item.node, (edge.fromHandle as string | null) ?? null)
+          if (!Number.isFinite(offset)) continue
+          if (topmostOutputOffset === null || offset < topmostOutputOffset) {
+            topmostOutputOffset = offset
+          }
+        }
+        if (topmostOutputOffset === null) {
+          const fallbackOffset = getOutputHandleTopOffset(item.node, null)
+          if (Number.isFinite(fallbackOffset)) {
+            topmostOutputOffset = fallbackOffset
+          }
+        }
+
+        if (topmostDownstreamY !== null && topmostOutputOffset !== null) {
+          desiredTop = topmostDownstreamY - topmostOutputOffset
+        }
+      }
+
+      const minAllowedTop = previousBottom !== null ? previousBottom + 1 : Number.NEGATIVE_INFINITY
+      if (desiredTop < minAllowedTop) {
+        desiredTop = minAllowedTop
+      }
+
+      if (Math.abs(desiredTop - currentPos.y) > 1e-3) {
+        const nextPosition = { x: currentPos.x, y: desiredTop }
+        coords.set(item.id, nextPosition)
+      }
+
+      const finalPos = coords.get(item.id)
+      if (finalPos) {
+        previousBottom = finalPos.y + nodeHeight
+      }
+    }
   }
 
   const nodes = project.nodes.map(node => {
