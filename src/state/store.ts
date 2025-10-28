@@ -150,7 +150,7 @@ const normalizeMarkup = (value: any): CanvasMarkup | null => {
     const position = normalizePoint(value.position, { x: 160, y: 160 })
     const color = typeof value.color === 'string' ? value.color : '#0f172a'
     const text = typeof value.text === 'string' ? value.text : 'Text'
-    const fontSize = Math.max(6, toNumber(value.fontSize, 18))
+    const fontSize = Math.max(1, toNumber(value.fontSize, 18))
     const isBold = value.isBold === true
     const backgroundColor = typeof value.backgroundColor === 'string' ? value.backgroundColor : null
     const size = value.size ? normalizeSize(value.size, { width: 220, height: fontSize * 1.4 }) : undefined

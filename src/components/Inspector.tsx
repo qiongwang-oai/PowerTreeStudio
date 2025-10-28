@@ -213,11 +213,11 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
                   <input
                     className="input"
                     type="number"
-                    min={8}
+                    min={1}
                     value={markup.fontSize}
                     onChange={e => {
                       const raw = Number(e.target.value)
-                      const nextSize = Number.isFinite(raw) ? Math.max(8, raw) : markup.fontSize
+                      const nextSize = Number.isFinite(raw) ? Math.max(1, raw) : markup.fontSize
                       updateMarkup(markup.id, current => current.type === 'text' ? { ...current, fontSize: nextSize } : current)
                     }}
                   />
