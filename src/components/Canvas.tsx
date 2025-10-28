@@ -1491,19 +1491,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const nodesSnapshot = reactFlowInstance.getNodes()
       const edgesSnapshot = reactFlowInstance.getEdges()
       const viewportSnapshot = reactFlowInstance.getViewport()
+      const markupsSnapshot = [...markups]
       await exportCanvasToPdf({
         wrapper: wrapperRef.current,
         nodes: nodesSnapshot,
         edges: edgesSnapshot,
         viewport: viewportSnapshot,
         fileName: project.name || 'PowerTreeCanvas',
+        markups: markupsSnapshot,
       })
     } catch (err) {
       console.error('Failed to export canvas as PDF', err)
       const message = err instanceof Error && err.message ? err.message : 'Unable to export canvas as PDF. Please try again.'
       window.alert(message)
     }
-  }, [project.name, reactFlowInstance])
+  }, [markups, project.name, reactFlowInstance])
 
   useImperativeHandle(ref, () => ({ exportToPdf }), [exportToPdf])
 

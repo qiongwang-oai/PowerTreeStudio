@@ -2,6 +2,8 @@ import { toPng } from 'html-to-image'
 import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
 import type { Edge, Node } from 'reactflow'
 
+import type { CanvasMarkup } from '../models'
+
 type FlowViewport = {
   x: number
   y: number
@@ -14,6 +16,7 @@ type ExportCanvasToPdfOptions = {
   edges: Edge[]
   viewport: FlowViewport
   fileName: string
+  markups?: CanvasMarkup[]
   padding?: number
 }
 
@@ -147,7 +150,7 @@ const wrapText = (text: string, maxWidth: number, font: PDFFont, fontSize: numbe
   return lines
 }
 
-const resolveNodeBounds = (nodes: Node[], edges: Edge[], padding: number) => {
+const resolveNodeBounds = (nodes: Node[], edges: Edge[], markups: CanvasMarkup[], padding: number) => {
   let minX = Number.POSITIVE_INFINITY
   let minY = Number.POSITIVE_INFINITY
   let maxX = Number.NEGATIVE_INFINITY
@@ -193,6 +196,46 @@ const resolveNodeBounds = (nodes: Node[], edges: Edge[], padding: number) => {
       const midX = data.midpointX as number
       minX = Math.min(minX, midX)
       maxX = Math.max(maxX, midX)
+    }
+  }
+
+  for (const markup of markups) {
+    if (!markup) continue
+    if (markup.type === 'rectangle') {
+      const left = markup.position.x
+      const top = markup.position.y
+      const right = left + markup.size.width
+      const bottom = top + markup.size.height
+      minX = Math.min(minX, left)
+      minY = Math.min(minY, top)
+      maxX = Math.max(maxX, right)
+      maxY = Math.max(maxY, bottom)
+      continue
+    }
+    if (markup.type === 'line') {
+      const points = [markup.start, markup.end]
+      for (const point of points) {
+        if (!point) continue
+        const { x, y } = point
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+          minX = Math.min(minX, x)
+          minY = Math.min(minY, y)
+          maxX = Math.max(maxX, x)
+          maxY = Math.max(maxY, y)
+        }
+      }
+      continue
+    }
+    if (markup.type === 'text') {
+      const left = markup.position.x
+      const top = markup.position.y
+      const width = markup.size?.width ?? Math.max(40, (markup.fontSize || 16) * Math.max(1, (markup.text?.length ?? 0) * 0.6))
+      const height = markup.size?.height ?? Math.max(24, (markup.fontSize || 16) * 1.8)
+      minX = Math.min(minX, left)
+      minY = Math.min(minY, top)
+      maxX = Math.max(maxX, left + width)
+      maxY = Math.max(maxY, top + height)
+      continue
     }
   }
 
@@ -243,6 +286,12 @@ const createCloneForExport = (wrapper: HTMLElement, width: number, height: numbe
     viewportEl.style.transform = `translate(${-minX}px, ${-minY}px) scale(1)`
   }
 
+  const markupTransformLayers = clone.querySelectorAll<HTMLElement>('[data-markup-transform-layer]')
+  markupTransformLayers.forEach(layer => {
+    layer.style.transformOrigin = '0 0'
+    layer.style.transform = `translate(${-minX}px, ${-minY}px) scale(1)`
+  })
+
   const edgesSvg = clone.querySelector<SVGElement>('.react-flow__edges')
   if (edgesSvg) {
     edgesSvg.setAttribute('width', `${width}`)
@@ -267,6 +316,7 @@ export async function exportCanvasToPdf({
   edges,
   viewport,
   fileName,
+  markups = [],
   padding = DEFAULT_PADDING,
 }: ExportCanvasToPdfOptions): Promise<void> {
   if (!wrapper) throw new Error('Canvas element is not available for export.')
@@ -274,7 +324,7 @@ export async function exportCanvasToPdf({
     throw new Error('Nothing to export from the canvas.')
   }
 
-  const bounds = resolveNodeBounds(nodes, edges, padding)
+  const bounds = resolveNodeBounds(nodes, edges, markups, padding)
   const width = Math.max(1, Math.ceil(bounds.width))
   const height = Math.max(1, Math.ceil(bounds.height))
   const labels = collectLabelInfos(wrapper, nodes, viewport)

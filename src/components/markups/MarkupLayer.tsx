@@ -470,6 +470,7 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
       >
         <div
           className="absolute inset-0"
+          data-markup-transform-layer="visual"
           style={{
             transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
             transformOrigin: '0 0',
@@ -499,6 +500,7 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
       >
         <div
           className="absolute inset-0"
+          data-markup-transform-layer="interactive"
           style={{
             transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
             transformOrigin: '0 0',
@@ -533,6 +535,7 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
       >
         <div
           className="absolute inset-0"
+          data-markup-transform-layer="default"
           style={{
             transform: `translate(${tx}px, ${ty}px) scale(${zoom})`,
             transformOrigin: '0 0',
