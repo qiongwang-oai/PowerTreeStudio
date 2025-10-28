@@ -377,6 +377,14 @@ function CustomNode(props: NodeProps) {
                   const voltageValue = Number(output?.Vout)
                   const branchVoltageText = Number.isFinite(voltageValue) && voltageValue > 0 ? formatVoltage(voltageValue) : null
                   const topOffset = 50 + ((idx - (count - 1) / 2) * 24)
+                  const labelTop = (() => {
+                    if (count > 1) {
+                      const offsetPx = 8
+                      if (idx === 0) return `calc(${topOffset}% - ${offsetPx}px)`
+                      if (idx === count - 1) return `calc(${topOffset}% + ${offsetPx}px)`
+                    }
+                    return `${topOffset}%`
+                  })()
                   return (
                     <React.Fragment key={handleId}>
                       <Handle
@@ -390,7 +398,7 @@ function CustomNode(props: NodeProps) {
                         style={{
                           position: 'absolute',
                           right: -8,
-                          top: `${topOffset}%`,
+                          top: labelTop,
                           transform: 'translate(100%, -50%)',
                           fontSize: '10px',
                           color: '#666',
