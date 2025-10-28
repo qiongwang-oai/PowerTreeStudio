@@ -41,6 +41,7 @@ type State = {
   updateNodePos: (id: string, x: number, y: number) => void
   removeNode: (id: string) => void
   removeEdge: (id: string) => void
+  updateEdges?: (ids: string[], patch: Partial<Edge>) => void
   addMarkup: (markup: CanvasMarkup) => void
   updateMarkup: (id: string, updater: (markup: CanvasMarkup) => CanvasMarkup) => void
   removeMarkup: (id: string) => void
@@ -64,6 +65,7 @@ type State = {
   nestedSubsystemAddEdge: (subsystemPath: string[], edge: Edge) => void
   nestedSubsystemUpdateNode: (subsystemPath: string[], nodeId: string, patch: Partial<AnyNode>) => void
   nestedSubsystemUpdateEdge: (subsystemPath: string[], edgeId: string, patch: Partial<Edge>) => void
+  nestedSubsystemUpdateEdges?: (subsystemPath: string[], ids: string[], patch: Partial<Edge>) => void
   nestedSubsystemUpdateNodePos: (subsystemPath: string[], nodeId: string, x: number, y: number) => void
   nestedSubsystemRemoveNode: (subsystemPath: string[], nodeId: string) => void
   nestedSubsystemRemoveEdge: (subsystemPath: string[], edgeId: string) => void
@@ -437,6 +439,25 @@ export const useStore = create<State>((set,get)=>({
     autosave(nextProject)
   },
   updateEdge: (id, patch) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.edges=p.edges.map(e=>e.id===id? {...e, ...patch}:e); set({project:{...p}}); autosave(get().project) },
+  updateEdges: (ids, patch) => {
+    if (!Array.isArray(ids) || ids.length === 0) return
+    const idSet = new Set(ids.filter(id => typeof id === 'string' && id.length > 0))
+    if (idSet.size === 0) return
+    const project = get().project
+    ensureMarkupsInitialized(project)
+    let changed = false
+    const nextEdges = project.edges.map(edge => {
+      if (!idSet.has(edge.id)) return edge
+      changed = true
+      return { ...edge, ...patch }
+    })
+    if (!changed) return
+    const prev = snapshotProject(project)
+    set(state => ({ past: [...state.past, prev], future: [] }))
+    const nextProject = { ...project, edges: nextEdges }
+    set({ project: nextProject })
+    autosave(nextProject)
+  },
   setScenario: (s) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.currentScenario=s; set({project:{...p}}); autosave(get().project) },
   updateNodePos: (id, x, y) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.map(n=>n.id===id? ({...n, x, y} as AnyNode):n) as AnyNode[]; set({project:{...p}}); autosave(get().project) },
   removeNode: (id) => { const p=get().project; ensureMarkupsInitialized(p); const prev = snapshotProject(p); set(state=>({ past:[...state.past, prev], future: [] })); p.nodes=p.nodes.filter(n=>n.id!==id) as AnyNode[]; p.edges=p.edges.filter(e=>e.from!==id && e.to!==id); set({project:{...p}}); autosave(get().project) },
@@ -628,6 +649,22 @@ export const useStore = create<State>((set,get)=>({
   ,nestedSubsystemUpdateEdge: (subsystemPath, edgeId, patch) => {
     const fn = (proj: Project): Project => ({ ...proj, edges: proj.edges.map(e=>e.id===edgeId? ({...e, ...patch}) : e) })
     get().updateSubsystemProjectAtPath(subsystemPath, fn)
+  }
+  ,nestedSubsystemUpdateEdges: (subsystemPath, ids, patch) => {
+    if (!Array.isArray(ids) || ids.length === 0) return
+    const idSet = new Set(ids.filter(id => typeof id === 'string' && id.length > 0))
+    if (idSet.size === 0) return
+    const updater = (proj: Project): Project => {
+      let changed = false
+      const nextEdges = proj.edges.map(edge => {
+        if (!idSet.has(edge.id)) return edge
+        changed = true
+        return { ...edge, ...patch }
+      })
+      if (!changed) return proj
+      return { ...proj, edges: nextEdges }
+    }
+    get().updateSubsystemProjectAtPath(subsystemPath, updater)
   }
   ,nestedSubsystemUpdateNodePos: (subsystemPath, nodeId, x, y) => {
     const fn = (proj: Project): Project => ({ ...proj, nodes: (proj.nodes.map(n=>n.id===nodeId? ({...n, x, y} as AnyNode) : n) as AnyNode[]) })

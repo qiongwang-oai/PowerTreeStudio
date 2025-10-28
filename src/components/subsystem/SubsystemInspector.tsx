@@ -23,11 +23,76 @@ import {
   MetricGrid
 } from '../ui/inspector'
 import { PartNumberField } from '../inspector/PartNumberField'
+import { voltageToEdgeColor } from '../../utils/color'
+import {
+  clampEdgeStrokeWidth,
+  DEFAULT_EDGE_STROKE_WIDTH,
+  MAX_EDGE_STROKE_WIDTH,
+  MIN_EDGE_STROKE_WIDTH,
+  resolveEdgeStrokeColor,
+  resolveEdgeStrokeWidth,
+} from '../../utils/edgeAppearance'
+import { edgeGroupKey } from '../../utils/edgeGroups'
+
+const EDGE_MISMATCH_COLOR = '#ef4444'
+
+const formatThicknessValue = (value: number): string => {
+  if (Number.isInteger(value)) return value.toFixed(0)
+  const text = value.toFixed(2)
+  return text.replace(/0+$/, '').replace(/\.$/, '')
+}
+
+const computeEdgeBaseColor = (edge: Edge, project: Project): { color: string; mismatch: boolean } => {
+  const parent = project.nodes.find(n => n.id === edge.from) as any
+  const child = project.nodes.find(n => n.id === edge.to) as any
+
+  let parentV: number | undefined
+  if (parent?.type === 'Source') parentV = parent?.Vout
+  else if (parent?.type === 'Converter') parentV = parent?.Vout
+  else if (parent?.type === 'DualOutputConverter') {
+    const outputs = Array.isArray(parent?.outputs) ? parent.outputs : []
+    const fallback = outputs.length > 0 ? outputs[0] : undefined
+    const handleId = (edge as any).fromHandle as string | undefined
+    const branch = handleId ? outputs.find((b: any) => b?.id === handleId) : undefined
+    parentV = (branch || fallback)?.Vout
+  }
+  else if (parent?.type === 'Bus') parentV = parent?.V_bus
+  else if (parent?.type === 'SubsystemInput') parentV = parent?.Vout
+
+  const childRange = (child?.type === 'Converter' || child?.type === 'DualOutputConverter')
+    ? { min: child?.Vin_min, max: child?.Vin_max }
+    : undefined
+
+  const childDirectVin = child?.type === 'Load'
+    ? child?.Vreq
+    : child?.type === 'Subsystem'
+      ? (() => {
+          const portId = (edge as any).toHandle as string | undefined
+          if (portId) {
+            const port = (child as any)?.project?.nodes?.find((x: any) => x.id === portId)
+            return port?.Vout
+          }
+          const ports = (child as any)?.project?.nodes?.filter((x: any) => x.type === 'SubsystemInput')
+          return ports?.length === 1 ? ports[0]?.Vout : undefined
+        })()
+      : undefined
+
+  const convRangeViolation = (parentV !== undefined && childRange !== undefined)
+    ? !(parentV >= childRange.min && parentV <= childRange.max)
+    : false
+  const eqViolation = (parentV !== undefined && childDirectVin !== undefined)
+    ? parentV !== childDirectVin
+    : false
+  const mismatch = convRangeViolation || eqViolation
+  const color = mismatch ? EDGE_MISMATCH_COLOR : voltageToEdgeColor(parentV)
+  return { color, mismatch }
+}
 
 export default function SubsystemInspector({ subsystemId, subsystemPath, project, selected, onDeleted }:{ subsystemId:string, subsystemPath?: string[], project: Project, selected:string|null, onDeleted?:()=>void }){
   const nestedUpdateNode = useStore(s=>s.nestedSubsystemUpdateNode)
   const nestedRemoveNode = useStore(s=>s.nestedSubsystemRemoveNode)
   const nestedUpdateEdge = useStore(s=>s.nestedSubsystemUpdateEdge)
+  const nestedUpdateEdgeGroup = useStore(s=>s.nestedSubsystemUpdateEdges)
   const nestedRemoveEdge = useStore(s=>s.nestedSubsystemRemoveEdge)
   const rootScenario = useStore(s=>s.project.currentScenario)
   const edge = useMemo(()=> project.edges.find(e=>e.id===selected) || null, [project.edges, selected])
@@ -42,7 +107,30 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
   const fileInputRef = React.useRef<HTMLInputElement>(null)
   const path = subsystemPath || [subsystemId]
 
+  const groupKeyValue = edge ? edgeGroupKey({ from: edge.from, fromHandle: edge.fromHandle }) : null
+  const groupedEdges = groupKeyValue ? project.edges.filter(e => edgeGroupKey({ from: e.from, fromHandle: e.fromHandle }) === groupKeyValue) : []
+  const edgeGroupIds = groupedEdges.map(e => e.id)
+  const applyEdgeGroupPatch = (patch: Partial<Edge>) => {
+    if (!edgeGroupIds.length) return
+    if (nestedUpdateEdgeGroup) {
+      nestedUpdateEdgeGroup(path, edgeGroupIds, patch)
+    } else if (nestedUpdateEdge) {
+      edgeGroupIds.forEach(id => nestedUpdateEdge(path, id, patch))
+    }
+  }
+
+  const groupHasColorOverride = groupedEdges.some(item => typeof item.strokeColor === 'string' && item.strokeColor.trim().length > 0)
+  const groupHasThicknessOverride = groupedEdges.some(item => item.strokeWidth !== undefined)
+
   if (edge) {
+    const { color: baseColor } = computeEdgeBaseColor(edge, project)
+    const effectiveColor = resolveEdgeStrokeColor(edge, baseColor)
+    const colorOverrideRaw = typeof edge.strokeColor === 'string' ? edge.strokeColor.trim() : ''
+    const hasColorOverride = colorOverrideRaw.length > 0
+    const colorInputValue = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(colorOverrideRaw) ? colorOverrideRaw : '#64748b'
+    const effectiveThickness = resolveEdgeStrokeWidth(edge)
+    const thicknessInputValue = edge.strokeWidth ?? ''
+    const effectiveThicknessText = formatThicknessValue(effectiveThickness)
     return (
       <InspectorShell>
         <InspectorHeader
@@ -64,6 +152,78 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
                 onChange={e=> nestedUpdateEdge(path, edge.id, { interconnect: { ...edge.interconnect, R_milliohm: parseFloat(e.target.value) } })}
               />
             </FormField>
+          </InspectorSection>
+          <InspectorSection title="Appearance" description="Overrides apply within this embedded subsystem only.">
+            <FormGrid columns={2}>
+              <FormField label="Color override">
+                <div className="flex items-center gap-3">
+                  <ColorInput
+                    aria-label="Edge color override"
+                    value={colorInputValue}
+                    onChange={e => {
+                      const next = e.target.value
+                      if (colorOverrideRaw === next) return
+                      applyEdgeGroupPatch({ strokeColor: next })
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!groupHasColorOverride}
+                    onClick={() => applyEdgeGroupPatch({ strokeColor: undefined })}
+                  >
+                    Reset
+                  </Button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                  <span className="inline-flex h-4 w-4 rounded border border-slate-300" style={{ background: effectiveColor }} />
+                  <span>{groupHasColorOverride ? 'Override active' : 'Using voltage-based color'}</span>
+                </div>
+                {!groupHasColorOverride && (
+                  <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                    <span className="inline-flex h-4 w-4 rounded border border-slate-300" style={{ background: baseColor }} />
+                    <span>{baseColor}</span>
+                  </div>
+                )}
+                {hasColorOverride && colorOverrideRaw && !/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(colorOverrideRaw) && (
+                  <p className="mt-1 text-xs text-amber-600">Custom value: {colorOverrideRaw}</p>
+                )}
+              </FormField>
+              <FormField label="Thickness (px)">
+                <div className="flex items-center gap-3">
+                  <input
+                    className="input"
+                    type="number"
+                    min={MIN_EDGE_STROKE_WIDTH}
+                    max={MAX_EDGE_STROKE_WIDTH}
+                    step={0.5}
+                    value={thicknessInputValue}
+                    placeholder={DEFAULT_EDGE_STROKE_WIDTH.toString()}
+                    onChange={e => {
+                      const rawValue = e.target.value
+                      if (rawValue === '') {
+                        applyEdgeGroupPatch({ strokeWidth: undefined })
+                        return
+                      }
+                      const parsed = Number(rawValue)
+                      if (!Number.isFinite(parsed)) return
+                      const clamped = clampEdgeStrokeWidth(parsed)
+                      if (edge.strokeWidth === clamped) return
+                      applyEdgeGroupPatch({ strokeWidth: clamped })
+                    }}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={!groupHasThicknessOverride}
+                    onClick={() => applyEdgeGroupPatch({ strokeWidth: undefined })}
+                  >
+                    Reset
+                  </Button>
+                </div>
+                <p className="mt-2 text-xs text-slate-500">Current effective thickness: {effectiveThicknessText} px</p>
+              </FormField>
+            </FormGrid>
           </InspectorSection>
           <InspectorSection title="Computed" description="Calculated from the active scenario.">
             <MetricGrid items={[{ label: 'Dissipation', value: renderPowerDisplay(analysis.edges[edge.id]?.P_loss_edge) }]} />

@@ -12,6 +12,7 @@ import type { AnyNode, Edge, Project, Scenario, CanvasMarkup } from '../models'
 import OrthogonalEdge from './edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../utils/edgeGroups'
+import { DEFAULT_EDGE_STROKE_WIDTH, resolveEdgeStrokeColor, resolveEdgeStrokeWidth } from '../utils/edgeAppearance'
 import type {
   InspectorSelection,
   SelectionMode,
@@ -1890,7 +1891,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
     const expandedIds = new Set(expandedLayouts.keys())
     for (const e of project.edges) {
       const I = computeResult.edges[e.id]?.I_edge ?? 0
-      const strokeWidth = 3
       const parent = project.nodes.find(n=>n.id===e.from) as any
       const child = project.nodes.find(n=>n.id===e.to) as any
       let parentV: number | undefined
@@ -1927,15 +1927,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       const currentLabel = I.toFixed(1)
       const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
       const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-      const edgeColor = voltageToEdgeColor(parentV)
-      const defaultColor = mismatch ? '#ef4444' : edgeColor
+      const baseColor = mismatch ? '#ef4444' : voltageToEdgeColor(parentV)
+      const strokeColor = resolveEdgeStrokeColor(e, baseColor)
+      const labelColor = mismatch ? '#ef4444' : strokeColor
+      const strokeWidth = resolveEdgeStrokeWidth(e)
       const edgeData = {
         midpointOffset,
         midpointX: info?.midpointX,
         onMidpointChange: handleMidpointChange,
         onMidpointCommit: handleMidpointCommit,
         screenToFlow: screenToFlowPosition,
-        defaultColor,
+        defaultColor: strokeColor,
         // Always allow extra travel so the midpoint remains draggable
         extendMidpointRange: true,
         groupKey: key,
@@ -1973,8 +1975,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         targetHandle,
         animated: false,
         label,
-        labelStyle: { fill: defaultColor },
-        style: { strokeWidth, stroke: defaultColor },
+        labelStyle: { fill: labelColor },
+        style: { strokeWidth, stroke: strokeColor },
         data: edgeData,
         selected: false,
       })
@@ -1985,7 +1987,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       for (const e of embeddedEdges) {
         const localEdgeResult = layout.analysis.edges[e.id] || {}
         const I = localEdgeResult.I_edge ?? 0
-        const strokeWidth = 3
         const parent = layout.embeddedProject.nodes.find(n=>n.id===e.from) as any
         let parentV: number | undefined
         if (parent?.type==='Source') parentV = parent?.Vout
@@ -2000,7 +2001,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
         else if (parent?.type==='Bus') parentV = parent?.V_bus
         else if (parent?.type==='SubsystemInput') parentV = parent?.Vout
         const baseLabel = `${(e.interconnect?.R_milliohm ?? 0).toFixed(1)} mΩ | ${I.toFixed(1)} A`
-        const edgeColor = voltageToEdgeColor(parentV)
+        const baseColor = voltageToEdgeColor(parentV)
+        const strokeColor = resolveEdgeStrokeColor(e, baseColor)
+        const strokeWidth = resolveEdgeStrokeWidth(e)
         const meta = layout.edgeMeta.get(e.id) || {}
         const midpointOffset = meta.offset ?? (typeof e.midpointOffset === 'number' ? e.midpointOffset : 0.5)
         const midpointX = typeof meta.localMidpoint === 'number'
@@ -2016,12 +2019,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           targetHandle: (e as any).toHandle,
           animated: false,
           label: baseLabel,
-          labelStyle: { fill: edgeColor },
-          style: { strokeWidth, stroke: edgeColor },
+          labelStyle: { fill: strokeColor },
+          style: { strokeWidth, stroke: strokeColor },
           data: {
             midpointOffset,
             ...(typeof midpointX === 'number' ? { midpointX } : {}),
-            defaultColor: edgeColor,
+            defaultColor: strokeColor,
             groupKey: embeddedGroupKey,
             enableCrossMarkers: false,
           },
@@ -2207,7 +2210,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       sourceHandle: resolvedConnection.sourceHandle,
       targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
-      style: { strokeWidth: 3, stroke: defaultColor },
+      style: { strokeWidth: DEFAULT_EDGE_STROKE_WIDTH, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))

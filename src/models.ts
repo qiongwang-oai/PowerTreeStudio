@@ -69,6 +69,10 @@ export type Edge = {
   midpointOffset?: number;
   /** Absolute horizontal coordinate (canvas units) for the middle segment */
   midpointX?: number;
+  /** User override for edge color */
+  strokeColor?: string;
+  /** User override for edge thickness in canvas units */
+  strokeWidth?: number;
 }
 export type Scenario = 'Typical'|'Max'|'Idle'
 export type MarkupType = 'text' | 'line' | 'rectangle'

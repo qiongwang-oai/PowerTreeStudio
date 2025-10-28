@@ -10,6 +10,7 @@ import type { ClipboardPayload } from '../../state/store'
 import OrthogonalEdge from '../edges/OrthogonalEdge'
 import { voltageToEdgeColor } from '../../utils/color'
 import { edgeGroupKey, computeEdgeGroupInfo } from '../../utils/edgeGroups'
+import { DEFAULT_EDGE_STROKE_WIDTH, resolveEdgeStrokeColor, resolveEdgeStrokeWidth } from '../../utils/edgeAppearance'
 import { createNodePreset, NODE_PRESET_MIME, withPosition, deserializePresetDescriptor, dataTransferHasNodePreset } from '../../utils/nodePresets'
 import { dataTransferHasQuickPreset, readQuickPresetDragPayload, materializeQuickPreset } from '../../utils/quickPresets'
 import { useQuickPresetDialogs } from '../quick-presets/QuickPresetDialogsContext'
@@ -1254,7 +1255,6 @@ const skipPaneClickRef = useRef(false)
 
   const rfEdgesInit: RFEdge[] = useMemo(()=>project.edges.map(e=>{
     const I = computeResult.edges[e.id]?.I_edge ?? 0
-    const strokeWidth = 3
     const parent = project.nodes.find(n=>n.id===e.from) as any
     const child = project.nodes.find(n=>n.id===e.to) as any
     const parentV = parent?.type==='Source'? parent?.Vout
@@ -1284,15 +1284,17 @@ const skipPaneClickRef = useRef(false)
     const currentLabel = I.toFixed(1)
     const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
     const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-    const edgeColor = voltageToEdgeColor(parentV)
-    const defaultColor = mismatch ? '#ef4444' : edgeColor
+    const baseColor = mismatch ? '#ef4444' : voltageToEdgeColor(parentV)
+    const strokeColor = resolveEdgeStrokeColor(e, baseColor)
+    const labelColor = mismatch ? '#ef4444' : strokeColor
+    const strokeWidth = resolveEdgeStrokeWidth(e)
     const edgeData = {
       midpointOffset,
       midpointX: info?.midpointX,
       onMidpointChange: handleMidpointChange,
       onMidpointCommit: handleMidpointCommit,
       screenToFlow: screenToFlowPosition,
-      defaultColor,
+      defaultColor: strokeColor,
       extendMidpointRange: true,
       groupKey: key,
       enableCrossMarkers: false,
@@ -1306,8 +1308,8 @@ const skipPaneClickRef = useRef(false)
       targetHandle: (e as any).toHandle,
       animated: false,
       label,
-      labelStyle: { fill: defaultColor },
-      style: { strokeWidth, stroke: defaultColor },
+      labelStyle: { fill: labelColor },
+      style: { strokeWidth, stroke: strokeColor },
       data: edgeData,
       selected: false,
     })
@@ -1589,7 +1591,6 @@ const skipPaneClickRef = useRef(false)
       const prevById = new Map(prev.map(p => [p.id, p]))
       return project.edges.map(e => {
         const I = computeResult.edges[e.id]?.I_edge ?? 0
-        const strokeWidth = 3
         const parent = project.nodes.find(n => n.id === e.from) as any
         const child = project.nodes.find(n => n.id === e.to) as any
         let parentV: number | undefined
@@ -1625,15 +1626,17 @@ const skipPaneClickRef = useRef(false)
         const currentLabel = I.toFixed(1)
         const baseLabel = `${resistanceLabel} mΩ | ${currentLabel} A`
         const label = convRangeViolation ? `${baseLabel} | Converter Vin Range Violation` : (eqViolation ? `${baseLabel} | Vin != Vout` : baseLabel)
-        const edgeColor = voltageToEdgeColor(parentV)
-        const defaultColor = mismatch ? '#ef4444' : edgeColor
+        const baseColor = mismatch ? '#ef4444' : voltageToEdgeColor(parentV)
+        const strokeColor = resolveEdgeStrokeColor(e, baseColor)
+        const labelColor = mismatch ? '#ef4444' : strokeColor
+        const strokeWidth = resolveEdgeStrokeWidth(e)
         const edgeData = {
           midpointOffset,
           midpointX: info?.midpointX,
           onMidpointChange: handleMidpointChange,
           onMidpointCommit: handleMidpointCommit,
           screenToFlow: screenToFlowPosition,
-          defaultColor,
+          defaultColor: strokeColor,
           extendMidpointRange: true,
           groupKey: key,
         }
@@ -1647,8 +1650,8 @@ const skipPaneClickRef = useRef(false)
           targetHandle: (e as any).toHandle,
           animated: false,
           label,
-          labelStyle: { fill: defaultColor },
-          style: { strokeWidth, stroke: defaultColor },
+          labelStyle: { fill: labelColor },
+          style: { strokeWidth, stroke: strokeColor },
           data: edgeData,
           selected: existing?.selected ?? false,
         }
@@ -1747,7 +1750,7 @@ const skipPaneClickRef = useRef(false)
       sourceHandle: resolvedConnection.sourceHandle,
       targetHandle: resolvedConnection.targetHandle,
       data: edgeData,
-      style: { strokeWidth: 3, stroke: defaultColor },
+      style: { strokeWidth: DEFAULT_EDGE_STROKE_WIDTH, stroke: defaultColor },
       labelStyle: { fill: defaultColor },
       selected: false,
     } as any, eds))
