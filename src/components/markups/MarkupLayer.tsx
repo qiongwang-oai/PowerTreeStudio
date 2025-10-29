@@ -946,7 +946,7 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
           top: markup.position.y,
           width: markup.size.width,
           height: markup.size.height,
-          pointerEvents: pointerEnabled && !pointerSuspended && !passThrough ? 'auto' : 'none',
+          pointerEvents: pointerEnabled && !pointerSuspended ? 'auto' : 'none',
           zIndex: interactive ? interactiveZIndex : markup.zIndex ?? 0,
         }}
         onPointerEnter={e => {
@@ -956,6 +956,10 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
           if (pointerEnabled) updatePassThrough(e.clientX, e.clientY)
         }}
         onPointerLeave={() => {
+          if (passThroughTimeoutRef.current !== null && typeof window !== 'undefined') {
+            window.clearTimeout(passThroughTimeoutRef.current)
+            passThroughTimeoutRef.current = null
+          }
           setPassThrough(false)
           setPassThroughCursor(null)
           passThroughTargetRef.current = null
@@ -964,6 +968,10 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
         <div
           onPointerDown={pointerEnabled ? event => {
             if (event.button !== 0) return
+            if (passThrough && passThroughTargetRef.current) {
+              redirectPointerToGraph(event, passThroughTargetRef.current)
+              return
+            }
             const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
             if (!interaction.shouldHandle) {
               redirectPointerToGraph(event, interaction.hitElement)
@@ -972,8 +980,20 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
             onSelect(markup.id, event)
             startDrag(markup, { type: 'move' }, event)
           } : undefined}
-          onPointerMove={pointerEnabled ? onPointerMove : undefined}
-          onPointerUp={pointerEnabled ? onPointerUp : undefined}
+          onPointerMove={pointerEnabled ? event => {
+            if (passThrough && passThroughTargetRef.current) {
+              redirectPointerToGraph(event, passThroughTargetRef.current)
+              return
+            }
+            onPointerMove(event)
+          } : undefined}
+          onPointerUp={pointerEnabled ? event => {
+            if (passThrough && passThroughTargetRef.current) {
+              redirectPointerToGraph(event, passThroughTargetRef.current)
+              return
+            }
+            onPointerUp(event)
+          } : undefined}
           style={{
             width: '100%',
             height: '100%',
@@ -1004,6 +1024,10 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
               }}
               onPointerDown={event => {
                 if (event.button !== 0) return
+                if (pointerEnabled && passThrough && passThroughTargetRef.current) {
+                  redirectPointerToGraph(event, passThroughTargetRef.current)
+                  return
+                }
                 const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
                 if (!interaction.shouldHandle) {
                   redirectPointerToGraph(event, interaction.hitElement)
@@ -1012,8 +1036,20 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 onSelect(markup.id, event)
                 startDrag(markup, { type: 'rect-resize', handle }, event)
               }}
-              onPointerMove={pointerEnabled ? onPointerMove : undefined}
-              onPointerUp={pointerEnabled ? onPointerUp : undefined}
+              onPointerMove={pointerEnabled ? event => {
+                if (passThrough && passThroughTargetRef.current) {
+                  redirectPointerToGraph(event, passThroughTargetRef.current)
+                  return
+                }
+                onPointerMove(event)
+              } : undefined}
+              onPointerUp={pointerEnabled ? event => {
+                if (passThrough && passThroughTargetRef.current) {
+                  redirectPointerToGraph(event, passThroughTargetRef.current)
+                  return
+                }
+                onPointerUp(event)
+              } : undefined}
             />
           )
         })}
