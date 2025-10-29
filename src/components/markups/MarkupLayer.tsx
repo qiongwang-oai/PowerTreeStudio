@@ -349,14 +349,6 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
     event.currentTarget.setPointerCapture(event.pointerId)
   }, [dragState, onSelect, screenToFlow])
 
-  const handlePointerMove = useCallback((event: React.PointerEvent) => {
-    if (!dragState || event.pointerId !== dragState.pointerId) return
-    event.preventDefault()
-    const pointer = screenToFlow({ x: event.clientX, y: event.clientY })
-    const updated = computeDragUpdate(dragState, pointer)
-    setDrafts(prev => ({ ...prev, [dragState.id]: updated }))
-  }, [dragState, screenToFlow])
-
   const handlePointerUp = useCallback((event: React.PointerEvent) => {
     if (!dragState || event.pointerId !== dragState.pointerId) return
     event.preventDefault()
@@ -370,6 +362,18 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
     setDragState(null)
     event.currentTarget.releasePointerCapture?.(event.pointerId)
   }, [dragState, drafts, onCommitUpdate])
+
+  const handlePointerMove = useCallback((event: React.PointerEvent) => {
+    if (!dragState || event.pointerId !== dragState.pointerId) return
+    if (event.buttons === 0) {
+      handlePointerUp(event)
+      return
+    }
+    event.preventDefault()
+    const pointer = screenToFlow({ x: event.clientX, y: event.clientY })
+    const updated = computeDragUpdate(dragState, pointer)
+    setDrafts(prev => ({ ...prev, [dragState.id]: updated }))
+  }, [dragState, handlePointerUp, screenToFlow])
 
   const updateCreationMarkup = useCallback((pointer: { x: number; y: number }, enforceMinimum = false) => {
     const draft = creationDraftRef.current
@@ -988,11 +992,11 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
             onPointerMove(event)
           } : undefined}
           onPointerUp={pointerEnabled ? event => {
-            if (passThrough && passThroughTargetRef.current) {
-              redirectPointerToGraph(event, passThroughTargetRef.current)
-              return
-            }
+            const target = passThroughTargetRef.current
             onPointerUp(event)
+            if (passThrough && target) {
+              redirectPointerToGraph(event, target)
+            }
           } : undefined}
           style={{
             width: '100%',
@@ -1044,11 +1048,11 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 onPointerMove(event)
               } : undefined}
               onPointerUp={pointerEnabled ? event => {
-                if (passThrough && passThroughTargetRef.current) {
-                  redirectPointerToGraph(event, passThroughTargetRef.current)
-                  return
-                }
+                const target = passThroughTargetRef.current
                 onPointerUp(event)
+                if (passThrough && target) {
+                  redirectPointerToGraph(event, target)
+                }
               } : undefined}
             />
           )
