@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, Node as RFNode, useNodesState, useEdgesState, addEdge, applyNodeChanges, applyEdgeChanges, OnEdgesDelete, OnNodesDelete, useReactFlow } from 'reactflow'
 import 'reactflow/dist/style.css'
 import { Project, AnyNode, Edge, CanvasMarkup } from '../../models'
-import { compute, etaFromModel } from '../../calc'
+import { compute, etaFromModel, previewEtaFromModel } from '../../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { useStore } from '../../state/store'
@@ -695,8 +695,8 @@ const skipPaneClickRef = useRef(false)
                       return (eta * 100).toFixed(1) + '%';
                     } else if (eff?.type === 'fixed') {
                       return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                    } else if (eff?.points?.[0]?.eta) {
-                      return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                    } else if (eff?.type === 'curve') {
+                      return (previewEtaFromModel(eff, n as any) * 100).toFixed(1) + '%';
                     } else {
                       return '—';
                     }
@@ -1362,8 +1362,8 @@ const skipPaneClickRef = useRef(false)
                             return (eta * 100).toFixed(1) + '%';
                           } else if (eff?.type === 'fixed') {
                             return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                          } else if (eff?.points?.[0]?.eta) {
-                            return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                          } else if (eff?.type === 'curve') {
+                            return (previewEtaFromModel(eff, n as any) * 100).toFixed(1) + '%';
                           } else {
                             return '—';
                           }
@@ -1436,8 +1436,8 @@ const skipPaneClickRef = useRef(false)
                   return (eta * 100).toFixed(1) + '%';
                 } else if (eff?.type === 'fixed') {
                   return ((eff.value ?? 0) * 100).toFixed(1) + '%';
-                } else if (eff?.points?.[0]?.eta) {
-                  return ((eff.points[0].eta ?? 0) * 100).toFixed(1) + '%';
+                } else if (eff?.type === 'curve') {
+                  return (previewEtaFromModel(eff, n as any) * 100).toFixed(1) + '%';
                 } else {
                   return '—';
                 }
@@ -2369,4 +2369,3 @@ const skipPaneClickRef = useRef(false)
     </div>
   )
 }
-

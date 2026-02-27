@@ -1,4 +1,4 @@
-import { AnyNode, ConverterNode, DualOutputConverterNode, EfficiencyModel, Edge, LoadNode, Project, Scenario, SourceNode, SubsystemNode } from './models'
+import { AnyNode, ConverterNode, DualOutputConverterNode, EfficiencyCurve1DModel, EfficiencyCurve2DModel, EfficiencyModel, EfficiencyTable2D, Edge, LoadNode, Project, Scenario, SourceNode, SubsystemNode } from './models'
 import { clamp } from './utils'
 
 export type ComputeEdge = Edge & { I_edge?: number, V_drop?: number, P_loss_edge?: number, R_total?: number }
@@ -33,18 +33,192 @@ type EfficiencyNodeMeta = {
   Pout_max?: number
   Iout_max?: number
   phaseCount?: number
+  Vout?: number
+}
+
+function resolvePhaseCount(node: EfficiencyNodeMeta): number {
+  const phaseCountRaw = (node?.phaseCount ?? 1) as number
+  return Number.isFinite(phaseCountRaw) && phaseCountRaw > 0 ? Math.max(1, Math.round(phaseCountRaw)) : 1
+}
+
+function isCurve2DModel(model: EfficiencyModel): model is EfficiencyCurve2DModel {
+  return model.type === 'curve' && model.mode === '2d'
+}
+
+function isCurve1DModel(model: EfficiencyModel): model is EfficiencyCurve1DModel {
+  return model.type === 'curve' && model.mode !== '2d'
+}
+
+export function normalizeCurve1DPoints(model: EfficiencyCurve1DModel, node: EfficiencyNodeMeta, divisor = 1): Array<{ pct: number; eta: number }> {
+  if (!Array.isArray(model.points) || model.points.length === 0) return []
+
+  const base = model.base
+  const rawMax = base === 'Pout_max' ? node?.Pout_max : node?.Iout_max
+  const maxBase = Number.isFinite(rawMax) && (rawMax as number) > 0 ? (rawMax as number) / Math.max(divisor, 1) : undefined
+  if (!maxBase || maxBase <= 0) {
+    return []
+  }
+
+  return model.points
+    .map((p: any) => {
+      const eta = typeof p.eta === 'number' ? clamp(p.eta, 0, 1) : 0
+      let pct: number | undefined
+      if (typeof p.loadPct === 'number') pct = clamp(p.loadPct, 0, 100)
+      else if (typeof p.current === 'number') pct = clamp((p.current / maxBase) * 100, 0, 100)
+      return typeof pct === 'number' ? { pct, eta } : null
+    })
+    .filter((point): point is { pct: number; eta: number } => !!point)
+    .sort((a, b) => a.pct - b.pct)
+}
+
+export function interpolate1D(points: Array<{ pct: number; eta: number }>, queryPct: number): number {
+  if (!points.length) return 0.9
+  const pct = clamp(queryPct, 0, 100)
+  if (pct <= points[0]!.pct) return points[0]!.eta
+  if (pct >= points[points.length - 1]!.pct) return points[points.length - 1]!.eta
+
+  let prev = points[0]!
+  let next = points[points.length - 1]!
+  for (let i = 0; i < points.length - 1; i++) {
+    const curr = points[i]!
+    const following = points[i + 1]!
+    if (pct >= curr.pct && pct <= following.pct) {
+      prev = curr
+      next = following
+      break
+    }
+  }
+
+  const spread = Math.max(next.pct - prev.pct, 1e-9)
+  return prev.eta + ((next.eta - prev.eta) * (pct - prev.pct)) / spread
+}
+
+function normalizeCurve2DTable(table: EfficiencyTable2D | undefined): EfficiencyTable2D | null {
+  if (!table || !Array.isArray(table.outputVoltages) || !Array.isArray(table.outputCurrents) || !Array.isArray(table.values)) {
+    return null
+  }
+  if (table.outputVoltages.length === 0 || table.outputCurrents.length === 0 || table.values.length !== table.outputVoltages.length) {
+    return null
+  }
+
+  const voltages = table.outputVoltages.map(v => Number(v))
+  const currents = table.outputCurrents.map(i => Number(i))
+  if (!voltages.every(v => Number.isFinite(v) && v > 0) || !currents.every(i => Number.isFinite(i) && i >= 0)) {
+    return null
+  }
+
+  const values = table.values.map(row => (
+    Array.isArray(row)
+      ? row.map(value => (value === null || value === undefined || value === '' ? null : Number(value)))
+      : []
+  ))
+  if (values.some(row => row.length !== currents.length || row.some(value => value !== null && !Number.isFinite(value)))) {
+    return null
+  }
+
+  const voltageOrder = voltages.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value)
+  const currentOrder = currents.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value)
+  for (let i = 1; i < voltageOrder.length; i++) {
+    if (Math.abs(voltageOrder[i]!.value - voltageOrder[i - 1]!.value) < 1e-9) return null
+  }
+  for (let i = 1; i < currentOrder.length; i++) {
+    if (Math.abs(currentOrder[i]!.value - currentOrder[i - 1]!.value) < 1e-9) return null
+  }
+
+  const sortedValues = voltageOrder.map(({ index: rowIndex }) =>
+    currentOrder.map(({ index: colIndex }) => {
+      const value = values[rowIndex]![colIndex]
+      return value === null ? null : clamp(value, 0, 1)
+    })
+  )
+
+  return {
+    outputVoltages: voltageOrder.map(entry => entry.value),
+    outputCurrents: currentOrder.map(entry => entry.value),
+    values: sortedValues,
+  }
+}
+
+function interpolateAxisValues(axis: number[], values: Array<number | null>, query: number): number | undefined {
+  const definedPoints = axis
+    .map((coord, index) => {
+      const value = values[index]
+      return value === null || value === undefined || !Number.isFinite(value) ? null : { coord, value }
+    })
+    .filter((entry): entry is { coord: number; value: number } => !!entry)
+
+  if (!definedPoints.length) return undefined
+  if (definedPoints.length === 1) return definedPoints[0]!.value
+  if (query <= definedPoints[0]!.coord) return definedPoints[0]!.value
+  if (query >= definedPoints[definedPoints.length - 1]!.coord) return definedPoints[definedPoints.length - 1]!.value
+
+  for (let i = 0; i < definedPoints.length - 1; i++) {
+    const start = definedPoints[i]!
+    const end = definedPoints[i + 1]!
+    if (query >= start.coord && query <= end.coord) {
+      const span = Math.max(end.coord - start.coord, 1e-9)
+      const frac = (query - start.coord) / span
+      return start.value + ((end.value - start.value) * frac)
+    }
+  }
+  return definedPoints[definedPoints.length - 1]!.value
+}
+
+export function interpolate2D(table: EfficiencyTable2D, queryVoltage: number, queryCurrent: number): number {
+  const normalized = normalizeCurve2DTable(table)
+  if (!normalized) return 0.9
+
+  const currentQuery = clamp(queryCurrent, normalized.outputCurrents[0]!, normalized.outputCurrents[normalized.outputCurrents.length - 1]!)
+  const rowInterpolated = normalized.outputVoltages.map((voltage, rowIndex) => ({
+    voltage,
+    eta: interpolateAxisValues(normalized.outputCurrents, normalized.values[rowIndex]!, currentQuery),
+  }))
+  const definedRows = rowInterpolated.filter((entry): entry is { voltage: number; eta: number } => typeof entry.eta === 'number')
+  if (!definedRows.length) return 0.9
+  if (definedRows.length === 1) return definedRows[0]!.eta
+
+  const voltageQuery = clamp(
+    Number.isFinite(queryVoltage) ? queryVoltage : normalized.outputVoltages[0]!,
+    definedRows[0]!.voltage,
+    definedRows[definedRows.length - 1]!.voltage
+  )
+  return interpolateAxisValues(
+    definedRows.map(entry => entry.voltage),
+    definedRows.map(entry => entry.eta),
+    voltageQuery
+  ) ?? 0.9
+}
+
+export function previewEtaFromModel(model: EfficiencyModel, node: EfficiencyNodeMeta): number {
+  if (model.type === 'fixed') return model.value
+  if (isCurve2DModel(model)) {
+    const normalized = normalizeCurve2DTable(model.table)
+    if (!normalized) return 0.9
+    const queryVoltage = Number.isFinite(node?.Vout) ? (node.Vout as number) : normalized.outputVoltages[0]!
+    return interpolate2D(normalized, queryVoltage, 0)
+  }
+  if (!isCurve1DModel(model)) return 0.9
+  const divisor = model.perPhase ? resolvePhaseCount(node) : 1
+  const points = normalizeCurve1DPoints(model, node, divisor)
+  if (points.length) return interpolate1D(points, 0)
+  return typeof model.points?.[0]?.eta === 'number' ? clamp(model.points[0]!.eta, 0, 1) : 0.9
 }
 
 export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: number, node: EfficiencyNodeMeta): number {
-  const phaseCountRaw = (node?.phaseCount ?? 1) as number
-  const phaseCount = Number.isFinite(phaseCountRaw) && phaseCountRaw > 0 ? Math.max(1, Math.round(phaseCountRaw)) : 1
+  const phaseCount = resolvePhaseCount(node)
   const perPhase = !!(model as any)?.perPhase && phaseCount > 0
   const divisor = perPhase ? phaseCount : 1
   const scaledPout = perPhase ? (P_out / divisor) : P_out
   const scaledIout = perPhase ? (I_out / divisor) : I_out
 
   if (model.type === 'fixed') return model.value
-  if (!Array.isArray(model.points) || model.points.length === 0) return 0.9 // default efficiency if points missing
+  if (isCurve2DModel(model)) {
+    const normalized = normalizeCurve2DTable(model.table)
+    if (!normalized) return 0.9
+    const queryVoltage = Number.isFinite(node?.Vout) ? (node.Vout as number) : normalized.outputVoltages[0]!
+    return interpolate2D(normalized, queryVoltage, scaledIout)
+  }
+  if (!isCurve1DModel(model) || !Array.isArray(model.points) || model.points.length === 0) return 0.9
 
   const base = model.base
   const rawMax = base === 'Pout_max' ? node?.Pout_max : node?.Iout_max
@@ -53,45 +227,14 @@ export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: numbe
     return 0.9
   }
 
-  const normalizedPoints = model.points
-    .map((p: any) => {
-      const eta = typeof p.eta === 'number' ? p.eta : 0
-      let pct: number | undefined
-      if (typeof p.loadPct === 'number') pct = clamp(p.loadPct, 0, 100)
-      else if (typeof p.current === 'number') pct = clamp((p.current / maxBase) * 100, 0, 100)
-      return { pct, eta }
-    })
-    .filter(p => typeof p.pct === 'number')
-    .sort((a, b) => (a.pct! - b.pct!))
+  const normalizedPoints = normalizeCurve1DPoints(model, node, divisor)
 
   if (normalizedPoints.length === 0) {
-    return typeof model.points[0]?.eta === 'number' ? model.points[0]!.eta : 0.9
+    return typeof model.points[0]?.eta === 'number' ? clamp(model.points[0]!.eta, 0, 1) : 0.9
   }
 
   const fracBase = base === 'Pout_max' ? (scaledPout / maxBase) : (scaledIout / maxBase)
-  const pct = clamp(fracBase * 100, 0, 100)
-  let prev = normalizedPoints[0]!
-  let next = normalizedPoints[normalizedPoints.length - 1]!
-  for (let i = 0; i < normalizedPoints.length - 1; i++) {
-    const curr = normalizedPoints[i]!
-    const following = normalizedPoints[i + 1]!
-    if (pct >= curr.pct! && pct <= following.pct!) {
-      prev = curr
-      next = following
-      break
-    }
-  }
-  if (pct <= normalizedPoints[0]!.pct!) {
-    prev = normalizedPoints[0]!
-    next = normalizedPoints[0]!
-  }
-  if (pct >= normalizedPoints[normalizedPoints.length - 1]!.pct!) {
-    prev = normalizedPoints[normalizedPoints.length - 1]!
-    next = normalizedPoints[normalizedPoints.length - 1]!
-  }
-  const spread = Math.max((next.pct! - prev.pct!), 1e-9)
-  const eta = prev.eta + (next.eta - prev.eta) * (pct - prev.pct!) / spread
-  return eta
+  return interpolate1D(normalizedPoints, fracBase * 100)
 }
 export function detectCycle(nodes: AnyNode[], edges: Edge[]): {hasCycle:boolean, order:string[]} {
   const adj: Record<string, string[]> = {}; const indeg: Record<string, number> = {}

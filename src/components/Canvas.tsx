@@ -3,7 +3,7 @@ import ReactFlow, { Background, Controls, MiniMap, Connection, Edge as RFEdge, N
 import 'reactflow/dist/style.css'
 import { useStore } from '../state/store'
 import type { ClipboardPayload } from '../state/store'
-import { compute, etaFromModel, computeDeepAggregates } from '../calc'
+import { compute, etaFromModel, previewEtaFromModel, computeDeepAggregates } from '../calc'
 import { Handle, Position } from 'reactflow'
 import type { NodeProps } from 'reactflow'
 import { Button } from './ui/button'
@@ -623,8 +623,8 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
                     return (eta * 100).toFixed(1) + '%'
                   } else if (eff?.type === 'fixed') {
                     return ((eff.value ?? 0) * 100).toFixed(1) + '%'
-                  } else if ((eff as any)?.points?.[0]?.eta) {
-                    return (((eff as any).points[0].eta ?? 0) * 100).toFixed(1) + '%'
+                  } else if (eff?.type === 'curve') {
+                    return (previewEtaFromModel(eff, node as any) * 100).toFixed(1) + '%'
                   }
                   return '—'
                 })()}</div>

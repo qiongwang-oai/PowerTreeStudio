@@ -7,6 +7,9 @@ html, body, #root { height: 100%; }
 .input{
   @apply w-full min-w-[6rem] rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm transition focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-100;
 }
+.table-cell-input{
+  @apply w-full min-w-0 rounded-none border-0 bg-transparent px-1 py-1 text-sm text-slate-700 shadow-none transition focus:bg-sky-50 focus:outline-none focus:ring-0;
+}
 .react-flow__edges { z-index: 18 !important; }
 .react-flow__edge-labels { z-index: 19 !important; }
 .react-flow__nodes { z-index: 10 !important; }

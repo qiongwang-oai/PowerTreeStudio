@@ -2,9 +2,28 @@ import type { QuickPreset } from './utils/quickPresets'
 
 export type NodeType = 'Source'|'Converter'|'DualOutputConverter'|'Load'|'Bus'|'Note'|'Subsystem'|'SubsystemInput'
 export type EfficiencyPoint = { loadPct?: number; current?: number; eta: number }
+export type EfficiencyTable2D = {
+  outputVoltages: number[]
+  outputCurrents: number[]
+  values: Array<Array<number | null>>
+}
+export type EfficiencyCurve1DModel = {
+  type: 'curve'
+  mode?: '1d'
+  base: 'Pout_max' | 'Iout_max'
+  points: EfficiencyPoint[]
+  perPhase?: boolean
+}
+export type EfficiencyCurve2DModel = {
+  type: 'curve'
+  mode: '2d'
+  table: EfficiencyTable2D
+  perPhase?: boolean
+}
+export type EfficiencyCurveModel = EfficiencyCurve1DModel | EfficiencyCurve2DModel
 export type EfficiencyModel =
  | { type: 'fixed', value: number, perPhase?: boolean }
- | { type: 'curve', base: 'Pout_max' | 'Iout_max', points: EfficiencyPoint[], perPhase?: boolean }
+ | EfficiencyCurveModel
 export type BaseNode = { id: string; type: NodeType; name: string; x?:number; y?:number; notes?: string; warnings?: string[] }
 export type SourceNode = BaseNode & { type: 'Source'; Vout: number; I_max?: number; P_max?: number; count?: number; redundancy?: 'N'|'N+1' }
 export type ConverterNode = BaseNode & {
