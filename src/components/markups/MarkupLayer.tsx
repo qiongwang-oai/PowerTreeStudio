@@ -276,7 +276,7 @@ const MarkupLayer: React.FC<MarkupLayerProps> = ({
     hitElement: HTMLElement | null
   }
 
-  const evaluateRectangleInteraction = useCallback((event: React.PointerEvent): RectangleInteractionResult => {
+  const evaluateRectangleInteraction = useCallback((event: React.PointerEvent | React.MouseEvent): RectangleInteractionResult => {
     if (typeof document === 'undefined') {
       return { shouldHandle: true, hitElement: null }
     }
@@ -591,7 +591,7 @@ type MarkupItemProps = {
   onPointerMove: (event: React.PointerEvent) => void
   onPointerUp: (event: React.PointerEvent) => void
   readOnly?: boolean
-  evaluateRectInteraction?: (event: React.PointerEvent) => { shouldHandle: boolean; hitElement: HTMLElement | null }
+  evaluateRectInteraction?: (event: React.PointerEvent | React.MouseEvent) => { shouldHandle: boolean; hitElement: HTMLElement | null }
   renderMode?: 'default' | 'visual' | 'interactive'
 }
 
@@ -633,6 +633,39 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
 
     window.addEventListener('pointerup', restore, true)
     window.addEventListener('pointercancel', restore, true)
+  }, [])
+
+  const redirectMouseToGraph = useCallback((event: React.MouseEvent, explicitTarget?: HTMLElement | null) => {
+    const targetElement = event.currentTarget as HTMLElement | null
+    if (!targetElement || typeof document === 'undefined') return
+
+    const previousPointerEvents = targetElement.style.pointerEvents
+    targetElement.style.pointerEvents = 'none'
+    const dispatchTarget = explicitTarget ?? document.elementFromPoint(event.clientX, event.clientY) as HTMLElement | null
+    targetElement.style.pointerEvents = previousPointerEvents
+
+    if (!dispatchTarget) return
+
+    const clone = new MouseEvent(event.type, {
+      bubbles: true,
+      cancelable: true,
+      composed: true,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      screenX: event.screenX,
+      screenY: event.screenY,
+      button: event.button,
+      buttons: event.buttons,
+      altKey: event.altKey,
+      ctrlKey: event.ctrlKey,
+      metaKey: event.metaKey,
+      shiftKey: event.shiftKey,
+      detail: event.detail,
+    })
+    dispatchTarget.dispatchEvent(clone)
+
+    event.preventDefault()
+    event.stopPropagation()
   }, [])
 
   const redirectPointerToGraph = useCallback((event: React.PointerEvent, explicitTarget?: HTMLElement | null) => {
@@ -906,6 +939,49 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
       e: { left: markup.size.width - HANDLE_SIZE / 2, top: markup.size.height / 2 - HANDLE_SIZE / 2, cursor: 'ew-resize' },
       w: { left: -HANDLE_SIZE / 2, top: markup.size.height / 2 - HANDLE_SIZE / 2, cursor: 'ew-resize' },
     }
+    const hitAreaThickness = Math.max(12, markup.thickness + 10)
+    const edgeHitAreas = [
+      {
+        key: 'top',
+        style: {
+          position: 'absolute' as const,
+          left: -hitAreaThickness / 2,
+          top: -hitAreaThickness / 2,
+          width: markup.size.width + hitAreaThickness,
+          height: hitAreaThickness,
+        },
+      },
+      {
+        key: 'bottom',
+        style: {
+          position: 'absolute' as const,
+          left: -hitAreaThickness / 2,
+          top: markup.size.height - hitAreaThickness / 2,
+          width: markup.size.width + hitAreaThickness,
+          height: hitAreaThickness,
+        },
+      },
+      {
+        key: 'left',
+        style: {
+          position: 'absolute' as const,
+          left: -hitAreaThickness / 2,
+          top: hitAreaThickness / 2,
+          width: hitAreaThickness,
+          height: Math.max(0, markup.size.height - hitAreaThickness),
+        },
+      },
+      {
+        key: 'right',
+        style: {
+          position: 'absolute' as const,
+          left: markup.size.width - hitAreaThickness / 2,
+          top: hitAreaThickness / 2,
+          width: hitAreaThickness,
+          height: Math.max(0, markup.size.height - hitAreaThickness),
+        },
+      },
+    ]
 
     if (renderMode === 'visual') {
       return (
@@ -939,6 +1015,50 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
     const interactionBackground = renderMode === 'interactive' ? 'transparent' : fillColor
     const interactionBorderColor = renderMode === 'interactive' ? 'transparent' : isMultiSelected ? multiAccent : markup.strokeColor || '#0f172a'
     const pointerEnabled = interactive
+    const clearPassThrough = () => {
+      if (passThroughTimeoutRef.current !== null && typeof window !== 'undefined') {
+        window.clearTimeout(passThroughTimeoutRef.current)
+        passThroughTimeoutRef.current = null
+      }
+      setPassThrough(false)
+      setPassThroughCursor(null)
+      passThroughTargetRef.current = null
+    }
+    const handleMovePointerDown = pointerEnabled ? (event: React.PointerEvent) => {
+      if (event.button !== 0) return
+      if (passThrough && passThroughTargetRef.current) {
+        redirectPointerToGraph(event, passThroughTargetRef.current)
+        return
+      }
+      const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
+      if (!interaction.shouldHandle) {
+        redirectPointerToGraph(event, interaction.hitElement)
+        return
+      }
+      onSelect(markup.id, event)
+      startDrag(markup, { type: 'move' }, event)
+    } : undefined
+    const handleMovePointerMove = pointerEnabled ? (event: React.PointerEvent) => {
+      if (pointerEnabled) updatePassThrough(event.clientX, event.clientY)
+      if (passThrough && passThroughTargetRef.current) {
+        redirectPointerToGraph(event, passThroughTargetRef.current)
+        return
+      }
+      onPointerMove(event)
+    } : undefined
+    const handleMovePointerUp = pointerEnabled ? (event: React.PointerEvent) => {
+      const target = passThroughTargetRef.current
+      onPointerUp(event)
+      if (passThrough && target) {
+        redirectPointerToGraph(event, target)
+      }
+    } : undefined
+    const handleMoveDoubleClick = pointerEnabled ? (event: React.MouseEvent) => {
+      const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
+      if (!interaction.shouldHandle) {
+        redirectMouseToGraph(event, interaction.hitElement)
+      }
+    } : undefined
 
     return (
       <div
@@ -950,64 +1070,38 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
           top: markup.position.y,
           width: markup.size.width,
           height: markup.size.height,
-          pointerEvents: pointerEnabled && !pointerSuspended ? 'auto' : 'none',
+          pointerEvents: 'none',
           zIndex: interactive ? interactiveZIndex : markup.zIndex ?? 0,
-        }}
-        onPointerEnter={e => {
-          if (pointerEnabled) updatePassThrough(e.clientX, e.clientY)
-        }}
-        onPointerMove={e => {
-          if (pointerEnabled) updatePassThrough(e.clientX, e.clientY)
-        }}
-        onPointerLeave={() => {
-          if (passThroughTimeoutRef.current !== null && typeof window !== 'undefined') {
-            window.clearTimeout(passThroughTimeoutRef.current)
-            passThroughTimeoutRef.current = null
-          }
-          setPassThrough(false)
-          setPassThroughCursor(null)
-          passThroughTargetRef.current = null
         }}
       >
         <div
-          onPointerDown={pointerEnabled ? event => {
-            if (event.button !== 0) return
-            if (passThrough && passThroughTargetRef.current) {
-              redirectPointerToGraph(event, passThroughTargetRef.current)
-              return
-            }
-            const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
-            if (!interaction.shouldHandle) {
-              redirectPointerToGraph(event, interaction.hitElement)
-              return
-            }
-            onSelect(markup.id, event)
-            startDrag(markup, { type: 'move' }, event)
-          } : undefined}
-          onPointerMove={pointerEnabled ? event => {
-            if (passThrough && passThroughTargetRef.current) {
-              redirectPointerToGraph(event, passThroughTargetRef.current)
-              return
-            }
-            onPointerMove(event)
-          } : undefined}
-          onPointerUp={pointerEnabled ? event => {
-            const target = passThroughTargetRef.current
-            onPointerUp(event)
-            if (passThrough && target) {
-              redirectPointerToGraph(event, target)
-            }
-          } : undefined}
           style={{
             width: '100%',
             height: '100%',
             borderRadius: markup.cornerRadius ?? 0,
             border: `${markup.thickness}px ${borderStyle} ${interactionBorderColor}`,
             background: interactionBackground,
-            cursor: passThrough ? passThroughCursor ?? 'pointer' : pointerEnabled ? 'grab' : 'default',
             boxShadow: highlightShadow,
+            pointerEvents: 'none',
           }}
         />
+        {pointerEnabled && edgeHitAreas.map(area => (
+          <div
+            key={area.key}
+            style={{
+              ...area.style,
+              background: 'transparent',
+              pointerEvents: pointerEnabled && !pointerSuspended ? 'auto' : 'none',
+              cursor: passThrough ? passThroughCursor ?? 'pointer' : 'grab',
+            }}
+            onPointerEnter={event => updatePassThrough(event.clientX, event.clientY)}
+            onPointerMove={handleMovePointerMove}
+            onPointerLeave={clearPassThrough}
+            onPointerDown={handleMovePointerDown}
+            onPointerUp={handleMovePointerUp}
+            onDoubleClick={handleMoveDoubleClick}
+          />
+        ))}
         {interactive && isPrimarySelected && handles.map(handle => {
           const pos = handlePositions[handle]
           return (
@@ -1025,6 +1119,9 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 cursor: pos.cursor,
                 zIndex: Math.max(50, (markup.zIndex ?? 0) + 1),
                 pointerEvents: pointerEnabled && !pointerSuspended ? 'auto' : 'none',
+              }}
+              onPointerEnter={event => {
+                if (pointerEnabled) updatePassThrough(event.clientX, event.clientY)
               }}
               onPointerDown={event => {
                 if (event.button !== 0) return
@@ -1047,11 +1144,18 @@ const MarkupItem: React.FC<MarkupItemProps> = ({ markup, isPrimarySelected, isMu
                 }
                 onPointerMove(event)
               } : undefined}
+              onPointerLeave={clearPassThrough}
               onPointerUp={pointerEnabled ? event => {
                 const target = passThroughTargetRef.current
                 onPointerUp(event)
                 if (passThrough && target) {
                   redirectPointerToGraph(event, target)
+                }
+              } : undefined}
+              onDoubleClick={pointerEnabled ? event => {
+                const interaction = evaluateRectInteraction ? evaluateRectInteraction(event) : { shouldHandle: true, hitElement: null }
+                if (!interaction.shouldHandle) {
+                  redirectMouseToGraph(event, interaction.hitElement)
                 }
               } : undefined}
             />
