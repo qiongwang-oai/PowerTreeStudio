@@ -3282,7 +3282,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           screenToFlow={screenToFlowPosition}
         />
         <div data-export-exclude="true"><MiniMap /></div>
-        <div data-export-exclude="true"><Controls /></div>
+        <div data-export-exclude="true"><Controls showInteractive={false} /></div>
         <div data-export-exclude="true"><Background gap={16} /></div>
       </ReactFlow>
       {marqueeRect && (

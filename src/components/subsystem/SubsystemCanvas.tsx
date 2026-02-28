@@ -2323,7 +2323,7 @@ const skipPaneClickRef = useRef(false)
         }}
         onNodeDoubleClick={(_,n)=>{ clearMultiSelection(); const t=(n as any).data?.type; if (t==='Subsystem' && onOpenNested) onOpenNested(n.id) }}
       >
-        <MiniMap /><Controls /><Background gap={16} />
+        <MiniMap /><Controls showInteractive={false} /><Background gap={16} />
       </ReactFlow>
       {marqueeRect && (
         <div

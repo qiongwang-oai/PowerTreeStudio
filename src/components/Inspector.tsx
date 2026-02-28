@@ -413,7 +413,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
       <InspectorShell>
         <InspectorHeader
           title={label}
-          subtitle={`Markup ID ${markup.id}`}
           actions={(
             <Button variant="outline" size="icon" aria-label="Delete markup" onClick={onDeleteMarkup}>
               <Trash2 className="h-4 w-4" />
