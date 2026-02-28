@@ -15,18 +15,17 @@ export default function QuickPresetTile({ preset, onClick, onDragStart }: QuickP
   return (
     <Button
       variant="outline"
-      className="w-full text-left px-3 py-2 border flex flex-col gap-1"
+      className="flex w-full min-w-0 flex-col items-stretch gap-1 overflow-hidden border px-3 py-2 text-left"
       style={{ borderColor: accent, background: `${accent}20`, color: '#0f172a' }}
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
       title={preset.description || preset.name}
     >
-      <span className="text-sm font-semibold">{preset.name}</span>
-      {preset.description && <span className="text-xs text-slate-600 truncate">{preset.description}</span>}
-      {!preset.description && <span className="text-xs text-slate-400">{preset.nodeType}</span>}
+      <span className="block w-full truncate text-sm font-semibold">{preset.name}</span>
+      {preset.description && <span className="block w-full truncate text-xs text-slate-600">{preset.description}</span>}
+      {!preset.description && <span className="block w-full truncate text-xs text-slate-400">{preset.nodeType}</span>}
     </Button>
   )
 }
-
 

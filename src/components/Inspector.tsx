@@ -450,7 +450,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
       <InspectorShell>
         <InspectorHeader
           title="Edge"
-          subtitle={`ID ${edge.id}`}
           actions={(
             <Button variant="outline" size="icon" aria-label="Delete edge" onClick={()=>{ removeEdge(edge.id); onDeleted && onDeleted() }}>
               <Trash2 className="h-4 w-4" />
@@ -1258,7 +1257,6 @@ export default function Inspector({selection, onDeleted, onOpenSubsystemEditor, 
       {embeddedFileInput}
       <InspectorHeader
         title={node.name || 'Untitled'}
-        subtitle={`ID ${node.id}`}
         actions={(
           <Button variant="outline" size="icon" aria-label="Delete node" onClick={()=>{ removeNode(node.id); onDeleted && onDeleted() }}>
             <Trash2 className="h-4 w-4" />

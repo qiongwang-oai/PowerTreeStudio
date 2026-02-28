@@ -135,7 +135,6 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
       <InspectorShell>
         <InspectorHeader
           title="Edge"
-          subtitle={`ID ${edge.id}`}
           actions={(
             <Button variant="outline" size="icon" aria-label="Delete edge" onClick={()=>{ nestedRemoveEdge(path, edge.id); onDeleted && onDeleted() }}>
               <Trash2 className="h-4 w-4" />
@@ -863,7 +862,6 @@ export default function SubsystemInspector({ subsystemId, subsystemPath, project
       {embeddedFileInput}
       <InspectorHeader
         title={node.name || 'Untitled'}
-        subtitle={`ID ${node.id}`}
         actions={(
           <Button variant="outline" size="icon" aria-label="Delete node" onClick={()=>{ nestedRemoveNode(path, node.id); onDeleted && onDeleted() }}>
             <Trash2 className="h-4 w-4" />

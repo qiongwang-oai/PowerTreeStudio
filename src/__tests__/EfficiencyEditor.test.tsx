@@ -60,7 +60,7 @@ describe('EfficiencyEditor', () => {
     const onEmit = vi.fn()
     render(<Harness initial={{ type: 'fixed', value: 0.91 }} onEmit={onEmit} />)
 
-    fireEvent.change(screen.getByLabelText('Efficiency model'), { target: { value: 'curve' } })
+    fireEvent.change(screen.getByLabelText('Efficiency model'), { target: { value: 'curve1d' } })
 
     await waitFor(() => expect(onEmit).toHaveBeenCalled())
     expect(onEmit.mock.lastCall?.[0]).toMatchObject({
@@ -87,7 +87,7 @@ describe('EfficiencyEditor', () => {
       />
     )
 
-    fireEvent.change(screen.getByLabelText('Curve dimension'), { target: { value: '2d' } })
+    fireEvent.change(screen.getByLabelText('Efficiency model'), { target: { value: 'curve2d' } })
 
     await waitFor(() => expect(onEmit).toHaveBeenCalled())
     expect(onEmit.mock.lastCall?.[0]).toMatchObject({

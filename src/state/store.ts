@@ -228,6 +228,8 @@ const ensureMarkupsInitialized = (project: Project): CanvasMarkup[] => {
 
 const normalizeProject = (project: Project): Project => {
   const clone = JSON.parse(JSON.stringify(project)) as Project
+  clone.nodes = Array.isArray(clone.nodes) ? clone.nodes : []
+  clone.edges = Array.isArray(clone.edges) ? clone.edges : []
   const sourceMarkups = Array.isArray(clone.markups)
     ? clone.markups
     : Array.isArray(project.markups)
@@ -239,6 +241,15 @@ const normalizeProject = (project: Project): Project => {
         .filter((markup): markup is CanvasMarkup => markup !== null)
     : []
   clone.markups = normalizedMarkups
+  clone.nodes = clone.nodes.map(node => {
+    if (node?.type === 'Subsystem' && node.project && typeof node.project === 'object') {
+      return {
+        ...node,
+        project: normalizeProject(node.project as Project),
+      } as AnyNode
+    }
+    return node
+  }) as AnyNode[]
   return clone
 }
 

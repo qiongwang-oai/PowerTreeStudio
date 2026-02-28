@@ -19,7 +19,7 @@ export function InspectorHeader({ title, subtitle, badge, actions }: HeaderProps
   return (
     <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-4 backdrop-blur">
       <div className="flex flex-col gap-3">
-        <div className="flex items-start justify-between gap-4">
+        <div className={`flex justify-between gap-4 ${subtitle ? 'items-start' : 'items-center'}`}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-slate-900">
               <h2 className="truncate text-base font-semibold leading-tight">{title}</h2>
@@ -152,4 +152,3 @@ export function EmptyState({ title, description }: { title: string; description?
     </div>
   )
 }
-

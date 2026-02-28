@@ -239,19 +239,32 @@ export function etaFromModel(model: EfficiencyModel, P_out: number, I_out: numbe
 export function detectCycle(nodes: AnyNode[], edges: Edge[]): {hasCycle:boolean, order:string[]} {
   const adj: Record<string, string[]> = {}; const indeg: Record<string, number> = {}
   nodes.forEach(n=>{ adj[n.id]=[]; indeg[n.id]=0 })
-  edges.forEach(e=>{ adj[e.from].push(e.to); indeg[e.to]=(indeg[e.to]||0)+1 })
+  edges.forEach(e=>{
+    if (!adj[e.from] || !(e.to in indeg)) return
+    adj[e.from].push(e.to)
+    indeg[e.to]=(indeg[e.to]||0)+1
+  })
   const q: string[] = Object.keys(indeg).filter(k=>indeg[k]===0); const order: string[] = []; let idx=0
   while (idx<q.length){ const u=q[idx++]; order.push(u); for (const v of adj[u]){ indeg[v]--; if (indeg[v]===0) q.push(v) } }
   return { hasCycle: order.length !== nodes.length, order }
 }
 export function compute(project: Project): ComputeResult {
-  const { nodes, edges, currentScenario, defaultMargins } = project
+  const rawNodes = Array.isArray(project?.nodes) ? project.nodes : []
+  const rawEdges = Array.isArray(project?.edges) ? project.edges : []
+  const nodes = rawNodes.filter((node): node is AnyNode => !!node && typeof (node as any).id === 'string' && typeof (node as any).type === 'string')
+  const edges = rawEdges.filter((edge): edge is Edge => !!edge && typeof (edge as any).id === 'string' && typeof (edge as any).from === 'string' && typeof (edge as any).to === 'string')
+  const currentScenario = project?.currentScenario ?? 'Typical'
+  const defaultMargins = project?.defaultMargins ?? { currentPct: 0, powerPct: 0, voltageDropPct: 0, voltageMarginPct: 0 }
   const nmap: Record<string, ComputeNode> = {}; const emap: Record<string, ComputeEdge> = {}
   nodes.forEach(n=> nmap[n.id] = { ...n, warnings: [] } as ComputeNode)
   edges.forEach(e=> emap[e.id] = { ...e })
   const { hasCycle, order } = detectCycle(nodes, edges)
   const globalWarnings: string[] = []
-  if (hasCycle) return { nodes:nmap, edges:emap, totals:{loadPower:0, sourceInput:0, overallEta:0}, globalWarnings:['Cycle detected: computation blocked.'], order }
+  if (!Array.isArray(project?.nodes)) globalWarnings.push('Project nodes were missing; using an empty node list.')
+  if (!Array.isArray(project?.edges)) globalWarnings.push('Project interconnects were missing; using an empty edge list.')
+  if (rawNodes.length !== nodes.length) globalWarnings.push('Some project nodes were invalid and were skipped during computation.')
+  if (rawEdges.length !== edges.length) globalWarnings.push('Some project interconnects were invalid and were skipped during computation.')
+  if (hasCycle) return { nodes:nmap, edges:emap, totals:{loadPower:0, sourceInput:0, overallEta:0}, globalWarnings:[...globalWarnings, 'Cycle detected: computation blocked.'], order }
   const outgoing: Record<string, ComputeEdge[]> = {}
   Object.values(emap).forEach(e=>{ (outgoing[e.from]=outgoing[e.from]||[]).push(e) })
   const reverseOrder = [...order].reverse()
@@ -1145,7 +1158,7 @@ export function compute(project: Project): ComputeResult {
     .filter(n=> n.type==='Source' || n.type==='SubsystemInput')
     .reduce((a,n)=> a + (n.P_in || 0), 0)
   const overallEta = totalSource>0? totalLoad/totalSource : 0
-  return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings:[], order }
+  return { nodes:nmap, edges:emap, totals:{ loadPower: totalLoad, sourceInput: totalSource, overallEta }, globalWarnings, order }
 }
 
 /**

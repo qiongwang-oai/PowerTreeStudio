@@ -15,6 +15,7 @@ type EfficiencyEditorProps = {
 }
 
 type EfficiencyEditorValue = EfficiencyModel & { _lastCurve?: any }
+type EfficiencyModelSelection = 'fixed' | 'curve1d' | 'curve2d'
 type CurvePoint = { current: number; eta: number }
 type CurveDraftCache = {
   oneDimensional?: EfficiencyCurve1DModel
@@ -392,6 +393,7 @@ export default function EfficiencyEditor({ efficiency, maxCurrent, onChange, ana
 
   const drafts = React.useMemo(() => collectCurveDrafts(eff), [eff])
   const curveMode = isCurve2D(eff) ? '2d' : '1d'
+  const modelSelection: EfficiencyModelSelection = !isCurve ? 'fixed' : curveMode === '2d' ? 'curve2d' : 'curve1d'
 
   const curve1D = React.useMemo(() => {
     if (isCurve1D(eff)) return eff
@@ -464,18 +466,12 @@ export default function EfficiencyEditor({ efficiency, maxCurrent, onChange, ana
     onChange(withCurveDrafts(nextCurve, eff))
   }, [canUsePerPhase, eff, onChange, perPhaseActive])
 
-  const handleTypeChange = (value: 'fixed' | 'curve') => {
+  const handleModelSelectionChange = (value: EfficiencyModelSelection) => {
     if (value === 'fixed') {
       emitFixed(typeof (eff as any).value === 'number' ? (eff as any).value : 0.92)
       return
     }
-    if (curveMode === '2d') emitCurve2D(matrixTable, curve2D)
-    else emitCurve1D(currentPoints, curve1D)
-  }
-
-  const handleCurveModeChange = (value: '1d' | '2d') => {
-    if (!isCurve) return
-    if (value === '2d') {
+    if (value === 'curve2d') {
       emitCurve2D(matrixTable, curve2D)
       return
     }
@@ -702,19 +698,20 @@ export default function EfficiencyEditor({ efficiency, maxCurrent, onChange, ana
   return (
     <div className="space-y-4 text-base text-slate-700">
       <FormGrid columns={canUsePerPhase ? 2 : 1}>
-        <FormField label="Model">
+        <FormField label="Eifficiency model">
           <select
             aria-label="Efficiency model"
             className="input"
-            value={isCurve ? 'curve' : 'fixed'}
-            onChange={event => handleTypeChange(event.target.value as 'fixed' | 'curve')}
+            value={modelSelection}
+            onChange={event => handleModelSelectionChange(event.target.value as EfficiencyModelSelection)}
           >
             <option value="fixed">Fixed</option>
-            <option value="curve">Curve</option>
+            <option value="curve1d">Curve: current only</option>
+            <option value="curve2d">Curve: Vout + current</option>
           </select>
         </FormField>
         {canUsePerPhase && (
-          <FormField label={`Data scope (x${phaseCount})`}>
+          <FormField label={`Efficiency scope (x${phaseCount})`}>
             <select
               aria-label="Efficiency data scope"
               className="input"
@@ -730,18 +727,6 @@ export default function EfficiencyEditor({ efficiency, maxCurrent, onChange, ana
 
       {isCurve ? (
         <>
-          <FormField label="Curve dimension">
-            <select
-              aria-label="Curve dimension"
-              className="input"
-              value={curveMode}
-              onChange={event => handleCurveModeChange(event.target.value as '1d' | '2d')}
-            >
-              <option value="1d">Current only</option>
-              <option value="2d">Vout + current</option>
-            </select>
-          </FormField>
-
           {curveMode === '1d' ? (
             <>
               <div className="space-y-3">
