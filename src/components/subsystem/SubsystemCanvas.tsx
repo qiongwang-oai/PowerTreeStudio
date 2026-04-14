@@ -52,6 +52,7 @@ import {
   getKeyboardPanTranslation,
   isKeyboardPanOverrideActive,
 } from '../../utils/keyboardPan'
+import { getScenarioLoadCurrentDisplay } from '../../utils/loadScenarioDisplay'
 
 type PowerDisplay = { text: string; tooltip?: string }
 
@@ -627,6 +628,7 @@ export default function SubsystemCanvas({
   const clipboard = useStore(s=>s.clipboard)
   const setClipboard = useStore(s=>s.setClipboard)
   const openSubsystemIds = useStore(s=>s.openSubsystemIds)
+  const rootScenario = useStore(s=>s.project.currentScenario)
   const undo = useStore(s=>s.undo)
   const redo = useStore(s=>s.redo)
   const pastLen = useStore(s=>s.past.length)
@@ -667,7 +669,12 @@ const skipPaneClickRef = useRef(false)
 
   const nodeTypes = useMemo(() => ({ custom: CustomNode }), [])
   const edgeTypes = useMemo(() => ({ orthogonal: OrthogonalEdge }), [])
-  const computeResult = useMemo(()=> compute(project), [project])
+  const projectForAnalysis = useMemo(() => {
+    const cloned: Project = JSON.parse(JSON.stringify(project))
+    cloned.currentScenario = rootScenario
+    return cloned
+  }, [project, rootScenario])
+  const computeResult = useMemo(()=> compute(projectForAnalysis), [projectForAnalysis])
 
   const rfNodesInit: RFNode[] = useMemo(()=>project.nodes.map(n=>{
     const parallelCount = parallelCountForNode(n as any)
@@ -737,17 +744,21 @@ const skipPaneClickRef = useRef(false)
                   )
                 })()
                ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
-                <div style={{display:'flex', alignItems:'stretch', gap:8}}>
-                  <div className="text-left">
-                    <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
-                  </div>
-                  <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
-                  <div className="text-left" style={{minWidth:70}}>
-                    <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
-                  </div>
-                </div>
+                (() => {
+                  const currentDisplay = getScenarioLoadCurrentDisplay(n as any, rootScenario)
+                  return (
+                    <div style={{display:'flex', alignItems:'stretch', gap:8}}>
+                      <div className="text-left">
+                        <div style={{fontSize:'11px',color:'#555'}}>{currentDisplay.label}: {currentDisplay.text}</div>
+                        <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
+                      </div>
+                      <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
+                      <div className="text-left" style={{minWidth:70}}>
+                        <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
+                      </div>
+                    </div>
+                  )
+                })()
                ) : n.type === 'Subsystem' ? (
                 <div>
                   <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledSystems ?? 1)}</div>
@@ -778,7 +789,7 @@ const skipPaneClickRef = useRef(false)
     draggable: true,
     selected: false,
   }
-  }), [project.nodes, project.edges, computeResult.nodes])
+  }), [project.nodes, project.edges, computeResult.nodes, rootScenario])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
@@ -1370,10 +1381,12 @@ const skipPaneClickRef = useRef(false)
                         })()}</div>
                       </div>
            ) : n.type === 'Load' && 'Vreq' in n && 'I_typ' in n && 'I_max' in n ? (
+                      (() => {
+                        const currentDisplay = getScenarioLoadCurrentDisplay(n as any, rootScenario)
+                        return (
                       <div style={{display:'flex', alignItems:'stretch', gap:8}}>
                         <div className="text-left">
-                          <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                          <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                          <div style={{fontSize:'11px',color:'#555'}}>{currentDisplay.label}: {currentDisplay.text}</div>
                           <div style={{fontSize:'11px',color:'#555'}}>Paralleled: {((n as any).numParalleledDevices ?? 1)}</div>
                         </div>
                         <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
@@ -1381,6 +1394,8 @@ const skipPaneClickRef = useRef(false)
                     <div style={{fontSize:'11px',color:'#1e293b'}}>P_in: {renderPowerDisplay(computeResult.nodes[n.id]?.P_in)}</div>
                         </div>
                       </div>
+                        )
+                      })()
            ) : n.type === 'Subsystem' ? (
             <div>
               <div style={{fontSize:'11px',color:'#555'}}>Vin: {(n as any).inputV_nom}V</div>
@@ -1413,7 +1428,7 @@ const skipPaneClickRef = useRef(false)
       })
       return mapped
     })
-  }, [project.nodes, setNodes])
+  }, [project.nodes, project.edges, computeResult.nodes, rootScenario, setNodes])
 
   useEffect(()=>{
     setNodes(prev => prev.map(rn => {
@@ -1493,11 +1508,11 @@ const skipPaneClickRef = useRef(false)
           ) : n.type === 'Load' && 'I_typ' in n && 'I_max' in n ? (
             (() => {
               const parallelCount = Math.max(1, Math.round((n as any).numParalleledDevices ?? 1))
+              const currentDisplay = getScenarioLoadCurrentDisplay(n as any, rootScenario)
               return (
                 <div style={{display:'flex', alignItems:'stretch', gap:8}}>
                   <div className="text-left">
-                    <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(n as any).I_typ}A</div>
-                    <div style={{fontSize:'11px',color:'#555'}}>I_max: {(n as any).I_max}A</div>
+                    <div style={{fontSize:'11px',color:'#555'}}>{currentDisplay.label}: {currentDisplay.text}</div>
                   </div>
                   <span style={{display:'inline-block', alignSelf:'stretch', width:1, background:'#cbd5e1'}} />
                   <div className="text-left" style={{minWidth:70}}>
@@ -1580,7 +1595,7 @@ const skipPaneClickRef = useRef(false)
         }
       }
     }))
-  }, [computeResult, project.nodes, project.edges, setNodes])
+  }, [computeResult, project.nodes, project.edges, rootScenario, setNodes])
 
   useEffect(() => {
     setNodes(prev => prev.map(rn => {

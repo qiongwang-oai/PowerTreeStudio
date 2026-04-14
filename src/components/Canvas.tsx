@@ -63,6 +63,7 @@ import {
   getKeyboardPanTranslation,
   isKeyboardPanOverrideActive,
 } from '../utils/keyboardPan'
+import { getScenarioLoadCurrentDisplay } from '../utils/loadScenarioDisplay'
 
 const EMBEDDED_CONTAINER_MIN_WIDTH = 320
 const EMBEDDED_CONTAINER_MIN_HEIGHT = 240
@@ -454,7 +455,7 @@ function hexToRgba(hex: string, alpha: number) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined, edges?: Edge[], allNodes?: AnyNode[]) {
+function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> | undefined, edges?: Edge[], allNodes?: AnyNode[], activeScenario: Scenario = 'Typical') {
   const parallelCount = parallelCountForNode(node as any)
   const nodeResult = computeNodes?.[node.id]
   const incomingEdges = Array.isArray(edges)
@@ -691,12 +692,12 @@ function buildNodeDisplayData(node: AnyNode, computeNodes: Record<string, any> |
           ) : node.type === 'Load' && 'Vreq' in node && 'I_typ' in node && 'I_max' in node ? (
             (() => {
               const parallelCount = Math.max(1, Math.round((node as any).numParalleledDevices ?? 1))
+              const currentDisplay = getScenarioLoadCurrentDisplay(node as any, activeScenario)
               const entries: PowerEntry[] = [buildPowerEntry('P_in', pinValue)]
               entries.push({ label: 'Paralleled', text: `${parallelCount}`, tooltip: 'Number of paralleled devices' })
               return withPower(
                 <div>
-                  <div style={{fontSize:'11px',color:'#555'}}>I_typ: {(node as any).I_typ}A</div>
-                  <div style={{fontSize:'11px',color:'#555'}}>I_max: {(node as any).I_max}A</div>
+                  <div style={{fontSize:'11px',color:'#555'}}>{currentDisplay.label}: {currentDisplay.text}</div>
                 </div>,
                 entries
               )
@@ -1570,7 +1571,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           style: { width: layout.width, height: layout.height },
         })
         for (const child of layout.childNodes) {
-          const childData = buildNodeDisplayData(child.node, layout.analysis.nodes, layout.embeddedProject.edges, layout.embeddedProject.nodes as AnyNode[])
+          const childData = buildNodeDisplayData(child.node, layout.analysis.nodes, layout.embeddedProject.edges, layout.embeddedProject.nodes as AnyNode[], project.currentScenario)
           nodes.push({
             id: child.rfId,
             type: 'custom',
@@ -1589,7 +1590,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
           })
         }
       } else {
-        const data = buildNodeDisplayData(node, computeResult.nodes, project.edges, project.nodes as AnyNode[])
+        const data = buildNodeDisplayData(node, computeResult.nodes, project.edges, project.nodes as AnyNode[], project.currentScenario)
         nodes.push({
           id: node.id,
           type: 'custom',
@@ -1601,7 +1602,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(function Canvas(
       }
     }
     return nodes
-  }, [project.nodes, project.edges, computeResult.nodes, expandedLayouts])
+  }, [project.nodes, project.edges, project.currentScenario, computeResult.nodes, expandedLayouts])
 
   const [nodes, setNodes, ] = useNodesState(rfNodesInit)
 
